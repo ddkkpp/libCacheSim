@@ -1,0 +1,96 @@
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "LRU" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/LRU_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_LRU_0.01.log
+System memory before launch: 2.76%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "LRU" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/LRU_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_LRU_0.1.log
+System memory before launch: 2.77%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "LHD" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/LHD_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_LHD_0.01.log
+System memory before launch: 2.78%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "LHD" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/LHD_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_LHD_0.1.log
+System memory before launch: 2.88%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "GDSF" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/GDSF_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_GDSF_0.01.log
+System memory before launch: 2.99%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "GDSF" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/GDSF_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_GDSF_0.1.log
+System memory before launch: 3.13%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "ARC" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/ARC_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_ARC_0.01.log
+System memory before launch: 3.32%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "ARC" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/ARC_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_ARC_0.1.log
+System memory before launch: 3.57%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "SIEVE" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/SIEVE_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_SIEVE_0.01.log
+System memory before launch: 3.87%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "SIEVE" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/SIEVE_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_SIEVE_0.1.log
+System memory before launch: 4.16%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "S3FIFO" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/S3FIFO_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_S3FIFO_0.01.log
+System memory before launch: 4.39%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "S3FIFO" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/S3FIFO_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_S3FIFO_0.1.log
+System memory before launch: 4.62%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "wtinylfu" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/wtinylfu_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_wtinylfu_0.01.log
+System memory before launch: 4.86%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "wtinylfu" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/wtinylfu_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_wtinylfu_0.1.log
+System memory before launch: 5.08%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "lecar" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/lecar_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_lecar_0.01.log
+System memory before launch: 5.31%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "lecar" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/lecar_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_lecar_0.1.log
+System memory before launch: 5.56%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "cacheus" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/cacheus_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_cacheus_0.01.log
+System memory before launch: 5.82%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "cacheus" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/cacheus_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_cacheus_0.1.log
+System memory before launch: 6.11%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "lrb" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/lrb_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_lrb_0.01.log
+System memory before launch: 40.48%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "lrb" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/lrb_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_lrb_0.1.log
+System memory before launch: 40.28%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "glcache" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/glcache_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_glcache_0.01.log
+System memory before launch: 40.16%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "glcache" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/glcache_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_glcache_0.1.log
+System memory before launch: 40.35%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "3lcache" "0.01"
+Output file: ./results/parallel/1063.oracleGeneral.zst/3lcache_0.01.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_3lcache_0.01.log
+System memory before launch: 39.97%
+Command: ./_build/bin/cachesim "./data/TencentCBS/1063.oracleGeneral.zst" "oracleGeneral" "3lcache" "0.1"
+Output file: ./results/parallel/1063.oracleGeneral.zst/3lcache_0.1.log
+Error log: ./results/parallel/1063.oracleGeneral.zst/error_3lcache_0.1.log
+System memory before launch: 40.51%

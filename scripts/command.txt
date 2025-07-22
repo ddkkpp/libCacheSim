@@ -1,0 +1,8 @@
+./scripts/run_simulations.sh
+./scripts/parallel_sim.sh
+
+./_build/bin/cachesim data/MetaCDN/meta_reag.oracleGeneral.zst oracleGeneral lru 0.1,0.01
+./_build/bin/cachesim data/WikiCDN/wiki_2016u.oracleGeneral.zst oracleGeneral LRU,LHD,GDSF,ARC,SIEVE,S3FIFO,wtinylfu,lecar,cacheus,lrb,glcache,3lcache 0.001
+
+ps aux | grep -E 'run_simulations.sh|cachesim' | grep -v grep | awk '{print $2}' | xargs kill -9
+ps aux | grep -E 'parallel|cachesim' | grep -v grep | awk '{print $2}' | xargs kill -9

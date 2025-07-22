@@ -1,0 +1,2 @@
+./data/Twitter/cluster52.oracleGeneral.zst LRU cache size   235MiB,      13426570607 req, miss ratio 0.1234, byte miss ratio 0.1270, throughput 2.49 MQPS
+./data/Twitter/cluster52.oracleGeneral.zst LRU cache size   235MiB,      13426570607 req, miss ratio 0.1234, byte miss ratio 0.1270, throughput 2.71 MQPS

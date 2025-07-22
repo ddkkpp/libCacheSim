@@ -1,0 +1,72 @@
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "LRU" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/LRU_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_LRU_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "LRU" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/LRU_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_LRU_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "LHD" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/LHD_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_LHD_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "LHD" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/LHD_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_LHD_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "GDSF" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/GDSF_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_GDSF_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "GDSF" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/GDSF_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_GDSF_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "ARC" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/ARC_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_ARC_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "ARC" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/ARC_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_ARC_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "SIEVE" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/SIEVE_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_SIEVE_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "SIEVE" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/SIEVE_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_SIEVE_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "S3FIFO" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/S3FIFO_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_S3FIFO_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "S3FIFO" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/S3FIFO_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_S3FIFO_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "wtinylfu" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/wtinylfu_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_wtinylfu_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "wtinylfu" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/wtinylfu_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_wtinylfu_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "lecar" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/lecar_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_lecar_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "lecar" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/lecar_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_lecar_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "cacheus" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/cacheus_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_cacheus_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "cacheus" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/cacheus_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_cacheus_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "lrb" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/lrb_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_lrb_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "lrb" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/lrb_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_lrb_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "glcache" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/glcache_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_glcache_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "glcache" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/glcache_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_glcache_0.1.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "3lcache" "0.01"
+Output file: ./results/parallel/3.oracleGeneral.zst/3lcache_0.01.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_3lcache_0.01.log
+Command: ./_build/bin/cachesim "./data/Alibaba/3.oracleGeneral.zst" "oracleGeneral" "3lcache" "0.1"
+Output file: ./results/parallel/3.oracleGeneral.zst/3lcache_0.1.log
+Error log: ./results/parallel/3.oracleGeneral.zst/error_3lcache_0.1.log

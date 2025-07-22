@@ -1,0 +1,48 @@
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "LRU" "0.01"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/LRU_0.01.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_LRU_0.01.log
+System memory before launch: 28.28%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "LRU" "0.1"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/LRU_0.1.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_LRU_0.1.log
+System memory before launch: 28.21%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "LHD" "0.01"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/LHD_0.01.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_LHD_0.01.log
+System memory before launch: 28.14%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "LHD" "0.1"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/LHD_0.1.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_LHD_0.1.log
+System memory before launch: 14.94%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "GDSF" "0.01"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/GDSF_0.01.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_GDSF_0.01.log
+System memory before launch: 13.78%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "GDSF" "0.1"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/GDSF_0.1.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_GDSF_0.1.log
+System memory before launch: 12.60%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "ARC" "0.01"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/ARC_0.01.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_ARC_0.01.log
+System memory before launch: 13.23%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "ARC" "0.1"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/ARC_0.1.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_ARC_0.1.log
+System memory before launch: 13.07%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "SIEVE" "0.01"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/SIEVE_0.01.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_SIEVE_0.01.log
+System memory before launch: 12.80%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "SIEVE" "0.1"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/SIEVE_0.1.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_SIEVE_0.1.log
+System memory before launch: 14.08%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "S3FIFO" "0.01"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/S3FIFO_0.01.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_S3FIFO_0.01.log
+System memory before launch: 13.94%
+Command: ./_build/bin/cachesim "./data/TencentPhoto/tencent_photo1.oracleGeneral.zst" "oracleGeneral" "S3FIFO" "0.1"
+Output file: ./results/parallel/tencent_photo1.oracleGeneral.zst/S3FIFO_0.1.log
+Error log: ./results/parallel/tencent_photo1.oracleGeneral.zst/error_S3FIFO_0.1.log
+System memory before launch: 72.14%

@@ -82,20 +82,22 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
   if (!ignore_obj_size) convert_size_to_str(cache->cache_size, size_str, 64);
 #pragma GCC diagnostic push
   // Removed unknown pragma warning
+  // Calculate byte miss ratio
+  double byte_miss_ratio = (double)miss_byte / (double)req_byte;
+
+  // Modify output to include byte miss ratio
   if (!ignore_obj_size) {
     snprintf(output_str, 1024,
-             "%s %s cache size %8s, %16lu req, miss ratio %.4lf, throughput "
-             "%.2lf MQPS\n",
+             "%s %s cache size %8s, %16lu req, miss ratio %.4lf, byte miss ratio %.4lf, throughput %.2lf MQPS\n",
              reader->trace_path, detailed_cache_name, size_str,
              (unsigned long)req_cnt, (double)miss_cnt / (double)req_cnt,
-             (double)req_cnt / 1000000.0 / runtime);
+             byte_miss_ratio, (double)req_cnt / 1000000.0 / runtime);
   } else {
     snprintf(output_str, 1024,
-             "%s %s cache size %8lld, %16lu req, miss ratio %.4lf, throughput "
-             "%.2lf MQPS\n",
+             "%s %s cache size %8lld, %16lu req, miss ratio %.4lf, byte miss ratio %.4lf, throughput %.2lf MQPS\n",
              reader->trace_path, detailed_cache_name,
              (long long)cache->cache_size, (unsigned long)req_cnt,
-             (double)miss_cnt / (double)req_cnt,
+             (double)miss_cnt / (double)req_cnt, byte_miss_ratio,
              (double)req_cnt / 1000000.0 / runtime);
   }
 

@@ -1,0 +1,9 @@
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst LRU cache size     2GiB,       8660501058 req, miss ratio 0.0789, byte miss ratio 0.0976, throughput 1.53 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst LRU cache size    24GiB,       8660501058 req, miss ratio 0.0364, byte miss ratio 0.0575, throughput 1.07 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst ARC cache size     2GiB,       8660501058 req, miss ratio 0.0760, byte miss ratio 0.1051, throughput 1.24 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst Sieve cache size     2GiB,       8660501058 req, miss ratio 0.0754, byte miss ratio 0.0960, throughput 1.69 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst ARC cache size    24GiB,       8660501058 req, miss ratio 0.0378, byte miss ratio 0.0678, throughput 1.12 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst Sieve cache size    24GiB,       8660501058 req, miss ratio 0.0350, byte miss ratio 0.0559, throughput 0.08 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst LHD cache size     2GiB,       8660501058 req, miss ratio 0.0480, byte miss ratio 0.1130, throughput 0.08 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst LHD cache size    24GiB,       8660501058 req, miss ratio 0.0371, byte miss ratio 0.0581, throughput 0.08 MQPS
+./data/MetaKV/202312_kv_traces_all.csv.oracleGeneral.zst S3FIFO-0.1000-2 cache size     2GiB,       8660501058 req, miss ratio 0.0746, byte miss ratio 0.0965, throughput 0.08 MQPS

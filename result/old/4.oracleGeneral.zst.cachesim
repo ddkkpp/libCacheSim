@@ -1,0 +1,14 @@
+./data/Alibaba/4.oracleGeneral.zst LRU cache size     4GiB,       1576134095 req, miss ratio 0.0325, byte miss ratio 0.0501, throughput 10.71 MQPS
+./data/Alibaba/4.oracleGeneral.zst LRU cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0480, throughput 9.70 MQPS
+./data/Alibaba/4.oracleGeneral.zst LHD cache size     4GiB,       1576134095 req, miss ratio 0.0324, byte miss ratio 0.0501, throughput 3.54 MQPS
+./data/Alibaba/4.oracleGeneral.zst LHD cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0481, throughput 2.90 MQPS
+./data/Alibaba/4.oracleGeneral.zst GDSF cache size     4GiB,       1576134095 req, miss ratio 0.0325, byte miss ratio 0.0506, throughput 1.29 MQPS
+./data/Alibaba/4.oracleGeneral.zst GDSF cache size    35GiB,       1576134095 req, miss ratio 0.0320, byte miss ratio 0.0494, throughput 1.12 MQPS
+./data/Alibaba/4.oracleGeneral.zst ARC cache size     4GiB,       1576134095 req, miss ratio 0.0325, byte miss ratio 0.0501, throughput 10.93 MQPS
+./data/Alibaba/4.oracleGeneral.zst ARC cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0481, throughput 9.31 MQPS
+./data/Alibaba/4.oracleGeneral.zst Sieve cache size     4GiB,       1576134095 req, miss ratio 0.0325, byte miss ratio 0.0501, throughput 11.83 MQPS
+./data/Alibaba/4.oracleGeneral.zst Sieve cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0480, throughput 10.25 MQPS
+./data/Alibaba/4.oracleGeneral.zst S3FIFO-0.1000-2 cache size     4GiB,       1576134095 req, miss ratio 0.0324, byte miss ratio 0.0499, throughput 8.04 MQPS
+./data/Alibaba/4.oracleGeneral.zst S3FIFO-0.1000-2 cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0480, throughput 7.59 MQPS
+./data/Alibaba/4.oracleGeneral.zst WTinyLFU-w0.01-SLRU cache size     4GiB,       1576134095 req, miss ratio 0.0326, byte miss ratio 0.0507, throughput 6.54 MQPS
+./data/Alibaba/4.oracleGeneral.zst WTinyLFU-w0.01-SLRU cache size    35GiB,       1576134095 req, miss ratio 0.0360, byte miss ratio 0.0527, throughput 6.71 MQPS
