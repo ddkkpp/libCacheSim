@@ -63,33 +63,6 @@ if ! [[ "$MAX_PARALLEL" =~ ^[0-9]+$ ]] || [ "$MAX_PARALLEL" -lt 1 ]; then
     show_help
 fi
 
-# 跟踪运行中的进程
-declare -a PIDS
-
-# 等待任意一个槽位可用
-wait_for_job_slot() {
-    while [[ ${#PIDS[@]} -ge $MAX_PARALLEL ]]; do
-        # 检查进程状态，移除已完成的进程
-        for i in "${!PIDS[@]}"; do
-            if ! ps -p ${PIDS[$i]} > /dev/null; then
-                unset PIDS[$i]
-            fi
-        done
-
-        # 如果仍然满了，等待一秒
-        if [[ ${#PIDS[@]} -ge $MAX_PARALLEL ]]; then
-            sleep 1
-        fi
-    done
-}
-
-# 等待所有进程完成
-wait_for_all_jobs() {
-    for pid in "${PIDS[@]}"; do
-        wait $pid
-    done
-    PIDS=()
-}
 
 # 处理单个trace文件
 process_trace_file() {
@@ -101,56 +74,33 @@ process_trace_file() {
 
     echo "处理文件: $trace_file"
 
-    # 对每个 trace 文件，为每种算法和缓存大小组合创建任务
-    for algo in "${ALGORITHMS[@]}"; do
-        # 将多个缓存大小合并为逗号分隔的字符串
-        cache_sizes_str=$(IFS=,; echo "${CACHE_SIZES[*]}")
+    # 将所有算法合并为逗号分隔的字符串
+    algos_str=$(IFS=,; echo "${ALGORITHMS[*]}")
+    cache_sizes_str=$(IFS=,; echo "${CACHE_SIZES[*]}")
 
-        # 等待可用槽位
-        wait_for_job_slot
+    # 构建命令，添加--num-thread参数
+    cmd="./_build/bin/cachesim \"$trace_file\" $TRACE_FORMAT $algos_str $cache_sizes_str --num-thread=$MAX_PARALLEL"
 
-        # 构建命令
-        cmd="./_build/bin/cachesim \"$trace_file\" $TRACE_FORMAT $algo $cache_sizes_str"
-
-        echo "开始处理 $trace_name 算法: $algo: $(date)"
-        # 执行命令，后台运行
-        (
-            echo "===================="
-            echo "正在处理: $trace_file"
-            echo "算法: $algo"
-            echo "缓存大小: $cache_sizes_str"
-            echo "执行命令: $cmd"
-            eval "$cmd"
-            echo "完成: $trace_file - $algo"
-            echo "完成时间: $(date)"
-            echo "===================="
-        ) &
-
-        # 保存进程ID
-        PIDS+=($!)
-
-        echo "后台任务已启动: $trace_name - $algo (PID: $!), 当前运行任务数: ${#PIDS[@]}"
-    done
+    echo "开始处理 $trace_name: $(date)"
+    echo "===================="
+    echo "正在处理: $trace_file"
+    echo "算法: $algos_str"
+    echo "缓存大小: $cache_sizes_str"
+    echo "执行命令: $cmd"
+    eval "$cmd"
+    echo "完成: $trace_file"
+    echo "完成时间: $(date)"
+    echo "===================="
 }
 
 # 主程序
 echo "开始并行模拟，最大并行任务数: $MAX_PARALLEL"
-echo "开始时间: $(date)"
-echo "Trace路径: $TRACE_PATH"
-echo "Trace格式: $TRACE_FORMAT"
 echo "===================================="
 
 # 检查是文件还是目录
 if [ -d "$TRACE_PATH" ]; then
-    # 是目录，查找所有zst文件
-    # 使用数组避免管道中的子shell问题
-    declare -a trace_files
-    while IFS= read -r -d '' trace_file; do
-        trace_files+=("$trace_file")
-    done < <(find "$TRACE_PATH" -type f -name "*.zst" | grep -v "/test/" | grep -v "/MetaKV/" | grep -v "/MetaCDN/" | grep -v "/Alibaba/" | grep -v "/TencentCBS/" | sort -z)
-
-    # 处理所有找到的文件
-    for trace_file in "${trace_files[@]}"; do
+    # 是目录，查找所有zst文件并逐个处理（不排除任何子目录）
+    find "$TRACE_PATH" -type f -name "*.zst" | sort | while read -r trace_file; do
         process_trace_file "$trace_file"
     done
 elif [ -f "$TRACE_PATH" ]; then
@@ -163,7 +113,6 @@ fi
 
 # 等待所有剩余的进程完成
 echo "等待剩余的任务完成..."
-wait_for_all_jobs
 
 echo "所有测试完成"
 echo "结束时间: $(date)"
