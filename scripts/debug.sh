@@ -64,6 +64,7 @@ echo "Configuring and building project with strict warnings..."
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug \
 	-DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs" \
 	-DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs" \
+	-DENABLE_GLCACHE=ON -DENABLE_LRB=ON -DENABLE_3L_CACHE=ON \
 	..
 
 ninja

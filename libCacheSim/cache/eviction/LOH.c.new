@@ -1,0 +1,1740 @@
+// Modified LOH.c with file-based shared memory support
+//
+//  LOH - An adaptive caching algorithm with online learning
+//
+//  LOH.c
+//  libCacheSim
+//
+
+#include <assert.h>
+#include <float.h>
+#include <glib.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+// Shared memory headers
+#include <errno.h>
+#include <signal.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "dataStructure/hashtable/hashtable.h"
+#include "libCacheSim/evictionAlgo.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// ***********************************************************************
+// ****                                                               ****
+// ****                   function declarations                       ****
+// ****                                                               ****
+// ***********************************************************************
+
+// Helper functions removed - direct field access used instead
+
+static void LOH_free(cache_t *cache);
+static bool LOH_get(cache_t *cache, const request_t *req);
+static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
+                             const bool update_cache);
+static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req);
+static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req);
+static void LOH_evict(cache_t *cache, const request_t *req);
+static bool LOH_remove(cache_t *cache, const obj_id_t obj_id);
+static void LOH_print_cache(const cache_t *cache);
+
+// Define the IRT (Inter-Request Time) history data structure
+#define IRT_HISTORY_SIZE 3
+#define MAX_CANDIDATES 60  // Maximum size of eviction candidate pool
+#define FEATURE_DIM 6      // Number of features for scoring
+#define CONTEXT_DIM 14     // Number of context dimensions for learning
+#define SHM_KEY 9876       // Key for shared memory segment
+#define SEM_KEY 9877       // Key for semaphore
+
+// Structure shared between C and Python for Actor-Critic network
+typedef struct {
+  // Control flags
+  int ready_for_inference;  // Set to 1 when state is ready for inference
+  int weights_updated;      // Set to 1 when weights have been updated by Python
+  int terminate;            // Set to 1 to signal termination
+
+  // State information - 14-dimensional state vector
+  double state[CONTEXT_DIM];
+
+  // Feature weights for policy network output (6 dimensions)
+  double weights[FEATURE_DIM];
+
+  // Performance metrics for reward calculation
+  double miss_ratio;       // Current miss ratio
+  double byte_miss_ratio;  // Current byte miss ratio
+  double reward;           // Current reward value
+
+  // Timestamp for synchronization
+  int64_t timestamp;
+} shm_data_t;
+#define STATS_WINDOW 10000   // Window size for tracking stats
+#define FREQ_MAX 255         // Maximum frequency to track individually
+#define SIZE_BUCKET_COUNT 5  // Number of size buckets (only 512KB and above)
+
+// Define the object metadata for LOH
+// Using the pre-declared LOH_obj_metadata_t from cacheObj.h
+
+// IRT min-heap entry
+typedef struct {
+  cache_obj_t *obj;   // Pointer to the cache object
+  int64_t irt_value;  // The IRT value this heap is tracking
+} irt_heap_entry_t;
+
+// Frequency table node for linked list
+typedef struct loh_freq_node {
+  cache_obj_t *obj;            // Pointer to the cache object
+  struct loh_freq_node *prev;  // Previous node in the frequency list
+  struct loh_freq_node *next;  // Next node in the frequency list
+} loh_freq_node_t;
+
+// Size bucket node for linked list
+typedef struct size_node {
+  cache_obj_t *obj;        // Pointer to the cache object
+  struct size_node *prev;  // Previous node in the size bucket
+  struct size_node *next;  // Next node in the size bucket
+} size_node_t;
+
+// Structure to track feature statistics for hit/miss objects
+typedef struct {
+  double hit_recency_sum;
+  double hit_frequency_sum;
+  double hit_size_sum;
+  double hit_irt1_sum;
+  double hit_irt2_sum;
+  double hit_irt3_sum;
+
+  double miss_recency_sum;
+  double miss_frequency_sum;
+  double miss_size_sum;
+  double miss_irt1_sum;
+  double miss_irt2_sum;
+  double miss_irt3_sum;
+
+  int hit_count;
+  int miss_count;
+} feature_stats_t;
+
+// Define the LOH parameters structure
+typedef struct {
+  // Reference to the parent cache
+  void *cache_ptr;  // Pointer to the parent cache_t structure
+
+  // LRU队列 - 跟踪最近性
+  cache_obj_t *q_head;        // Queue head for maintaining object order
+  cache_obj_t *q_tail;        // Queue tail for maintaining object order
+  int64_t current_timestamp;  // Current logical timestamp
+
+  // 频率表 - 跟踪访问频率
+  loh_freq_node_t *freq_table[FREQ_MAX + 1];       // Array of frequency lists
+  loh_freq_node_t *freq_table_tail[FREQ_MAX + 1];  // Tails of frequency lists
+
+  // IRT堆 - 跟踪访问间隔时间
+  irt_heap_entry_t *irt_heap[IRT_HISTORY_SIZE];  // Three separate min-heaps for
+                                                 // each IRT value
+  int irt_heap_size[IRT_HISTORY_SIZE];  // Current number of elements in each
+                                        // heap
+  int irt_heap_capacity;                // Maximum capacity of each heap
+
+  // 尺寸桶 - 跟踪对象尺寸
+  size_node_t *size_buckets[SIZE_BUCKET_COUNT];  // Bucket heads for different
+                                                 // size ranges
+  size_node_t *size_buckets_tail[SIZE_BUCKET_COUNT];  // Bucket tails
+  int64_t
+      size_bucket_bounds[SIZE_BUCKET_COUNT];  // Upper bounds for each bucket
+
+  // 特征哈希表 - 快速查找频率节点和尺寸节点
+  GHashTable *freq_node_map;  // 对象到频率节点的映射
+  GHashTable *size_node_map;  // 对象到尺寸节点的映射
+
+  // Feature weights for scoring function
+  double weights[FEATURE_DIM];
+
+  // Candidate objects for eviction
+  cache_obj_t *candidates[MAX_CANDIDATES];
+  int n_candidates;
+
+  // Statistics for learning
+  feature_stats_t recent_stats;
+  double recent_obj_hit_ratio;
+  double recent_byte_hit_ratio;
+  int64_t recent_hits;
+  int64_t recent_misses;
+  int64_t recent_hit_bytes;
+  int64_t recent_miss_bytes;
+
+  // Actor-Critic RL shared memory structures
+  int shm_id;     // Shared memory segment ID
+  void *shm_ptr;  // Pointer to shared memory
+  int sem_id;     // Semaphore ID for synchronization
+
+  // 14-dimensional context state vector
+  double context_state[CONTEXT_DIM];  // Input to Actor-Critic networks
+
+  // RL training parameters
+  int64_t rl_update_interval;  // How often to update state and weights
+  int64_t requests_since_rl_update;
+  double epoch_start_time;      // Start time of current training epoch
+  double epoch_obj_miss_count;  // For calculating epoch miss ratio
+  double epoch_obj_count;
+  double epoch_byte_miss_count;  // For calculating epoch byte miss ratio
+  double epoch_byte_count;
+
+  // Learning parameters
+  int64_t learning_interval;  // How often to update weights
+  int64_t requests_since_update;
+
+  // Min-max values for feature normalization
+  double min_values[FEATURE_DIM];
+  double max_values[FEATURE_DIM];
+
+  // Flag to indicate if the cache has been "warmed up"
+  bool is_warmed_up;
+} LOH_params_t;
+
+// Actor-Critic related functions
+// Semaphore operations for synchronization
+static void lock_shared_memory(LOH_params_t *params) {
+  if (params->sem_id == -1) return;
+
+  struct sembuf sb;
+  sb.sem_num = 0;
+  sb.sem_op = -1;  // Decrement by 1 (acquire)
+  sb.sem_flg = SEM_UNDO;
+
+  if (semop(params->sem_id, &sb, 1) == -1) {
+    perror("semop lock failed");
+  }
+}
+
+static void unlock_shared_memory(LOH_params_t *params) {
+  if (params->sem_id == -1) return;
+
+  struct sembuf sb;
+  sb.sem_num = 0;
+  sb.sem_op = 1;  // Increment by 1 (release)
+  sb.sem_flg = SEM_UNDO;
+
+  if (semop(params->sem_id, &sb, 1) == -1) {
+    perror("semop unlock failed");
+  }
+}
+
+// Update state vector for Actor-Critic network
+static void update_state_vector(LOH_params_t *params) {
+  // Calculate miss ratios
+  double obj_miss_ratio = 0.0;
+  if (params->epoch_obj_count > 0) {
+    obj_miss_ratio = params->epoch_obj_miss_count / params->epoch_obj_count;
+  }
+
+  double byte_miss_ratio = 0.0;
+  if (params->epoch_byte_count > 0) {
+    byte_miss_ratio = params->epoch_byte_miss_count / params->epoch_byte_count;
+  }
+
+  // Calculate epoch duration
+  double epoch_duration = time(NULL) - params->epoch_start_time;
+  if (epoch_duration < 1.0) epoch_duration = 1.0;
+
+  // Update context state vector (14 dimensions)
+  params->context_state[0] = obj_miss_ratio;
+  params->context_state[1] = byte_miss_ratio;
+  params->context_state[2] =
+      params->epoch_obj_count / epoch_duration;  // Request rate
+  params->context_state[3] =
+      params->epoch_byte_count / epoch_duration;  // Data rate
+
+  // Feature weights (6 dimensions)
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    params->context_state[i + 4] = params->weights[i];
+  }
+
+  // System metrics (4 dimensions) - could include:
+  // - Current cache size utilization
+  // - Average object size
+  // - Working set size estimate
+  // - Temporal locality measure
+  cache_t *cache = (cache_t *)params->cache_ptr;
+  params->context_state[10] = (double)cache_get_occupied_byte_default(cache) /
+                              (double)cache->cache_size;  // Cache utilization
+
+  // These would need proper implementation based on your metrics
+  params->context_state[11] = 0.0;  // Average object size or other metric
+  params->context_state[12] = 0.0;  // Working set estimate
+  params->context_state[13] = 0.0;  // Temporal locality measure
+}
+
+// Send state to Actor-Critic network and get updated weights
+static void sync_with_actor_critic(LOH_params_t *params) {
+  if (params->shm_ptr == NULL) return;
+
+  // Calculate current state vector
+  update_state_vector(params);
+
+  // Acquire lock on shared memory
+  lock_shared_memory(params);
+
+  // Update shared memory with current state
+  shm_data_t *shm_data = (shm_data_t *)params->shm_ptr;
+  memcpy(shm_data->state, params->context_state, sizeof(double) * CONTEXT_DIM);
+
+  // Set current performance metrics
+  if (params->epoch_obj_count > 0) {
+    shm_data->miss_ratio =
+        params->epoch_obj_miss_count / params->epoch_obj_count;
+  } else {
+    shm_data->miss_ratio = 0.0;
+  }
+
+  if (params->epoch_byte_count > 0) {
+    shm_data->byte_miss_ratio =
+        params->epoch_byte_miss_count / params->epoch_byte_count;
+  } else {
+    shm_data->byte_miss_ratio = 0.0;
+  }
+
+  // Signal that inference is needed
+  shm_data->ready_for_inference = 1;
+  shm_data->timestamp = params->current_timestamp;
+
+  // Release lock
+  unlock_shared_memory(params);
+
+  // Check if weights have been updated (non-blocking)
+  if (shm_data->weights_updated) {
+    // Acquire lock again
+    lock_shared_memory(params);
+
+    // Copy updated weights
+    memcpy(params->weights, shm_data->weights, sizeof(double) * FEATURE_DIM);
+
+    // Reset flag
+    shm_data->weights_updated = 0;
+
+    // Release lock
+    unlock_shared_memory(params);
+
+    // Print updated weights for debugging
+    printf(
+        "LOH: Updated weights from Actor-Critic: [%.3f, %.3f, %.3f, %.3f, "
+        "%.3f, %.3f]\n",
+        params->weights[0], params->weights[1], params->weights[2],
+        params->weights[3], params->weights[4], params->weights[5]);
+  }
+
+  // Reset epoch statistics
+  params->epoch_start_time = time(NULL);
+  params->epoch_obj_miss_count = 0;
+  params->epoch_obj_count = 0;
+  params->epoch_byte_miss_count = 0;
+  params->epoch_byte_count = 0;
+}
+
+// Forward declarations for helper functions
+static void calculate_features(LOH_params_t *params, cache_obj_t *obj,
+                               double *features);
+static double calculate_score(LOH_params_t *params, cache_obj_t *obj);
+static void update_feature_stats(LOH_params_t *params, cache_obj_t *obj,
+                                 bool is_hit);
+static void update_weights(LOH_params_t *params);
+static void normalize_features(LOH_params_t *params, double *features);
+
+// 频率表操作函数
+static void freq_table_init(LOH_params_t *params);
+static void freq_table_free(LOH_params_t *params);
+static void freq_table_add(LOH_params_t *params, cache_obj_t *obj);
+static void freq_table_remove(LOH_params_t *params, cache_obj_t *obj);
+static void freq_table_update(LOH_params_t *params, cache_obj_t *obj);
+static cache_obj_t *freq_table_get_min_freq_obj(LOH_params_t *params);
+static void freq_table_get_candidates(LOH_params_t *params, int max_candidates,
+                                      int *n_candidates);
+
+// IRT堆操作函数
+static void irt_heap_init(LOH_params_t *params, int capacity);
+static void irt_heap_free(LOH_params_t *params);
+static void irt_heap_add(LOH_params_t *params, cache_obj_t *obj, int heap_idx);
+static void irt_heap_remove(LOH_params_t *params, cache_obj_t *obj,
+                            int heap_idx);
+static void irt_heap_update(LOH_params_t *params, cache_obj_t *obj);
+static cache_obj_t *irt_heap_peek_top(LOH_params_t *params, int heap_idx);
+static void irt_heap_get_candidates(LOH_params_t *params, int max_candidates,
+                                    int *n_candidates);
+
+// 尺寸桶操作函数
+static void size_buckets_init(LOH_params_t *params);
+static void size_buckets_free(LOH_params_t *params);
+static void size_buckets_add(LOH_params_t *params, cache_obj_t *obj);
+static void size_buckets_remove(LOH_params_t *params, cache_obj_t *obj);
+static int size_get_bucket_index(LOH_params_t *params, int64_t size);
+static void size_buckets_get_candidates(LOH_params_t *params,
+                                        int max_candidates, int *n_candidates);
+
+/**
+ * @brief initialize a LOH cache
+ *
+ * @param ccache_params common cache parameters
+ * @param cache_specific_params LOH specific parameters
+ *        format: "learning-interval=64000"
+ *        learning-interval: how often to update weights (default: 64000)
+ */
+cache_t *LOH_init(const common_cache_params_t ccache_params,
+                  const char *cache_specific_params) {
+  cache_t *cache =
+      cache_struct_init("LOH", ccache_params, cache_specific_params);
+  cache->cache_init = LOH_init;
+  cache->cache_free = LOH_free;
+  cache->get = LOH_get;
+  cache->find = LOH_find;
+  cache->insert = LOH_insert;
+  cache->evict = LOH_evict;
+  cache->remove = LOH_remove;
+  cache->to_evict = LOH_to_evict;
+  cache->get_occupied_byte = cache_get_occupied_byte_default;
+  cache->can_insert = cache_can_insert_default;
+  cache->get_n_obj = cache_get_n_obj_default;
+  cache->print_cache = LOH_print_cache;
+
+  if (ccache_params.consider_obj_metadata) {
+    // Account for the size of our metadata in cache capacity calculations
+    cache->obj_md_size = sizeof(LOH_obj_metadata_t);
+  } else {
+    cache->obj_md_size = 0;
+  }
+
+  // Initialize LOH params
+  LOH_params_t *params = g_new0(LOH_params_t, 1);
+  params->q_head = NULL;
+  params->q_tail = NULL;
+  params->current_timestamp = 0;
+  params->n_candidates = 0;
+  params->is_warmed_up = false;
+  params->learning_interval = 64000;  // Default learning interval
+  params->requests_since_update = 0;
+
+  // 初始化频率表
+  freq_table_init(params);
+
+  // 初始化IRT堆
+  irt_heap_init(params, ccache_params.cache_size > 10000
+                            ? 10000
+                            : ccache_params.cache_size);
+
+  // 初始化尺寸桶
+  size_buckets_init(params);
+
+  // Initialize feature weights with balanced initial values
+  params->weights[0] = 1.0;  // recency
+  params->weights[1] = 1.0;  // frequency
+  params->weights[2] = 0.5;  // size
+  params->weights[3] = 1.0;  // irt1
+  params->weights[4] = 0.8;  // irt2
+  params->weights[5] = 0.6;  // irt3
+
+  // Initialize feature stats
+  memset(&params->recent_stats, 0, sizeof(feature_stats_t));
+  params->recent_obj_hit_ratio = 0.0;
+  params->recent_byte_hit_ratio = 0.0;
+  params->recent_hits = 0;
+  params->recent_misses = 0;
+  params->recent_hit_bytes = 0;
+  params->recent_miss_bytes = 0;
+
+  // Initialize Actor-Critic RL parameters
+  params->rl_update_interval = 10000;  // Update every 10K requests by default
+  params->requests_since_rl_update = 0;
+  params->epoch_start_time = time(NULL);
+  params->epoch_obj_miss_count = 0;
+  params->epoch_obj_count = 0;
+  params->epoch_byte_miss_count = 0;
+  params->epoch_byte_count = 0;
+
+  // Initialize context state
+  memset(params->context_state, 0, sizeof(double) * CONTEXT_DIM);
+
+  // Initialize shared memory
+  // Use file-based shared memory instead of System V IPC
+  const char* shm_filename = "/dev/shm/loh_ac_9876";
+  int shm_fd = open(shm_filename, O_RDWR | O_CREAT, 0666);
+  if (shm_fd == -1) {
+    perror("open failed");
+    printf("Error opening shared memory file for Actor-Critic network\n");
+    params->shm_ptr = NULL;
+  } else {
+    // Ensure the file is the right size
+    if (ftruncate(shm_fd, sizeof(shm_data_t)) == -1) {
+      perror("ftruncate failed");
+    }
+    // Map the file to memory
+    params->shm_ptr = mmap(NULL, sizeof(shm_data_t), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (params->shm_ptr == MAP_FAILED) {
+      perror("mmap failed");
+      printf("Error mapping shared memory for Actor-Critic network\n");
+      params->shm_ptr = NULL;
+      close(shm_fd);
+    } else {
+      // Store the file descriptor for later use
+      params->shm_id = shm_fd;
+      // Initialize shared memory segment
+      shm_data_t *shm_data = (shm_data_t *)params->shm_ptr;
+      memset(shm_data, 0, sizeof(shm_data_t));
+      // Copy initial weights to shared memory
+      memcpy(shm_data->weights, params->weights, sizeof(double) * FEATURE_DIM);
+      printf("Successfully mapped shared memory file for Actor-Critic network\n");
+    }
+  }
+  }
+
+  // Initialize semaphore for synchronization
+  params->sem_id = semget(SEM_KEY, 1, IPC_CREAT | 0666);
+  if (params->sem_id == -1) {
+    perror("semget failed");
+    printf("Error initializing semaphore for Actor-Critic network\n");
+  } else {
+    // Initialize semaphore value to 1 (unlocked)
+    union semun {
+      int val;
+      struct semid_ds *buf;
+      unsigned short *array;
+    } sem_union;
+    sem_union.val = 1;
+
+    if (semctl(params->sem_id, 0, SETVAL, sem_union) == -1) {
+      perror("semctl failed");
+    }
+  }
+
+  // Initialize min-max values for feature normalization
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    params->min_values[i] = DBL_MAX;
+    params->max_values[i] = -DBL_MAX;
+  }
+
+  // Parse cache-specific parameters if provided
+  if (cache_specific_params != NULL) {
+    char *params_str = g_strdup(cache_specific_params);
+    char *old_params_str = params_str;
+    char *token, *key, *value;
+
+    // Format: "learning-interval=64000"
+    while ((token = strsep(&params_str, ",")) != NULL) {
+      key = strsep(&token, "=");
+      value = token;
+
+      if (key == NULL || value == NULL) continue;
+
+      if (strcmp(key, "learning-interval") == 0) {
+        params->learning_interval = atol(value);
+      }
+    }
+
+    g_free(old_params_str);
+  }
+
+  // Set cache pointer for later use
+  params->cache_ptr = cache;
+
+  cache->eviction_params = params;
+  return cache;
+}
+
+/**
+ * free resources used by this cache
+ *
+ * @param cache
+ */
+static void LOH_free(cache_t *cache) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+
+  // Clean up shared memory resources
+  // Clean up file-based shared memory resources
+  if (params->shm_ptr != NULL && params->shm_ptr != MAP_FAILED) {
+    // Signal termination to Python process if it's running
+    shm_data_t *shm_data = (shm_data_t *)params->shm_ptr;
+    shm_data->terminate = 1;
+    // Allow some time for Python process to notice and terminate
+    usleep(100000);  // 100ms
+    // Unmap the shared memory
+    if (munmap(params->shm_ptr, sizeof(shm_data_t)) == -1) {
+      perror("munmap failed");
+    }
+    // Close the file descriptor
+    if (params->shm_id != -1) {
+      close(params->shm_id);
+    }
+  }
+
+    // Remove shared memory segment
+    if (shmctl(params->shm_id, IPC_RMID, NULL) == -1) {
+      perror("shmctl failed");
+    }
+  }
+
+  // Remove semaphore
+  if (params->sem_id != -1) {
+    if (semctl(params->sem_id, 0, IPC_RMID) == -1) {
+      perror("semctl failed");
+    }
+  }
+
+  // 释放数据结构资源
+  freq_table_free(params);
+  size_buckets_free(params);
+  irt_heap_free(params);
+
+  g_free(params);
+  cache_struct_free(cache);
+}
+
+/**
+ * @brief this function is the user facing API
+ * it performs the following logic
+ *
+ * ```
+ * if obj in cache:
+ *    update_metadata
+ *    return true
+ * else:
+ *    if cache does not have enough space:
+ *        evict until it has space to insert
+ *    insert the object
+ *    return false
+ * ```
+ *
+ * @param cache
+ * @param req
+ * @return true if cache hit, false if cache miss
+ */
+static bool LOH_get(cache_t *cache, const request_t *req) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+  params->current_timestamp += 1;
+  params->requests_since_update += 1;
+  params->requests_since_rl_update += 1;
+
+  // Check if it's time to update weights using standard method
+  if (params->requests_since_update >= params->learning_interval &&
+      params->is_warmed_up) {
+    update_weights(params);
+    params->requests_since_update = 0;
+  }
+
+  // Check if it's time to update state for RL
+  if (params->requests_since_rl_update >= params->rl_update_interval &&
+      params->is_warmed_up && params->shm_ptr != NULL) {
+    // Update RL state and check for weight updates
+    sync_with_actor_critic(params);
+    params->requests_since_rl_update = 0;
+  }
+
+  bool hit = cache_get_base(cache, req);
+
+  // Update statistics
+  if (hit) {
+    params->recent_hits++;
+    params->recent_hit_bytes += req->obj_size;
+  } else {
+    params->recent_misses++;
+    params->recent_miss_bytes += req->obj_size;
+  }
+
+  // Update epoch statistics for RL
+  params->epoch_obj_count++;
+  params->epoch_byte_count += req->obj_size;
+  if (!hit) {
+    params->epoch_obj_miss_count++;
+    params->epoch_byte_miss_count += req->obj_size;
+  }
+
+  // Calculate hit ratios after some requests
+  if ((params->recent_hits + params->recent_misses) >= STATS_WINDOW) {
+    params->recent_obj_hit_ratio = (double)params->recent_hits / STATS_WINDOW;
+    params->recent_byte_hit_ratio =
+        (double)params->recent_hit_bytes /
+        (params->recent_hit_bytes + params->recent_miss_bytes);
+
+    // Reset counters
+    params->recent_hits = 0;
+    params->recent_misses = 0;
+    params->recent_hit_bytes = 0;
+    params->recent_miss_bytes = 0;
+
+    // Mark as warmed up after first window
+    if (!params->is_warmed_up) {
+      params->is_warmed_up = true;
+    }
+  }
+
+  return hit;
+}
+
+/**
+ * @brief check whether an object is in the cache and update its metadata
+ *
+ * @param cache
+ * @param req
+ * @param update_cache whether to update the cache,
+ *  if true, the object is promoted
+ * @return the object if found, NULL otherwise
+ */
+static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
+                             const bool update_cache) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+  cache_obj_t *cache_obj = cache_find_base(cache, req, update_cache);
+
+  if (cache_obj && likely(update_cache)) {
+    // Calculate Inter-Request Time (IRT)
+    int64_t irt =
+        params->current_timestamp - cache_obj->LOH.last_access_counter;
+
+    // Shift IRT history
+    for (int i = IRT_HISTORY_SIZE - 1; i > 0; i--) {
+      cache_obj->LOH.irt_history[i] = cache_obj->LOH.irt_history[i - 1];
+    }
+    cache_obj->LOH.irt_history[0] = irt;
+
+    // Update access timestamps
+    cache_obj->LOH.last_access_time = time(NULL);
+    cache_obj->LOH.last_access_counter = params->current_timestamp;
+
+    // 更新各个数据结构
+
+    // 1. 移动到LRU队列头部（更新最近性）
+    remove_obj_from_list(&params->q_head, &params->q_tail, cache_obj);
+    prepend_obj_to_head(&params->q_head, &params->q_tail, cache_obj);
+
+    // 2. 更新频率表（更新频率）
+    freq_table_update(params, cache_obj);
+
+    // 3. 更新IRT堆（更新预测访问时间）
+    irt_heap_update(params, cache_obj);
+
+    // 注意：尺寸是静态特征，不需要更新尺寸桶
+
+    // Update feature statistics for learning
+    update_feature_stats(params, cache_obj, true);  // true for hit
+  }
+
+  return cache_obj;
+}
+
+/**
+ * @brief insert an object into the cache
+ *
+ * @param cache
+ * @param req
+ * @return the inserted object
+ */
+static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+
+  // Create new object with base cache function
+  cache_obj_t *obj =
+      cache_insert_base(cache, req);  // Initialize object metadata
+  obj->LOH.access_count = 1;
+  obj->LOH.last_access_time = time(NULL);
+  obj->LOH.last_access_counter = params->current_timestamp;
+
+  // Initialize IRT history to "infinity" (represented by a large number)
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    obj->LOH.irt_history[i] = INT64_MAX;
+  }
+
+  // 添加到各个数据结构
+
+  // 1. 添加到LRU队列头部（最近性）
+  prepend_obj_to_head(&params->q_head, &params->q_tail, obj);
+
+  // 2. 添加到频率表（频率为1）
+  freq_table_add(params, obj);
+
+  // 3. 添加到三个IRT堆
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    irt_heap_add(params, obj, i);
+  }
+
+  // 4. 添加到尺寸桶（根据对象尺寸）
+  size_buckets_add(params, obj);
+
+  return obj;
+}
+
+/**
+ * @brief find candidates for eviction and select the one with the lowest score
+ *
+ * @param cache
+ * @param req
+ * @return the object to be evicted
+ */
+static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+
+  // 清空候选对象
+  params->n_candidates = 0;
+
+  // 从各个特征数据结构中选择候选对象
+  int candidates_per_feature = MAX_CANDIDATES / 4;  // 四种特征
+
+  // 1. 从LRU队列尾部选择（最近性特征）
+  cache_obj_t *curr = params->q_tail;
+  int lru_candidates = 0;
+  while (curr != NULL && lru_candidates < candidates_per_feature) {
+    params->candidates[params->n_candidates++] = curr;
+    curr = curr->queue.prev;
+    lru_candidates++;
+  }
+
+  // 2. 从频率表选择低频率对象（频率特征）
+  freq_table_get_candidates(params, candidates_per_feature,
+                            &params->n_candidates);
+
+  // 3. 从IRT堆选择预测下次访问较晚的对象（IRT特征）
+  irt_heap_get_candidates(params, candidates_per_feature,
+                          &params->n_candidates);
+
+  // 4. 从尺寸桶选择大尺寸对象（尺寸特征）
+  size_buckets_get_candidates(params, candidates_per_feature,
+                              &params->n_candidates);
+
+  // 如果没有候选对象，使用LRU作为回退
+  if (params->n_candidates == 0) {
+    return params->q_tail;
+  }
+
+  // 对候选对象评分，选择得分最低的
+  double min_score = DBL_MAX;
+  cache_obj_t *obj_to_evict = NULL;
+
+  for (int i = 0; i < params->n_candidates; i++) {
+    double score = calculate_score(params, params->candidates[i]);
+    if (score < min_score) {
+      min_score = score;
+      obj_to_evict = params->candidates[i];
+    }
+  }
+
+  return obj_to_evict;
+}
+
+/**
+ * @brief evict an object from the cache
+ *
+ * @param cache
+ * @param req not used
+ */
+static void LOH_evict(cache_t *cache, const request_t *req) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+  cache_obj_t *obj_to_evict = LOH_to_evict(cache, req);
+
+  if (obj_to_evict == NULL) {
+    ERROR("LOH_evict: no object to evict\n");
+    return;
+  }
+
+  // Update feature statistics for learning (mark as a miss since it was
+  // evicted)
+  update_feature_stats(params, obj_to_evict, false);
+
+  // 从各个数据结构中移除
+
+  // 1. 从LRU队列移除（最近性）
+  remove_obj_from_list(&params->q_head, &params->q_tail, obj_to_evict);
+
+  // 2. 从频率表移除
+  freq_table_remove(params, obj_to_evict);
+
+  // 3. 从三个IRT堆移除
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    irt_heap_remove(params, obj_to_evict, i);
+  }
+
+  // 4. 从尺寸桶移除
+  size_buckets_remove(params, obj_to_evict);
+
+  // Use the base eviction function to handle hash table updates and freeing
+  cache_evict_base(cache, obj_to_evict, true);
+}
+
+/**
+ * @brief remove an object from the cache
+ *
+ * @param cache
+ * @param obj_id
+ * @return true if the object is removed, false if the object is not in the
+ * cache
+ */
+static bool LOH_remove(cache_t *cache, const obj_id_t obj_id) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+
+  cache_obj_t *obj = hashtable_find_obj_id(cache->hashtable, obj_id);
+  if (obj == NULL) {
+    return false;
+  }
+
+  // 从各个数据结构中移除
+
+  // 1. 从LRU队列移除（最近性）
+  remove_obj_from_list(&params->q_head, &params->q_tail, obj);
+
+  // 2. 从频率表移除
+  freq_table_remove(params, obj);
+
+  // 3. 从三个IRT堆移除
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    irt_heap_remove(params, obj, i);
+  }
+
+  // 4. 从尺寸桶移除
+  size_buckets_remove(params, obj);
+
+  // Use the base function to handle hash table updates and freeing
+  cache_remove_obj_base(cache, obj, true);
+
+  return true;
+}
+
+/**
+ * @brief print information about the cache
+ *
+ * @param cache
+ */
+static void LOH_print_cache(const cache_t *cache) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+  printf("LOH cache: current size %d, cache size %ld\n",
+         (int)cache_get_occupied_byte_default(cache), (long)cache->cache_size);
+  printf("Current feature weights: [");
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    printf("%.3f", params->weights[i]);
+    if (i < FEATURE_DIM - 1) printf(", ");
+  }
+  printf("]\n");
+  printf("Recent obj hit ratio: %.4f, Recent byte hit ratio: %.4f\n",
+         params->recent_obj_hit_ratio, params->recent_byte_hit_ratio);
+}
+
+/**
+ * @brief Calculate the features for an object
+ *
+ * @param params
+ * @param obj
+ * @param features Output parameter to store the computed features
+ */
+static void calculate_features(LOH_params_t *params, cache_obj_t *obj,
+                               double *features) {
+  // Feature 1: Recency (higher is more recent)
+  features[0] =
+      1.0 - (double)(params->current_timestamp - obj->LOH.last_access_counter) /
+                (params->current_timestamp > 0 ? params->current_timestamp : 1);
+
+  // Feature 2: Frequency (access count, transformed by log)
+  features[1] = log1p((double)obj->LOH.access_count);
+
+  // Feature 3: Size (inverse, smaller objects score higher)
+  features[2] = 1.0 / (1.0 + (double)obj->obj_size);
+
+  // Features 4-6: Inter-request times (lower IRT is better)
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    if (obj->LOH.irt_history[i] == INT64_MAX) {
+      features[i + 3] = 0.0;  // No history yet
+    } else {
+      features[i + 3] = 1.0 / (1.0 + (double)obj->LOH.irt_history[i]);
+    }
+  }
+
+  // Update min-max values for normalization
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    if (features[i] < params->min_values[i]) {
+      params->min_values[i] = features[i];
+    }
+    if (features[i] > params->max_values[i]) {
+      params->max_values[i] = features[i];
+    }
+  }
+
+  // Normalize the features
+  normalize_features(params, features);
+}
+
+/**
+ * @brief Normalize features to the range [0,1]
+ *
+ * @param params
+ * @param features
+ */
+static void normalize_features(LOH_params_t *params, double *features) {
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    if (params->max_values[i] - params->min_values[i] > 1e-6) {
+      features[i] = (features[i] - params->min_values[i]) /
+                    (params->max_values[i] - params->min_values[i]);
+    } else {
+      features[i] = 0.5;  // Default if range is too small
+    }
+  }
+}
+
+/**
+ * @brief Calculate the score for an object based on its features and current
+ * weights
+ *
+ * @param params
+ * @param obj
+ * @return double Score value, higher is better to keep in cache
+ */
+static double calculate_score(LOH_params_t *params, cache_obj_t *obj) {
+  double features[FEATURE_DIM];
+  calculate_features(params, obj, features);
+
+  // Linear scoring function: Score = W · F
+  double score = 0.0;
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    score += params->weights[i] * features[i];
+  }
+
+  return score;
+}
+
+/**
+ * @brief Update feature statistics for learning
+ *
+ * @param params
+ * @param obj
+ * @param is_hit Whether this update is for a hit or miss
+ */
+static void update_feature_stats(LOH_params_t *params, cache_obj_t *obj,
+                                 bool is_hit) {
+  double features[FEATURE_DIM];
+  calculate_features(params, obj, features);
+
+  if (is_hit) {
+    params->recent_stats.hit_recency_sum += features[0];
+    params->recent_stats.hit_frequency_sum += features[1];
+    params->recent_stats.hit_size_sum += features[2];
+    params->recent_stats.hit_irt1_sum += features[3];
+    params->recent_stats.hit_irt2_sum += features[4];
+    params->recent_stats.hit_irt3_sum += features[5];
+    params->recent_stats.hit_count++;
+  } else {
+    params->recent_stats.miss_recency_sum += features[0];
+    params->recent_stats.miss_frequency_sum += features[1];
+    params->recent_stats.miss_size_sum += features[2];
+    params->recent_stats.miss_irt1_sum += features[3];
+    params->recent_stats.miss_irt2_sum += features[4];
+    params->recent_stats.miss_irt3_sum += features[5];
+    params->recent_stats.miss_count++;
+  }
+}
+
+/**
+ * @brief Update the weights based on recent performance statistics
+ *
+ * @param params
+ */
+static void update_weights(LOH_params_t *params) {
+  if (params->recent_stats.hit_count == 0 ||
+      params->recent_stats.miss_count == 0) {
+    // Not enough statistics yet
+    return;
+  }
+
+  // If we're using the Actor-Critic network and shared memory is available
+  if (params->shm_ptr != NULL && params->is_warmed_up) {
+    // Use Actor-Critic network for weight updates
+    sync_with_actor_critic(params);
+
+    // Don't reset stats immediately - we want to accumulate enough data
+    params->requests_since_rl_update = 0;
+  } else {
+    // Calculate average feature values for hits and misses
+    double hit_avg_features[FEATURE_DIM];
+    double miss_avg_features[FEATURE_DIM];
+
+    hit_avg_features[0] =
+        params->recent_stats.hit_recency_sum / params->recent_stats.hit_count;
+    hit_avg_features[1] =
+        params->recent_stats.hit_frequency_sum / params->recent_stats.hit_count;
+    hit_avg_features[2] =
+        params->recent_stats.hit_size_sum / params->recent_stats.hit_count;
+    hit_avg_features[3] =
+        params->recent_stats.hit_irt1_sum / params->recent_stats.hit_count;
+    hit_avg_features[4] =
+        params->recent_stats.hit_irt2_sum / params->recent_stats.hit_count;
+    hit_avg_features[5] =
+        params->recent_stats.hit_irt3_sum / params->recent_stats.hit_count;
+
+    miss_avg_features[0] =
+        params->recent_stats.miss_recency_sum / params->recent_stats.miss_count;
+    miss_avg_features[1] = params->recent_stats.miss_frequency_sum /
+                           params->recent_stats.miss_count;
+    miss_avg_features[2] =
+        params->recent_stats.miss_size_sum / params->recent_stats.miss_count;
+    miss_avg_features[3] =
+        params->recent_stats.miss_irt1_sum / params->recent_stats.miss_count;
+    miss_avg_features[4] =
+        params->recent_stats.miss_irt2_sum / params->recent_stats.miss_count;
+    miss_avg_features[5] =
+        params->recent_stats.miss_irt3_sum / params->recent_stats.miss_count;
+
+    // Adjust weights based on the difference between hit and miss profiles
+    // Features that show stronger differences between hit/miss are more
+    // important
+    double learning_rate = 0.1;
+
+    for (int i = 0; i < FEATURE_DIM; i++) {
+      // If this feature has higher values for hits, increase its weight
+      double feature_gap = hit_avg_features[i] - miss_avg_features[i];
+      params->weights[i] += learning_rate * feature_gap;
+
+      // Ensure weights stay positive
+      if (params->weights[i] < 0.1) params->weights[i] = 0.1;
+    }
+
+    // Normalize weights to sum to FEATURE_DIM (keeps scale consistent)
+    double weight_sum = 0.0;
+    for (int i = 0; i < FEATURE_DIM; i++) {
+      weight_sum += params->weights[i];
+    }
+
+    if (weight_sum > 0) {
+      for (int i = 0; i < FEATURE_DIM; i++) {
+        params->weights[i] = params->weights[i] * FEATURE_DIM / weight_sum;
+      }
+    }
+  }
+
+  // Reset statistics for next learning interval
+  memset(&params->recent_stats, 0, sizeof(feature_stats_t));
+
+  // Update hit ratio stats
+  params->recent_obj_hit_ratio =
+      (double)params->recent_hits /
+      (double)(params->recent_hits + params->recent_misses);
+  params->recent_byte_hit_ratio =
+      (double)params->recent_hit_bytes /
+      (double)(params->recent_hit_bytes + params->recent_miss_bytes);
+
+  // Reset counters
+  params->recent_hits = 0;
+  params->recent_misses = 0;
+  params->recent_hit_bytes = 0;
+  params->recent_miss_bytes = 0;
+
+  // We've now "warmed up" the cache if not already
+  params->is_warmed_up = true;
+}
+
+/**
+ * @brief 初始化频率表
+ *
+ * @param params
+ */
+static void freq_table_init(LOH_params_t *params) {
+  for (int i = 0; i <= FREQ_MAX; i++) {
+    params->freq_table[i] = NULL;
+    params->freq_table_tail[i] = NULL;
+  }
+
+  // 初始化哈希表
+  params->freq_node_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+}
+
+/**
+ * @brief 释放频率表资源
+ *
+ * @param params
+ */
+static void freq_table_free(LOH_params_t *params) {
+  // 清理哈希表和节点
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, params->freq_node_map);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    g_free(value);  // 释放节点
+  }
+  g_hash_table_destroy(params->freq_node_map);
+
+  for (int i = 0; i <= FREQ_MAX; i++) {
+    params->freq_table[i] = NULL;
+    params->freq_table_tail[i] = NULL;
+  }
+}
+
+/**
+ * @brief 添加对象到频率表对应的频率链表
+ *
+ * @param params
+ * @param obj 新对象，频率默认为1
+ */
+static void freq_table_add(LOH_params_t *params, cache_obj_t *obj) {
+  // 新对象的频率为1
+  int freq = 1;
+  obj->LOH.access_count = freq;
+
+  // 创建新节点
+  loh_freq_node_t *node = g_new0(loh_freq_node_t, 1);
+  node->obj = obj;
+  node->prev = NULL;
+  node->next = NULL;
+
+  // 添加到哈希表
+  g_hash_table_insert(params->freq_node_map, obj, node);
+
+  // 插入到频率为1的链表头部
+  if (params->freq_table[freq] == NULL) {
+    params->freq_table[freq] = node;
+    params->freq_table_tail[freq] = node;
+  } else {
+    node->next = params->freq_table[freq];
+    params->freq_table[freq]->prev = node;
+    params->freq_table[freq] = node;
+  }
+}
+
+/**
+ * @brief 从频率表中移除对象
+ *
+ * @param params
+ * @param obj 要移除的对象
+ */
+static void freq_table_remove(LOH_params_t *params, cache_obj_t *obj) {
+  // 从哈希表中获取节点
+  loh_freq_node_t *node = g_hash_table_lookup(params->freq_node_map, obj);
+  if (node == NULL) return;
+
+  int freq = obj->LOH.access_count;
+  if (freq > FREQ_MAX) freq = FREQ_MAX;
+
+  // 从链表中移除
+  if (node->prev != NULL) {
+    node->prev->next = node->next;
+  } else {
+    params->freq_table[freq] = node->next;
+  }
+
+  if (node->next != NULL) {
+    node->next->prev = node->prev;
+  } else {
+    params->freq_table_tail[freq] = node->prev;
+  }
+
+  // 从哈希表中移除并释放节点
+  g_hash_table_remove(params->freq_node_map, obj);
+  g_free(node);
+}
+
+/**
+ * @brief 更新对象在频率表中的位置
+ *
+ * @param params
+ * @param obj 访问频率增加的对象
+ */
+static void freq_table_update(LOH_params_t *params, cache_obj_t *obj) {
+  // 从旧频率移除
+  freq_table_remove(params, obj);
+
+  // 更新频率
+  obj->LOH.access_count++;
+  int freq = obj->LOH.access_count;
+  if (freq > FREQ_MAX) freq = FREQ_MAX;
+
+  // 创建新节点添加到新频率链表
+  loh_freq_node_t *node = g_new0(loh_freq_node_t, 1);
+  node->obj = obj;
+  node->prev = NULL;
+  node->next = NULL;
+
+  // 添加到哈希表
+  g_hash_table_insert(params->freq_node_map, obj, node);
+
+  if (params->freq_table[freq] == NULL) {
+    params->freq_table[freq] = node;
+    params->freq_table_tail[freq] = node;
+  } else {
+    node->next = params->freq_table[freq];
+    params->freq_table[freq]->prev = node;
+    params->freq_table[freq] = node;
+  }
+}
+
+/**
+ * @brief 获取最低频率的对象
+ *
+ * @param params
+ * @return cache_obj_t* 最低频率的对象，如果没有则返回NULL
+ */
+static cache_obj_t *freq_table_get_min_freq_obj(LOH_params_t *params) {
+  for (int i = 1; i <= FREQ_MAX; i++) {
+    if (params->freq_table_tail[i] != NULL) {
+      return params->freq_table_tail[i]->obj;
+    }
+  }
+  return NULL;
+}
+
+/**
+ * @brief 从频率表获取淘汰候选对象
+ *
+ * @param params
+ * @param max_candidates 最大候选数量
+ * @param n_candidates 输出参数，实际添加的候选数量
+ */
+static void freq_table_get_candidates(LOH_params_t *params, int max_candidates,
+                                      int *n_candidates) {
+  int added = 0;
+  int start_idx = *n_candidates;
+
+  // 从低频率开始选择
+  for (int i = 1; i <= FREQ_MAX && added < max_candidates; i++) {
+    loh_freq_node_t *curr = params->freq_table_tail[i];
+    while (curr != NULL && added < max_candidates) {
+      params->candidates[start_idx + added++] = curr->obj;
+      curr = curr->prev;
+    }
+  }
+
+  *n_candidates += added;
+}
+
+/**
+ * @brief 初始化IRT最大堆 - 每个堆保存相应IRT历史值
+ *
+ * @param params
+ * @param capacity 堆的容量（应与候选对象数目相关）
+ */
+static void irt_heap_init(LOH_params_t *params, int capacity) {
+  // 每个堆使用MAX_CANDIDATES作为容量，确保有足够空间存储淘汰候选对象
+  params->irt_heap_capacity = MAX_CANDIDATES;
+
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    params->irt_heap_size[i] = 0;
+    params->irt_heap[i] = g_new0(irt_heap_entry_t, params->irt_heap_capacity);
+  }
+}
+
+/**
+ * @brief 释放IRT堆资源
+ *
+ * @param params
+ */
+static void irt_heap_free(LOH_params_t *params) {
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    g_free(params->irt_heap[i]);
+    params->irt_heap[i] = NULL;
+    params->irt_heap_size[i] = 0;
+  }
+  params->irt_heap_capacity = 0;
+}
+
+/**
+ * @brief 上移操作以维护最大堆属性 - IRT值大的对象在堆顶
+ *
+ * @param params
+ * @param heap_idx 堆的索引
+ * @param idx 要上移的节点索引
+ */
+static void irt_heap_sift_up(LOH_params_t *params, int heap_idx, int idx) {
+  while (idx > 0) {
+    int parent = (idx - 1) / 2;
+    if (params->irt_heap[heap_idx][idx].irt_value <=
+        params->irt_heap[heap_idx][parent].irt_value) {
+      break;
+    }
+
+    // 交换节点
+    irt_heap_entry_t temp = params->irt_heap[heap_idx][idx];
+    params->irt_heap[heap_idx][idx] = params->irt_heap[heap_idx][parent];
+    params->irt_heap[heap_idx][parent] = temp;
+
+    idx = parent;
+  }
+}
+
+/**
+ * @brief 下移操作以维护最大堆属性 - IRT值大的对象在堆顶
+ *
+ * @param params
+ * @param heap_idx 堆的索引
+ * @param idx 要下移的节点索引
+ */
+static void irt_heap_sift_down(LOH_params_t *params, int heap_idx, int idx) {
+  int max_idx = idx;
+  int left = 2 * idx + 1;
+  int right = 2 * idx + 2;
+
+  if (left < params->irt_heap_size[heap_idx] &&
+      params->irt_heap[heap_idx][left].irt_value >
+          params->irt_heap[heap_idx][max_idx].irt_value) {
+    max_idx = left;
+  }
+
+  if (right < params->irt_heap_size[heap_idx] &&
+      params->irt_heap[heap_idx][right].irt_value >
+          params->irt_heap[heap_idx][max_idx].irt_value) {
+    max_idx = right;
+  }
+
+  if (max_idx != idx) {
+    // 交换节点
+    irt_heap_entry_t temp = params->irt_heap[heap_idx][idx];
+    params->irt_heap[heap_idx][idx] = params->irt_heap[heap_idx][max_idx];
+    params->irt_heap[heap_idx][max_idx] = temp;
+
+    irt_heap_sift_down(params, heap_idx, max_idx);
+  }
+}
+
+/**
+ * @brief 添加对象到指定的IRT最大堆
+ *
+ * @param params LOH参数结构体
+ * @param obj 缓存对象
+ * @param heap_idx 要添加到的堆索引
+ */
+static void irt_heap_add(LOH_params_t *params, cache_obj_t *obj, int heap_idx) {
+  // 获取对应IRT历史值
+  int64_t irt_value = obj->LOH.irt_history[heap_idx];
+
+  // 如果是无效值，不添加到堆
+  if (irt_value == INT64_MAX) {
+    return;
+  }
+
+  // 如果堆已满，且新对象的IRT值比堆顶小，则忽略
+  // 注意：在最大堆中，我们希望保留IRT值较大的对象，因为它们更适合被驱逐
+  if (params->irt_heap_size[heap_idx] >= params->irt_heap_capacity) {
+    if (irt_value <= params->irt_heap[heap_idx][0].irt_value) {
+      return;  // IRT值较小，不是好的驱逐候选者，不添加到堆中
+    }
+
+    // 移除堆顶
+    params->irt_heap[heap_idx][0] =
+        params->irt_heap[heap_idx][params->irt_heap_size[heap_idx] - 1];
+    params->irt_heap_size[heap_idx]--;
+    irt_heap_sift_down(params, heap_idx, 0);
+  }
+
+  // 添加新元素到堆尾
+  int idx = params->irt_heap_size[heap_idx]++;
+  params->irt_heap[heap_idx][idx].obj = obj;
+  params->irt_heap[heap_idx][idx].irt_value = irt_value;
+
+  // 上移以维护最大堆属性
+  irt_heap_sift_up(params, heap_idx, idx);
+}
+
+/**
+ * @brief 从指定的IRT堆中移除特定对象
+ *
+ * @param params
+ * @param obj
+ * @param heap_idx 堆的索引
+ */
+static void irt_heap_remove(LOH_params_t *params, cache_obj_t *obj,
+                            int heap_idx) {
+  // 查找对象在堆中的位置
+  int idx = -1;
+  for (int i = 0; i < params->irt_heap_size[heap_idx]; i++) {
+    if (params->irt_heap[heap_idx][i].obj == obj) {
+      idx = i;
+      break;
+    }
+  }
+
+  if (idx == -1) return;  // 对象不在堆中
+
+  // 用最后一个元素替换要删除的元素
+  params->irt_heap[heap_idx][idx] =
+      params->irt_heap[heap_idx][params->irt_heap_size[heap_idx] - 1];
+  params->irt_heap_size[heap_idx]--;
+
+  // 调整堆
+  if (idx < params->irt_heap_size[heap_idx]) {
+    irt_heap_sift_down(params, heap_idx, idx);
+    irt_heap_sift_up(params, heap_idx, idx);
+  }
+}
+
+/**
+ * @brief 更新对象在所有IRT堆中的位置
+ *
+ * @param params
+ * @param obj
+ */
+static void irt_heap_update(LOH_params_t *params, cache_obj_t *obj) {
+  // 更新对象在每个IRT堆中的位置
+  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+    // 先从当前堆中移除（如果存在）
+    irt_heap_remove(params, obj, i);
+
+    // 再添加到堆中（如果IRT值有效）
+    irt_heap_add(params, obj, i);
+  }
+}
+
+/**
+ * @brief 获取IRT堆顶对象（预测最早被再次访问的）
+ *
+ * @param params
+ * @return cache_obj_t*
+ */
+static cache_obj_t *irt_heap_peek_top(LOH_params_t *params, int heap_idx) {
+  if (params->irt_heap_size[heap_idx] == 0) return NULL;
+  return params->irt_heap[heap_idx][0].obj;
+}
+
+/**
+ * @brief 从IRT最大堆获取淘汰候选对象
+ *
+ * 选择IRT值最大的对象作为候选对象，因为IRT值大表示间隔时间长，
+ * 这些对象更适合被驱逐
+ *
+ * @param params
+ * @param max_candidates 最大候选数量
+ * @param n_candidates 输出参数，实际添加的候选数量
+ */
+static void irt_heap_get_candidates(LOH_params_t *params, int max_candidates,
+                                    int *n_candidates) {
+  int added = 0;
+  int start_idx = *n_candidates;
+  int candidates_per_heap = max_candidates / IRT_HISTORY_SIZE;
+
+  // 从每个堆中获取候选对象
+  for (int heap_idx = 0; heap_idx < IRT_HISTORY_SIZE; heap_idx++) {
+    int heap_candidates_added = 0;
+
+    // 创建临时堆的副本以便于操作
+    irt_heap_entry_t *temp_heap =
+        g_new0(irt_heap_entry_t, params->irt_heap_size[heap_idx]);
+    memcpy(temp_heap, params->irt_heap[heap_idx],
+           params->irt_heap_size[heap_idx] * sizeof(irt_heap_entry_t));
+    int temp_size = params->irt_heap_size[heap_idx];
+
+    // 从临时堆中提取最大的candidates_per_heap个元素
+    // 这些元素有最长的IRT，是最适合驱逐的对象
+    while (temp_size > 0 && heap_candidates_added < candidates_per_heap) {
+      params->candidates[start_idx + added++] = temp_heap[0].obj;
+      heap_candidates_added++;
+
+      // 移除堆顶
+      temp_heap[0] = temp_heap[temp_size - 1];
+      temp_size--;
+
+      // 下移
+      int idx = 0;
+      while (1) {
+        int max_idx = idx;
+        int left = 2 * idx + 1;
+        int right = 2 * idx + 2;
+
+        // 在最大堆中，选择较大的子节点
+        if (left < temp_size &&
+            temp_heap[left].irt_value > temp_heap[max_idx].irt_value) {
+          max_idx = left;
+        }
+
+        if (right < temp_size &&
+            temp_heap[right].irt_value > temp_heap[max_idx].irt_value) {
+          max_idx = right;
+        }
+
+        if (max_idx == idx) break;
+
+        irt_heap_entry_t temp = temp_heap[idx];
+        temp_heap[idx] = temp_heap[max_idx];
+        temp_heap[max_idx] = temp;
+
+        idx = max_idx;
+      }
+    }
+
+    g_free(temp_heap);
+  }
+
+  *n_candidates += added;
+}
+
+/**
+ * @brief 初始化尺寸桶
+ *
+ * @param params
+ */
+static void size_buckets_init(LOH_params_t *params) {
+  for (int i = 0; i < SIZE_BUCKET_COUNT; i++) {
+    params->size_buckets[i] = NULL;
+    params->size_buckets_tail[i] = NULL;
+  }
+
+  // 初始化哈希表
+  params->size_node_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+  // 设置桶的边界（只保存512KB以上的对象）
+  params->size_bucket_bounds[0] = 524288;     // 512KB
+  params->size_bucket_bounds[1] = 1048576;    // 1MB
+  params->size_bucket_bounds[2] = 10485760;   // 10MB
+  params->size_bucket_bounds[3] = 104857600;  // 100MB
+  params->size_bucket_bounds[4] = INT64_MAX;  // >100MB
+}
+
+/**
+ * @brief 释放尺寸桶资源
+ *
+ * @param params
+ */
+static void size_buckets_free(LOH_params_t *params) {
+  // 清理哈希表和节点
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, params->size_node_map);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    g_free(value);  // 释放节点
+  }
+  g_hash_table_destroy(params->size_node_map);
+
+  for (int i = 0; i < SIZE_BUCKET_COUNT; i++) {
+    params->size_buckets[i] = NULL;
+    params->size_buckets_tail[i] = NULL;
+  }
+}
+
+/**
+ * @brief 获取对象应该放入的尺寸桶索引
+ *
+ * @param params
+ * @param size 对象大小
+ * @return int 桶索引，如果对象小于512KB则返回-1表示不应该放入任何尺寸桶
+ */
+static int size_get_bucket_index(LOH_params_t *params, int64_t size) {
+  // 小于512KB的对象不放入尺寸桶
+  if (size < 524288) {
+    return -1;
+  }
+
+  // 对于符合条件的对象，找到合适的桶
+  for (int i = 0; i < SIZE_BUCKET_COUNT; i++) {
+    if (size <= params->size_bucket_bounds[i]) {
+      return i;
+    }
+  }
+  return SIZE_BUCKET_COUNT - 1;  // 最后一个桶
+}
+
+/**
+ * @brief 添加对象到尺寸桶（仅添加512KB以上的大对象）
+ *
+ * @param params
+ * @param obj
+ */
+static void size_buckets_add(LOH_params_t *params, cache_obj_t *obj) {
+  int bucket_idx = size_get_bucket_index(params, obj->obj_size);
+
+  // 如果对象不符合任何桶的条件（小于512KB），则不添加
+  if (bucket_idx == -1) {
+    return;
+  }
+
+  // 创建新节点
+  size_node_t *node = g_new0(size_node_t, 1);
+  node->obj = obj;
+  node->prev = NULL;
+  node->next = NULL;
+
+  // 添加到哈希表
+  g_hash_table_insert(params->size_node_map, obj, node);
+
+  if (params->size_buckets[bucket_idx] == NULL) {
+    // 桶为空，创建新链表
+    params->size_buckets[bucket_idx] = node;
+    params->size_buckets_tail[bucket_idx] = node;
+  } else {
+    // 添加到桶链表头部
+    node->next = params->size_buckets[bucket_idx];
+    params->size_buckets[bucket_idx]->prev = node;
+    params->size_buckets[bucket_idx] = node;
+  }
+}
+
+/**
+ * @brief 从尺寸桶中移除对象
+ *
+ * @param params
+ * @param obj
+ */
+static void size_buckets_remove(LOH_params_t *params, cache_obj_t *obj) {
+  // 检查对象是否符合尺寸桶条件（大于等于512KB）
+  if (obj->obj_size < 524288) {
+    return;  // 小对象不在尺寸桶中
+  }
+
+  // 从哈希表中获取节点
+  size_node_t *node = g_hash_table_lookup(params->size_node_map, obj);
+  if (node == NULL) return;
+
+  int bucket_idx = size_get_bucket_index(params, obj->obj_size);
+
+  // 从链表中移除
+  if (node->prev != NULL) {
+    node->prev->next = node->next;
+  } else {
+    // 节点是桶链表的头节点
+    params->size_buckets[bucket_idx] = node->next;
+  }
+
+  if (node->next != NULL) {
+    node->next->prev = node->prev;
+  } else {
+    // 节点是桶链表的尾节点
+    params->size_buckets_tail[bucket_idx] = node->prev;
+  }
+
+  // 从哈希表中移除并释放节点
+  g_hash_table_remove(params->size_node_map, obj);
+  g_free(node);
+}
+
+/**
+ * @brief
+ * 从尺寸桶获取淘汰候选对象，只考虑大尺寸(≥512KB)对象，优先选择尺寸更大的对象
+ *
+ * @param params
+ * @param max_candidates 最大候选数量
+ * @param n_candidates 输出参数，实际添加的候选数量
+ */
+static void size_buckets_get_candidates(LOH_params_t *params,
+                                        int max_candidates, int *n_candidates) {
+  int added = 0;
+  int start_idx = *n_candidates;
+
+  // 从大尺寸桶开始选择
+  for (int i = SIZE_BUCKET_COUNT - 1; i >= 0 && added < max_candidates; i--) {
+    size_node_t *curr = params->size_buckets[i];
+    while (curr != NULL && added < max_candidates) {
+      params->candidates[start_idx + added++] = curr->obj;
+      curr = curr->next;
+    }
+  }
+
+  *n_candidates += added;
+}
+
+/* End of implementation */
+
+#undef likely
+#define likely(x) __builtin_expect(!!(x), 1)
+#undef unlikely
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+#ifdef __cplusplus
+}
+#endif

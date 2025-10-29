@@ -75,6 +75,8 @@ static inline cache_t *create_cache(const char *trace_path,
       {"slruv0", SLRUv0_init},
       {"twoq", TwoQ_init},
       {"wtinyLFU", WTinyLFU_init},
+      {"adaptcache", LOH_init},  // 向后兼容，重定向到LOH
+      {"loh", LOH_init},
 #ifdef ENABLE_3L_CACHE
       {"3LCache", ThreeLCache_init},
 #endif

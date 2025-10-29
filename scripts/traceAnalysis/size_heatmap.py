@@ -1,10 +1,10 @@
 """
-plot size heatmap 
+plot size heatmap
 
-usage: 
-1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --common`, 
+usage:
+1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --common`,
 this will generate some output, including size distribution result, trace.size
-2. plot size heatmap using this script: 
+2. plot size heatmap using this script:
 `python3 size_heatmap.py trace.sizeWindow_w300`
 
 """
@@ -73,8 +73,15 @@ def _load_size_heatmap_data(datapath) -> Tuple[np.ndarray, int, float, int]:
 
     for idx, l in enumerate(size_distribution_over_time):
         l = np.array(l, dtype=np.float64)
-        l = l / np.sum(l)
-        plot_data[idx][: len(l)] = l
+        s = np.sum(l)
+        if s == 0.0:
+            # no counts in this time window: keep zeros
+            normed = np.zeros_like(l)
+        else:
+            normed = l / s
+        # convert to finite values and avoid inserting NaN
+        normed = np.nan_to_num(normed, nan=0.0, posinf=0.0, neginf=0.0)
+        plot_data[idx][: len(l)] = normed
 
     return plot_data.T, time_window, log_base, size_base
 

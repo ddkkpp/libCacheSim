@@ -127,6 +127,19 @@ typedef struct {
 } QDLP_obj_metadata_t;
 
 typedef struct {
+  int32_t access_count;         // Access frequency counter
+  int64_t last_access_time;     // Physical timestamp of last access
+  int64_t last_access_counter;  // Logical counter of last access
+  int64_t irt_values[3];        // IRT值数组: [0]=最新IRT, [1]=第2新, [2]=第3新,
+                                // 0表示未初始化
+  int32_t loh_state;            // Object lifecycle state (loh_obj_state_t)
+  // Hot-path cached pointers to auxiliary nodes (set by LOH policy)
+  void *loh_freq_node;     // points to loh_freq_node_t in LOH.c
+  void *loh_size_node;     // points to size_node_t in LOH.c
+  int16_t loh_irt_pos[3];  // index in each IRT heap (-1 if not present)
+} LOH_obj_metadata_t;
+
+typedef struct {
   int64_t insertion_time;  // measured in number of objects inserted
   int64_t freq;
   int32_t main_insert_freq;
@@ -191,6 +204,7 @@ typedef struct cache_obj {
     S3FIFO_obj_metadata_t S3FIFO;
     Sieve_obj_params_t sieve;
     CAR_obj_metadata_t CAR;
+    LOH_obj_metadata_t LOH;
 
 #if defined(ENABLE_GLCACHE) && ENABLE_GLCACHE == 1
     GLCache_obj_metadata_t GLCache;

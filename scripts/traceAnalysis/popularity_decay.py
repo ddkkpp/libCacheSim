@@ -1,11 +1,11 @@
 """
-plot how popularity decay over time 
+plot how popularity decay over time
 this can be used to visualize how objects get accessed over time
 
-usage: 
-1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --all`, 
+usage:
+1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --all`,
 this will generate some output, including popularityDecay result, trace.popularityDecay_w300_obj
-2. plot popularity decay using this script: 
+2. plot popularity decay using this script:
 `python3 popularity_decay.py trace.popularityDecay_w300_obj`
 
 Note that the small data provided in the repo cannot be used to plot this, please use large data
@@ -467,7 +467,12 @@ if __name__ == "__main__":
 
     figname_prefix = p.figname_prefix
     if not p.figname_prefix:
-        figname_prefix = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        # if user provided a single datapath, use its extracted dataname as prefix
+        if len(p.datapath_list) == 1:
+            figname_prefix = extract_dataname(p.datapath_list[0])
+        else:
+            # join multiple datanames with underscore
+            figname_prefix = "_".join([extract_dataname(d) for d in p.datapath_list])
 
     plot_data_list = []
     for datapath in p.datapath_list:

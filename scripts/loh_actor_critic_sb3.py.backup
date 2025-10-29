@@ -1,0 +1,538 @@
+#!/usr/bin/env python3
+"""
+LOH Actor-Critic using stable-baselines3.
+
+This script defines a cus# --    def __init__(self, shm_key=SHM_KEY):
+        super(LohEnv, self).__init__()
+
+        # 1. 定义动作空间和观测空间  return True
+
+# --- 自定义Gymnasium环境 ---
+class LohEnv(gym.Env):ronment that communicates with
+the LOH C cache simulator via shared memory.
+
+【重要设计说明】：
+1. 时序一致性：
+   - C端是触发式的，每隔 rl_update_interval 个请求才调用一次 sync_with_actor_critic
+   - Python端的 step 函数是被动等待的，等待C端发送状态后才响应
+   - 确保状态-动作-奖励的严格对应关系
+
+2. 训练数据流：
+   - C端：计算状态向量 → 发送给Python → 等待权重 → 应用权重继续处理
+   - Python端：接收状态 → 输出动作(权重) → 发送给C端 → 等待下一个状态 → 计算奖励
+
+3. 奖励计算：
+   - 基于执行动作后的性能指标计算奖励
+   - 使用 miss_ratio 和 byte_miss_ratio 计算命中率奖励
+   - stable-baselines3 自动处理经验回放和策略更新
+
+4. 关于训练数据保存：
+   - stable-baselines3的PPO会自动管理经验缓冲区
+   - 每个step返回的(state, action, reward, next_state)会被自动收集
+   - 当收集到n_steps个经验后，会进行策略更新
+   - CheckpointCallback定期保存模型参数
+   - TensorBoard记录训练过程中的各种指标
+"""
+
+import gymnasium as gym
+from gymnasium import spaces
+import numpy as np
+import ctypes
+import mmap
+import os
+import sys
+import time
+from datetime import datetime
+
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
+import torch
+
+# --- 常量和共享内存结构定义 (与C++和原Python脚本一致) ---
+SHM_KEY = 9876
+FEATURE_DIM = 6
+
+# 【新增】状态向量维度配置 - 通过环境变量或命令行参数设置
+def get_state_dim():
+    """获取状态向量维度，默认为38维，可通过环境变量LOH_STATE_DIM设置"""
+    state_dim = os.environ.get('LOH_STATE_DIM', '38')
+    return int(state_dim)
+
+CONTEXT_DIM = get_state_dim()
+STATE_DIM = CONTEXT_DIM
+
+print(f"LOH RL Agent: Using {STATE_DIM}-dimensional state vector")
+
+# 【修复】动态创建 SharedMemoryData 类以匹配 C 端的条件编译结构
+def create_shared_memory_class(state_dim):
+    """动态创建与 C 端 shm_data_t 结构匹配的类"""
+    class SharedMemoryData(ctypes.Structure):
+        """
+        与 C 端匹配的共享内存结构
+        支持26维和38维状态向量的动态切换
+        This structure must exactly match the shm_data_t struct in LOH.c
+        """
+        _fields_ = [
+            # 控制标志位
+            ('ready_for_inference', ctypes.c_int),
+            ('weights_updated', ctypes.c_int),
+            ('terminate', ctypes.c_int),
+            # 动态维度状态向量 - 支持26维或38维
+            ('state', ctypes.c_double * state_dim),
+            # 6维权重向量
+            ('weights', ctypes.c_double * FEATURE_DIM),
+            # 性能指标，用于计算奖励
+            ('miss_ratio', ctypes.c_double),
+            ('byte_miss_ratio', ctypes.c_double),
+            ('reward', ctypes.c_double), # C端暂时不用，但结构中保留
+            ('timestamp', ctypes.c_int64),
+        ]
+    return SharedMemoryData
+
+# 创建匹配当前配置的共享内存类
+SharedMemoryData = create_shared_memory_class(CONTEXT_DIM)
+
+# --- 自定义Gymnasium环境 ---
+class LohEnv(gym.Env):
+    """
+    一个遵循 Gymnasium API 的自定义环境，用于与LOH缓存模拟器交互。
+    A custom Gymnasium environment for interacting with the LOH cache simulator.
+    """
+    metadata = {"render_modes": []}
+
+    def __init__(self, shm_key=SHM_KEY):
+    """
+    自定义回调函数，用于监控LOH训练过程中的特殊指标
+    """
+    def __init__(self, verbose=0):
+        super(LOHTrainingCallback, self).__init__(verbose)
+        self.episode_count = 0
+        self.best_reward = float('-inf')
+        self.best_miss_ratio = float('inf')
+
+    def _on_step(self) -> bool:
+        """每一步都会调用这个方法（必须实现的抽象方法）"""
+        # 这里可以记录每步的信息，但我们主要在rollout结束时记录
+        return True  # 返回True继续训练，False停止训练
+
+    def _on_rollout_end(self) -> None:
+        """每次rollout结束时调用"""
+        # 简化的监控回调，只记录基本信息
+        print(f"� Rollout完成")
+        return True# --- 自定义Gymnasium环境 ---
+class LohEnv(gym.Env):
+    """
+    一个遵循 Gymnasium API 的自定义环境，用于与LOH缓存模拟器交互。
+    A custom Gymnasium environment for interacting with the LOH cache simulator.
+    """
+    metadata = {"render_modes": []}
+
+    def __init__(self, shm_key=SHM_KEY):
+        super(LohEnv, self).__init__()
+
+        # 1. 定义动作空间和观测空间
+        # 【核心修改点】: 将动作空间边界从无穷大改为 [-1, 1]
+        # 这是 stable-baselines3 的标准实践，可以解决致命错误。
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(FEATURE_DIM,), dtype=np.float32
+        )
+        # 观测空间：38维的上下文状态向量
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(STATE_DIM,), dtype=np.float32
+        )
+
+        # 2. 连接共享内存
+        self.shm_key = shm_key
+        self.shm = None
+        self.shm_file = None
+        self.shm_mmap = None
+        self._attach_shared_memory()
+
+        # 3. 初始化奖励函数参数
+        self.reward_alpha = 1.0 # 对象命中率的权重
+        self.reward_beta = 0.0  # 字节命中率的权重
+
+        # 【修复参数一致性】: Episode长度与PPO参数保持一致
+        # 原则：让episode长度略大于PPO的n_steps，避免频繁重置
+        self.max_episode_steps = 512   # 等于PPO的512步
+        self.current_step = 0
+        self.weight_update_count = 0
+
+        # 训练基础统计
+        self.episode_count = 0
+
+        print("✅ LohEnv 初始化完成")
+
+    def _attach_shared_memory(self):
+        """连接到共享内存文件，如不存在则主动创建并初始化"""
+        try:
+            shm_path = f"/dev/shm/loh_ac_{self.shm_key}"
+            expected_size = ctypes.sizeof(SharedMemoryData)
+
+            if not os.path.exists(shm_path):
+                print(f"🔨 共享内存文件不存在，Python端主动创建: {shm_path}")
+                # 创建并初始化为全零
+                with open(shm_path, 'wb') as f:
+                    f.write(b'\x00' * expected_size)
+                print(f"✅ 创建共享内存文件，大小: {expected_size} bytes")
+            else:
+                # 检查现有文件大小是否匹配
+                actual_size = os.path.getsize(shm_path)
+                print(f"⏳ 共享内存文件已存在: {shm_path}")
+                print(f"📏 文件大小: {actual_size} bytes, 期望大小: {expected_size} bytes")
+
+                if actual_size != expected_size:
+                    print(f"❌ 共享内存文件大小不匹配!")
+
+                    # 推断正确的状态维度
+                    if actual_size == 304:  # 26维结构的大小
+                        suggested_dim = 26
+                    elif actual_size == 400:  # 38维结构的大小（大约）
+                        suggested_dim = 38
+                    else:
+                        suggested_dim = "未知"
+
+                    print(f"💡 检测到的状态维度可能是: {suggested_dim}")
+                    print(f"💡 当前Python配置的状态维度: {STATE_DIM}")
+                    print(f"💡 请设置环境变量: export LOH_STATE_DIM={suggested_dim}")
+
+                    raise ValueError(f"共享内存大小不匹配: 文件={actual_size}字节, 期望={expected_size}字节")
+
+            self.shm_file = open(shm_path, 'r+b')
+            self.shm_mmap = mmap.mmap(self.shm_file.fileno(), expected_size)
+            self.shm = self.shm_mmap
+            print(f"✅ 成功连接到共享内存 ({expected_size} bytes)")
+        except Exception as e:
+            print(f"❌ 共享内存连接失败: {e}")
+            raise e
+
+    def _read_shm(self):
+        """从共享内存读取数据"""
+        try:
+            self.shm.seek(0)
+            raw_data = self.shm.read(ctypes.sizeof(SharedMemoryData))
+            return SharedMemoryData.from_buffer_copy(raw_data)
+        except Exception as e:
+            print(f"❌ 共享内存读取错误: {e}")
+            return None
+
+    def _write_shm(self, data_struct):
+        """将数据结构写入共享内存"""
+        try:
+            # 序列化数据结构
+            raw_data = ctypes.string_at(ctypes.byref(data_struct), ctypes.sizeof(data_struct))
+
+            # 写入共享内存
+            self.shm.seek(0)
+            self.shm.write(raw_data)
+            self.shm.flush()
+
+            return True
+        except Exception as e:
+            print(f"❌ 共享内存写入错误: {e}")
+            return False
+
+    def reset(self, seed=None, options=None):
+        """重置环境，在每轮episode开始时调用
+
+        【重要】：reset的正确逻辑应该等待C端主动发送第一个状态
+        这确保了状态的有效性和时序一致性
+        """
+        super().reset(seed=seed)
+
+        # 重置步数计数器
+        self.current_step = 0
+        self.weight_update_count = 0
+        self.episode_count += 1
+
+        print(f"\n🔄 Episode #{self.episode_count} Reset - Waiting for first state from C...")
+        print(f"[Reset Debug] Previous episode summary:")
+        if hasattr(self, 'experience_buffer') and len(self.experience_buffer) > 0:
+            last_exp = self.experience_buffer[-1]
+            print(f"   Last step: {last_exp.get('step', 'N/A')}")
+            print(f"   Terminated: {last_exp.get('terminated', 'N/A')}")
+            print(f"   Truncated: {last_exp.get('truncated', 'N/A')}")
+        print(f"[Reset Debug] Reset called by: PPO internal logic")
+
+        # 【关键】：等待C端发送第一个有效状态
+        # C端会在第一个rl_update_interval周期结束时发送状态
+        timeout_counter = 0
+        max_timeout = 60000  # 60秒超时（首次可能需要更长时间进行warmup）
+
+        initial_data = None
+        while timeout_counter < max_timeout:
+            data = self._read_shm()
+            if data and data.ready_for_inference:
+                initial_data = data
+                break
+            time.sleep(0.005)  # 5ms检查一次，与C端同步
+            timeout_counter += 1
+
+            # 每10秒打印一次等待状态
+            if timeout_counter % 2000 == 0:
+                elapsed_time = timeout_counter * 0.005
+                print(f"Still waiting for first state... {elapsed_time:.1f}s elapsed")
+
+        if timeout_counter >= max_timeout:
+            raise RuntimeError("Reset timeout: C端未发送初始状态")
+
+        # 获取初始观测状态
+        initial_observation = np.array(initial_data.state, dtype=np.float32)
+
+        # 记录初始性能指标（不用于奖励计算，仅作为基准）
+        initial_miss_ratio = initial_data.miss_ratio
+        initial_byte_miss_ratio = initial_data.byte_miss_ratio
+
+        # 清除历史性能指标，确保第一步不会错误计算奖励
+        if hasattr(self, '_previous_miss_ratio'):
+            delattr(self, '_previous_miss_ratio')
+        if hasattr(self, '_previous_byte_miss_ratio'):
+            delattr(self, '_previous_byte_miss_ratio')
+
+        print(f"✅ Episode #{self.episode_count} Reset Complete:")
+        print(f"   Initial miss_ratio: {initial_miss_ratio:.4f}")
+        print(f"   Initial byte_miss_ratio: {initial_byte_miss_ratio:.4f}")
+        print(f"   State vector shape: {initial_observation.shape}")
+
+        # 准备返回信息
+        info = {
+            'initial_miss_ratio': initial_miss_ratio,
+            'initial_byte_miss_ratio': initial_byte_miss_ratio,
+            'episode_step': self.current_step,
+            'episode_count': self.episode_count,
+            'state_dim': CONTEXT_DIM
+        }
+
+        return initial_observation, info
+
+    def step(self, action):
+        """执行一步操作，这是环境的核心
+
+        【重要】：修复时序一致性，确保正确的状态-动作-奖励对应关系
+
+        正确的时序逻辑：
+        1. 当前step函数被调用时，我们已经有了当前状态(通过上次调用或reset获得)
+        2. 基于当前状态，智能体选择了action
+        3. 我们将action(权重)发送给C端
+        4. 等待C端执行这个action并生成新状态
+        5. 计算执行action后的奖励(基于新状态的性能)
+        6. 返回新状态、奖励等信息
+
+        注意：C端是触发式的，每隔rl_update_interval个请求才主动发送状态
+        """
+        # 步数加一
+        self.current_step += 1
+
+        # 【第1步】：将当前动作转换为权重并发送给C端
+        action_tensor = torch.from_numpy(action)
+        weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
+
+        # 读取当前共享内存数据
+        data = self._read_shm()
+        if data is None:
+            raise RuntimeError("无法读取共享内存")
+
+        # 发送权重到C端，并标记权重已更新
+        data.weights[:] = weights
+        data.weights_updated = 1
+        data.ready_for_inference = 0  # 清除推理标志，表示C端可以继续处理
+
+        # 写入权重到共享内存
+        self._write_shm(data)
+
+        # 打印权重信息（简化）
+        self.weight_update_count += 1
+        print(f"[Step {self.current_step}] Weights: {weights}")
+
+        # 【修复时序问题】：发送权重后，等待C端应用权重并发送执行结果
+        # 等待时间与C端的RL处理周期匹配
+        timeout_counter = 0
+        max_timeout = 3000  # 15秒超时（3000 × 5ms），稍长于C端的10秒超时
+
+        print(f"[Step {self.current_step}] Waiting for C to process weights...")
+        while timeout_counter < max_timeout:
+            # 重新读取，检查是否有新状态
+            new_data = self._read_shm()
+            if new_data and new_data.ready_for_inference:
+                # C端发送了新状态，使用新状态
+                data = new_data
+                break
+            time.sleep(0.005)  # 5ms检查一次
+            timeout_counter += 1
+
+        # 如果超时，使用当前状态（降级处理）
+        if timeout_counter >= max_timeout:
+            print(f"[Step {self.current_step}] ⚠️ Timeout waiting for new state, using current state")
+
+        # 使用状态作为新观测
+        new_observation = np.array(data.state, dtype=np.float32)
+        new_miss_ratio = data.miss_ratio
+        new_byte_miss_ratio = data.byte_miss_ratio
+
+        print(f"[Step {self.current_step}] Using current state (miss_ratio: {new_miss_ratio:.4f})")
+
+        # 【第5步】：计算奖励
+        # 奖励基于新状态的性能指标计算
+        obj_hit_ratio = 1.0 - new_miss_ratio
+        byte_hit_ratio = 1.0 - new_byte_miss_ratio
+        reward = self.reward_alpha * obj_hit_ratio + self.reward_beta * byte_hit_ratio
+
+        # 如果有历史性能，可以计算性能改进作为额外奖励
+        if hasattr(self, '_previous_miss_ratio'):
+            # 计算性能改进奖励（可选）
+            performance_improvement = self._previous_miss_ratio - new_miss_ratio
+            # reward += 0.1 * performance_improvement  # 可根据需要调整权重
+
+        print(f"[Step {self.current_step}] Calculated reward: {reward:.6f}")
+
+        # 【第6步】：保存当前性能指标作为下次的历史基准
+        self._previous_miss_ratio = new_miss_ratio
+        self._previous_byte_miss_ratio = new_byte_miss_ratio
+
+        # 【第8步】：检查终止条件
+        terminated = (data.terminate == 1)
+        truncated = (self.current_step >= self.max_episode_steps)
+
+        # 【调试】增加详细的终止信息 - 简化版
+        if terminated or truncated:
+            print(f"[Step {self.current_step}] Episode ending - terminated={terminated}, truncated={truncated}")
+
+        # 【第9步】：准备返回信息
+        info = {
+            'miss_ratio': new_miss_ratio,
+            'byte_miss_ratio': new_byte_miss_ratio,
+            'step': self.current_step,
+            'weights_sent': weights.tolist(),
+            'obj_hit_ratio': obj_hit_ratio,
+            'byte_hit_ratio': byte_hit_ratio
+        }
+
+        # 【调试输出】：状态向量详细信息 - 参考C端LOH.c的格式
+        # 【性能优化】：减少格式化字符串的开销
+        if CONTEXT_DIM == 38:
+            # 【38维状态向量】快速输出格式
+            print(f"[global_features]: [{new_observation[0]:.6f}, {new_observation[1]:.6f}]")
+            # 使用更高效的字符串构建
+            request_features = ", ".join(f"{new_observation[i]:.6f}" for i in range(2, 26))
+            print(f"[request_features]: [{request_features}]")
+            cache_features = ", ".join(f"{new_observation[i]:.6f}" for i in range(26, 38))
+            print(f"[cache_features]: [{cache_features}]")
+
+        elif CONTEXT_DIM == 26:
+            # 【26维状态向量】快速输出格式
+            print(f"[global_features]: [{new_observation[0]:.6f}, {new_observation[1]:.6f}]")
+            # 【高性能】：预分配字符串避免重复格式化
+            request_features = ", ".join(f"{new_observation[i]:.6f}" for i in range(2, 26))
+            print(f"[request_features]: [{request_features}]")
+
+        return new_observation, reward, terminated, truncated, info
+
+    def close(self):
+        """清理资源"""
+        if self.shm_mmap: self.shm_mmap.close()
+        if self.shm_file: self.shm_file.close()
+        print("🧹 环境已清理。")
+
+# --- 主训练逻辑 ---
+def main():
+    # 【新增】使用时间戳创建唯一的运行目录
+    run_timestamp = datetime.now().strftime("%m%d_%H%M%S")
+    run_dir = f"./runs/{run_timestamp}"
+    log_dir = f"{run_dir}/sb3_logs/"
+    checkpoint_dir = f"{run_dir}/sb3_checkpoints/"
+    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    print(f"🚀 LOH Actor-Critic (stable-baselines3 版本) 启动...")
+    print(f"💾 本次运行数据将保存在: {run_dir}")
+
+    env = None
+    try:
+        # 1. 实例化自定义环境
+        env = LohEnv()
+
+        # (可选但推荐) 检查环境是否遵循Gymnasium API
+        print("🕵️  正在检查环境...")
+        check_env(env, warn=True) # 改为warn模式，避免严格检查导致的问题
+        print("✅ 环境检查通过！")
+
+        # 【删除所有回调以提升性能】
+        callbacks = None
+
+        # 2. 实例化PPO模型
+        # 【针对LOH优化】考虑C端每200个请求发送1次数据的特性
+        # 原则：增加训练强度，充分利用稀少的样本
+        model = PPO(
+            "MlpPolicy",
+            env,
+            verbose=1,
+            tensorboard_log=log_dir,
+
+            # === 核心超参数优化 ===
+            n_steps=512,          # 适中的样本收集数量，适合数据稀少场景
+            batch_size=32,        # 确保有16个批次 (512/32=16)
+            n_epochs=30,          # 大幅增加训练轮数，充分利用每个样本
+            gamma=0.99,           # 折扣因子保持默认
+            learning_rate=1e-4,   # 稍微降低学习率，避免过拟合
+
+            # === PPO特定参数 ===
+            clip_range=0.2,       # PPO裁剪参数保持默认
+            ent_coef=0.02,        # 稍微增加熵系数，鼓励探索
+            vf_coef=0.5,          # 价值函数损失系数保持默认
+            max_grad_norm=0.5,    # 梯度裁剪保持默认
+
+            # === 网络架构 ===
+            policy_kwargs=dict(
+                net_arch=dict(pi=[128, 128], vf=[128, 128]),  # 稍小的网络避免过拟合
+                activation_fn=torch.nn.ReLU,
+            ),
+
+            # === 其他优化 ===
+            gae_lambda=0.95,      # GAE lambda参数保持默认
+            use_sde=False,        # 不使用状态相关探索
+            sde_sample_freq=-1,   # SDE采样频率
+            target_kl=0.02,      # 稍微放宽KL散度限制
+        )
+
+        # 3. 开始训练
+        print("🧠 开始训练模型... 按 Ctrl+C 停止。")
+        print(f"📋 训练配置 (针对LOH稀少数据优化):")
+        print(f"   - 状态维度: {CONTEXT_DIM}")
+        print(f"   - 动作维度: {FEATURE_DIM}")
+        print(f"   - C端数据频率: 每200个请求发送1次状态")
+        print(f"   - PPO样本收集: {model.n_steps} 步")
+        print(f"   - PPO批次大小: {model.batch_size} (共 {model.n_steps//model.batch_size} 个批次)")
+        print(f"   - PPO训练轮数: 30 轮 (增强训练)")
+        print(f"   - 网络大小: 128x128 (防止过拟合)")
+        print("")
+        print("💡 优化原理:")
+        print("   • 增加训练轮数(30轮)充分利用稀少样本")
+        print("   • 降低学习率(1e-4)提高训练稳定性")
+        print("   • 减小网络规模防止过拟合")
+        print("   • 合理的批次数量(16个)保证训练效果")
+
+        model.learn(
+            total_timesteps=50000,     # 增加训练步数以获得更好的性能
+            callback=callbacks,        # 使用组合回调
+            progress_bar=True,         # 显示进度条
+            tb_log_name="loh_ppo_run", # TensorBoard日志名称
+        )        # 4. 保存最终模型
+        model.save(f"{run_dir}/ppo_loh_final")
+        print(f"💾 最终模型已保存为 {run_dir}/ppo_loh_final.zip")
+
+    except KeyboardInterrupt:
+        print("\n⚠️  用户中断训练。")
+        if 'model' in locals():
+            model.save(f"{run_dir}/ppo_loh_interrupted")
+            print(f"💾 中断时模型已保存为 {run_dir}/ppo_loh_interrupted.zip")
+    except Exception as e:
+        print(f"❌ 发生致命错误: {e}")
+
+    finally:
+        if 'env' in locals() and env is not None:
+            env.close()
+
+if __name__ == "__main__":
+    import torch
+
+    main()

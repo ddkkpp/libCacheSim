@@ -1,4 +1,7 @@
-#!/bin/bash 
+#!/bin/bash
+
+# Use non-interactive matplotlib backend to avoid EGL/OpenGL errors on headless hosts
+export MPLBACKEND=Agg
 
 dataname=$1
 CURR_DIR=$(dirname $(readlink -f $0))

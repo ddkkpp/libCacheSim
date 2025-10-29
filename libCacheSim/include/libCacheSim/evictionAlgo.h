@@ -191,6 +191,9 @@ cache_t *GLCache_init(const common_cache_params_t ccache_params,
 
 #endif
 
+cache_t *LOH_init(const common_cache_params_t ccache_params,
+                  const char *cache_specific_params);
+
 #ifdef __cplusplus
 }
 #endif
