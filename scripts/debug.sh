@@ -61,9 +61,49 @@ cd _build_dbg
 
 # Configure and build with warning flags
 echo "Configuring and building project with strict warnings..."
+## Propagate LOH state-dimension to compiler as a macro (default 26 -> no cache features)
+# Priority: explicit LOH_INCLUDE_CACHE_FEATURES > LOH_STATE_DIM mapping > default
+LOH_FEATURES_DEFINE=""
+if [[ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ]]; then
+	# Use caller-provided 0/1 directly
+	VAL="${LOH_INCLUDE_CACHE_FEATURES}"
+	if [[ "${VAL}" != "0" && "${VAL}" != "1" ]]; then
+		VAL=1
+	fi
+	LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=${VAL}"
+elif [[ -n "${LOH_STATE_DIM:-}" ]]; then
+	# Map 26 -> 0, 38 -> 1 (others default to 1 for safety)
+	if [[ "${LOH_STATE_DIM}" == "26" ]]; then
+		LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=0"
+	elif [[ "${LOH_STATE_DIM}" == "38" ]]; then
+		LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=1"
+	else
+		LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=1"
+	fi
+else
+	# Default: include cache features (38)
+	LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=1"
+fi
+
+# Compose flags including the macro define
+# Propagate optional candidate features switch (default OFF)
+LOH_CAND_DEFINE=""
+if [[ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ]]; then
+	VAL="${LOH_INCLUDE_CANDIDATE_FEATURES}"
+	if [[ "${VAL}" != "0" && "${VAL}" != "1" ]]; then
+		VAL=0
+	fi
+	LOH_CAND_DEFINE="-DLOH_INCLUDE_CANDIDATE_FEATURES=${VAL}"
+else
+	LOH_CAND_DEFINE="-DLOH_INCLUDE_CANDIDATE_FEATURES=0"
+fi
+
+C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs ${LOH_FEATURES_DEFINE} ${LOH_CAND_DEFINE}"
+CXX_FLAGS="-Wall -Wextra -Werror -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs ${LOH_FEATURES_DEFINE} ${LOH_CAND_DEFINE}"
+
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-	-DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs" \
-	-DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs" \
+	-DCMAKE_C_FLAGS="${C_FLAGS}" \
+	-DCMAKE_CXX_FLAGS="${CXX_FLAGS}" \
 	-DENABLE_GLCACHE=ON -DENABLE_LRB=ON -DENABLE_3L_CACHE=ON \
 	..
 

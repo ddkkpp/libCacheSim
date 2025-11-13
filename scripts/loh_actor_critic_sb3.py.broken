@@ -35,19 +35,6 @@ def LOH_DEBUG_VERBOSE():
 from stable_baselines3 import PPO  # 保留作参考
 # from stable_baselines3 import SAC
 
-# 常数定义
-FEATURE_DIM = 6
-CONTEXT_DIM = 26
-STATE_DIM = 28  # CONTEXT_DIM + 2 global features
-SHM_KEY = 9876
-LOH_DEBUG_LEVEL = 2
-
-def LOH_DEBUG_BASIC():
-    return LOH_DEBUG_LEVEL >= 1
-
-def LOH_DEBUG_VERBOSE():
-    return LOH_DEBUG_LEVEL >= 2
-
 from stable_baselines3 import PPO  # 保留作参考
 # from stable_baselines3 import SAC
 # from stable_baselines3.common.logger import configure
@@ -789,7 +776,7 @@ def main():
             total_timesteps=int(1e12),
             log_interval=1,
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_sb3_run",
         )
 
         training_end_time = datetime.now()

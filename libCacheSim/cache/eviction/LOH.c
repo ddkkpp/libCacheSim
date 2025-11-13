@@ -14,9 +14,12 @@
 
 // 不管是否训练，继续等待权重
 
-// 状态向量配置开关
-// 设置为1表示状态向量包含缓存特征（38维），设置为0表示只包含近期请求特征（26维）
-#define LOH_INCLUDE_CACHE_FEATURES 0
+// 状态向量配置：由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1
+// 控制（未定义则按0处理） 不在此文件内提供默认
+// #define，避免与构建脚本传入的定义发生重定义警告
+#ifndef LOH_INCLUDE_CACHE_FEATURES
+// 未定义时保持未定义，后续使用 #if LOH_INCLUDE_CACHE_FEATURES 时会按 0 处理
+#endif
 
 // LOH 调试模式控制
 // 根据编译模式自动确定调试级别
@@ -227,14 +230,24 @@ static void LOH_print_cache(const cache_t *cache);
 // 当前配置：MAX_CANDIDATES=96，LOH_SEEN_CAP=256，负载约 <= 96/256 ≈ 0.375。
 #define FEATURE_DIM 6  // 用于评分的特征数量
 
-// 根据配置选择状态向量维度
+// 根据配置选择基础状态向量维度 (26 或 38)
 #if LOH_INCLUDE_CACHE_FEATURES
-#define CONTEXT_DIM \
-  38  // 完整状态向量：[0-1] 全局性能, [2-25] 特征统计, [26-37] 缓存状态
+#define BASE_STATE_DIM 38  // [0-1] 全局, [2-25] 请求特征统计, [26-37] 缓存状态
 #else
-#define CONTEXT_DIM \
-  26  // 简化状态向量：[0-1] 全局性能, [2-25] 特征统计（无缓存状态）
+#define BASE_STATE_DIM 26  // [0-1] 全局, [2-25] 请求特征统计（无缓存状态）
 #endif
+
+// 候选特征汇总附加维度 (编译期开关)：6来源×6特征×2(均值/方差)=72
+#ifndef LOH_INCLUDE_CANDIDATE_FEATURES
+#define LOH_INCLUDE_CANDIDATE_FEATURES 0
+#endif
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+#define CAND_FEATURE_DIM 72
+#else
+#define CAND_FEATURE_DIM 0
+#endif
+
+#define CONTEXT_DIM (BASE_STATE_DIM + CAND_FEATURE_DIM)
 
 #define SHM_KEY 9876  // 共享内存段键
 #define SEM_KEY 9877  // 信号量键
@@ -260,14 +273,8 @@ typedef struct {
   int terminate;            // 置为 1 用于通知终止
   int is_training;          // Python 训练状态标志：1 表示Python正在训练
 
-  // 状态信息 - 根据配置选择维度
-#if LOH_INCLUDE_CACHE_FEATURES
-  // 38 维状态向量: [0-1] 全局性能, [2-25] 特征统计, [26-37] 缓存状态
-  double state[38];
-#else
-  // 26 维状态向量: [0-1] 全局性能, [2-25] 特征统计（无缓存状态）
-  double state[26];
-#endif
+  // 状态信息：统一使用 CONTEXT_DIM（包含基础维度 + 可选候选特征附加段）
+  double state[CONTEXT_DIM];
 
   // 策略网络输出的特征权重（6 维）
   double weights[FEATURE_DIM];
@@ -432,6 +439,15 @@ typedef struct {
   double cache_feature_sum[FEATURE_DIM];     // 每个特征在当前缓存中的总和
   double cache_feature_sum_sq[FEATURE_DIM];  // 每个特征在当前缓存中的平方和
 
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+  // 候选集合的特征累计（按来源拆分：来源数量与 FEATURE_DIM 绑定，以避免硬编码
+  // 6） 来源顺序：0=recency,1=frequency,2=size,3=irt1,4=irt2,5=irt3
+  // （与特征维度一致）
+  double cand_feat_sum[FEATURE_DIM][FEATURE_DIM];
+  double cand_feat_sumsq[FEATURE_DIM][FEATURE_DIM];
+  uint64_t cand_feat_count[FEATURE_DIM];
+#endif
+
   // 【删除 global_access_records】：改用对象级访问窗口和 ghost cache
   // 【新增】为被驱逐对象保留历史信息的 Ghost 缓存（类似 ThreeLCache 的
   // out_cache）
@@ -457,7 +473,7 @@ typedef struct {
   int sem_requested;     // 运行时是否请求使用信号量（由环境变量控制）
   bool sem_owner;        // 是否由当前进程负责 unlink
 
-  // 38 维上下文状态向量
+  // 上下文状态向量（可能为 26/38/98/110 等，取决于开关）
   double context_state[CONTEXT_DIM];  // Actor-Critic 网络的输入状态向量
 
   // RL 训练相关参数
@@ -1339,7 +1355,7 @@ static void update_state_vector(LOH_params_t *params) {
   // 初始化状态向量为 0
   memset(params->context_state, 0, sizeof(double) * CONTEXT_DIM);
 
-  // 状态向量结构 (38 维):
+  // 状态向量结构 (BASE_STATE_DIM 维):
   // [0-1]: global_perf 指标 - 对象命中率，字节命中率
   // [2-25]: 特征表现剖析 - 每个特征在命中/未命中对象中的均值和方差
   // (6 个特征 × 2 种统计 × 2 种事件) [26-37]: 缓存池状态摘要 -
@@ -1466,6 +1482,37 @@ static void update_state_vector(LOH_params_t *params) {
   }
 #endif
 
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+  // D. 候选集合统计 (72 维): 来源序 recency,freq,size,irt1,irt2,irt3；特征序
+  // recency..irt3 输出顺序：对每个来源 s∈[0..5]，对每个特征 f∈[0..5]，先 mean
+  // 再 var
+  int base_off = BASE_STATE_DIM;  // 附加段起点
+  for (int s = 0; s < FEATURE_DIM; ++s) {
+    for (int f = 0; f < FEATURE_DIM; ++f) {
+      double mean = 0.0, var = 0.0;
+      uint64_t n = params->cand_feat_count[s];
+      if (n > 0) {
+        mean = params->cand_feat_sum[s][f] / (double)n;
+        double ex2 = params->cand_feat_sumsq[s][f] / (double)n;
+        var = ex2 - mean * mean;
+        if (var < 0.0) var = 0.0;
+      }
+      int idx = base_off + s * (FEATURE_DIM * 2) + f * 2;
+      params->context_state[idx] = mean;
+      params->context_state[idx + 1] = var;
+    }
+  }
+
+  // 计算完成后，立即重置累计器，开始新周期
+  for (int s = 0; s < FEATURE_DIM; ++s) {
+    params->cand_feat_count[s] = 0;
+    for (int f = 0; f < FEATURE_DIM; ++f) {
+      params->cand_feat_sum[s][f] = 0.0;
+      params->cand_feat_sumsq[s][f] = 0.0;
+    }
+  }
+#endif
+
 #if LOH_INCLUDE_CACHE_FEATURES
   // 【调试打印】完整状态向量 (38维)
 
@@ -1486,6 +1533,21 @@ static void update_state_vector(LOH_params_t *params) {
     if (i < 37) LOH_DEBUG_PRINT_BASIC(", ");
   }
   LOH_DEBUG_PRINT_BASIC("]\n");
+
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+  // 候选统计（72维）按来源拆分为6行；每行12个（6特征×均值/方差），最后打印
+  {
+    for (int s = 0; s < 6; ++s) {
+      LOH_DEBUG_PRINT_BASIC("[candidate_features_%d]: [", s + 1);
+      for (int j = 0; j < 12; ++j) {
+        int idx = base_off + s * 12 + j;
+        LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[idx]);
+        if (j < 11) LOH_DEBUG_PRINT_BASIC(", ");
+      }
+      LOH_DEBUG_PRINT_BASIC("]\n");
+    }
+  }
+#endif
 #else
   // 【调试打印】完整状态向量 (26维) - 不包含缓存特征
 
@@ -1499,6 +1561,20 @@ static void update_state_vector(LOH_params_t *params) {
     if (i < 25) LOH_DEBUG_PRINT_BASIC(", ");
   }
   LOH_DEBUG_PRINT_BASIC("]\n");
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+  // 候选统计（72维）按来源拆分为6行；每行12个（6特征×均值/方差），最后打印
+  {
+    for (int s = 0; s < 6; ++s) {
+      LOH_DEBUG_PRINT_BASIC("[candidate_features_%d]: [", s + 1);
+      for (int j = 0; j < 12; ++j) {
+        int idx = base_off + s * 12 + j;
+        LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[idx]);
+        if (j < 11) LOH_DEBUG_PRINT_BASIC(", ");
+      }
+      LOH_DEBUG_PRINT_BASIC("]\n");
+    }
+  }
+#endif
 #endif
 
   // 【保留】逐个详细输出（VERBOSE模式）
@@ -2350,7 +2426,12 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->sem_owner = false;
   // 仅在启用RL时初始化共享内存
   if (params->enable_rl) {
-    params->shm_filename = strdup("/dev/shm/loh_ac_9876");
+    const char *key_str = getenv("LOH_SHM_KEY");
+    if (key_str && key_str[0] != '\0') {
+      params->shm_filename = g_strdup_printf("/dev/shm/loh_ac_%s", key_str);
+    } else {
+      params->shm_filename = g_strdup_printf("/dev/shm/loh_ac_%d", SHM_KEY);
+    }
     params->shm_file = fopen(params->shm_filename, "r+b");
   }
 
@@ -2463,6 +2544,22 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     }
 
     g_free(old_params_str);
+    // ===== Temporary change: force-disable RL and fix weights =====
+    // User requested a quick way to run LOH without any Actor-Critic IPC
+    // and to use fixed weights = (1,0,0,0,0,0). This is intentionally
+    // intrusive and should be removed after debugging.
+    // params->enable_rl = 0; /* force disable RL communication */
+    // params->weights[0] = 1.0;
+    // params->weights[1] = 0.0;
+    // params->weights[2] = 0.0;
+    // params->weights[3] = 0.0;
+    // params->weights[4] = 0.0;
+    // params->weights[5] = 0.0;
+    // LOH_DEBUG_PRINT_BASIC(
+    //     "[LOH INIT] Temporary: RL disabled and weights fixed to [%.3f, %.3f,
+    //     %.3f, %.3f, %.3f, %.3f]\n", params->weights[0], params->weights[1],
+    //     params->weights[2], params->weights[3], params->weights[4],
+    //     params->weights[5]);
   }
 
   // 如果关闭了RL，确保不持有未使用的SHM资源
@@ -2478,10 +2575,20 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     loh_sem_close(params, false);
   } else {
     if (params->sem_ready_name == NULL) {
-      params->sem_ready_name = g_strdup_printf("/loh_ac_ready_%d", SHM_KEY);
+      const char *key_str = getenv("LOH_SHM_KEY");
+      if (key_str && key_str[0] != '\0') {
+        params->sem_ready_name = g_strdup_printf("/loh_ac_ready_%s", key_str);
+      } else {
+        params->sem_ready_name = g_strdup_printf("/loh_ac_ready_%d", SHM_KEY);
+      }
     }
     if (params->sem_ack_name == NULL) {
-      params->sem_ack_name = g_strdup_printf("/loh_ac_ack_%d", SHM_KEY);
+      const char *key_str = getenv("LOH_SHM_KEY");
+      if (key_str && key_str[0] != '\0') {
+        params->sem_ack_name = g_strdup_printf("/loh_ac_ack_%s", key_str);
+      } else {
+        params->sem_ack_name = g_strdup_printf("/loh_ac_ack_%d", SHM_KEY);
+      }
     }
     if (!loh_sem_init(params)) {
       LOH_DEBUG_PRINT_BASIC(
@@ -3165,7 +3272,7 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   // 避免每次都 memset 整个候选数组（写放大）；仅通过 n_candidates 控制有效范围
 
   // 从各个特征数据结构中选择候选对象，每个特征分别获取候选
-  int candidates_per_feature = MAX_CANDIDATES / 6;  // 6 种特征
+  int candidates_per_feature = MAX_CANDIDATES / FEATURE_DIM;  // 与特征维度一致
   LOH_DEBUG_PRINT_DETAILED(
       "[CANDIDATE COLLECTION] Normal mode: candidates_per_feature=%d "
       "(MAX_CANDIDATES=%d)\n",
@@ -3191,6 +3298,16 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
     if (o && loh_seen_add(params, o)) {
       params->candidates[params->n_candidates++] = o;
       lru_candidates++;
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+      // 记录候选对象来自 recency 来源的特征
+      double f[FEATURE_DIM];
+      calculate_object_features(params, o, f);
+      for (int k = 0; k < FEATURE_DIM; ++k) {
+        params->cand_feat_sum[0][k] += f[k];
+        params->cand_feat_sumsq[0][k] += f[k] * f[k];
+      }
+      params->cand_feat_count[0]++;
+#endif
     }
     curr = curr->queue.prev;
   }
@@ -3402,18 +3519,17 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   }
   PERF_ACCUM(params, calc_score, ts_score_loop);
 
-  /*
-  LOH_DEBUG_PRINT_BASIC(
-      "[LOH DEBUG EVICT] Selected obj_id=%llu with score=%.6f, size=%ld, "
-      "access_count=%ld, "
-      "last_access_time=%ld, "
-      "last_access_counter=%ld, irt_values=[%ld,%ld,%ld]\n",
-      obj_to_evict ? (unsigned long long)obj_to_evict->obj_id : -1ULL,
-      min_score, (long)obj_to_evict->obj_size,
-      (long)obj_to_evict->LOH.access_count, obj_to_evict->LOH.last_access_time,
-      obj_to_evict->LOH.last_access_counter, obj_to_evict->LOH.irt_values[0],
-      obj_to_evict->LOH.irt_values[1], obj_to_evict->LOH.irt_values[2]);
-  */
+  // LOH_DEBUG_PRINT_BASIC(
+  //     "[LOH DEBUG EVICT] Selected obj_id=%llu with score=%.6f, size=%ld, "
+  //     "access_count=%ld, "
+  //     "last_access_time=%ld, "
+  //     "last_access_counter=%ld, irt_values=[%ld,%ld,%ld]\n",
+  //     obj_to_evict ? (unsigned long long)obj_to_evict->obj_id : -1ULL,
+  //     min_score, (long)obj_to_evict->obj_size,
+  //     (long)obj_to_evict->LOH.access_count,
+  //     obj_to_evict->LOH.last_access_time,
+  //     obj_to_evict->LOH.last_access_counter, obj_to_evict->LOH.irt_values[0],
+  //     obj_to_evict->LOH.irt_values[1], obj_to_evict->LOH.irt_values[2]);
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
   // 验证选中的对象确实在候选集中
@@ -4003,6 +4119,16 @@ static void freq_table_get_candidates(LOH_params_t *params, int max_candidates,
           curr = curr->prev;
           continue;
         }
+#endif
+        // 先记录候选统计（按来源：frequency=1），不受跨来源去重影响
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+        double f[FEATURE_DIM];
+        calculate_object_features(params, curr->obj, f);
+        for (int k = 0; k < FEATURE_DIM; ++k) {
+          params->cand_feat_sum[1][k] += f[k];
+          params->cand_feat_sumsq[1][k] += f[k] * f[k];
+        }
+        params->cand_feat_count[1]++;
 #endif
         // 融合去重：频率候选加入前先通过 seen 去重
         if (loh_seen_add(params, curr->obj)) {
@@ -4887,6 +5013,16 @@ static void irt1_heap_get_candidates(LOH_params_t *params, int max_candidates,
         continue;
       }
 #endif
+      // 先记录候选统计（来源：irt1=3），不受跨来源去重影响
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+      double f[FEATURE_DIM];
+      calculate_object_features(params, candidate, f);
+      for (int k = 0; k < FEATURE_DIM; ++k) {
+        params->cand_feat_sum[3][k] += f[k];
+        params->cand_feat_sumsq[3][k] += f[k] * f[k];
+      }
+      params->cand_feat_count[3]++;
+#endif
       // 融合去重：IRT1 候选加入前先通过 seen 去重
       if (loh_seen_add(params, candidate)) {
         params->candidates[start_idx + added++] =
@@ -4941,6 +5077,16 @@ static void irt2_heap_get_candidates(LOH_params_t *params, int max_candidates,
         continue;
       }
 #endif
+      // 先记录候选统计（来源：irt2=4）
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+      double f[FEATURE_DIM];
+      calculate_object_features(params, candidate, f);
+      for (int k = 0; k < FEATURE_DIM; ++k) {
+        params->cand_feat_sum[4][k] += f[k];
+        params->cand_feat_sumsq[4][k] += f[k] * f[k];
+      }
+      params->cand_feat_count[4]++;
+#endif
       if (loh_seen_add(params, candidate)) {
         params->candidates[start_idx + added++] = candidate;
       }
@@ -4977,6 +5123,16 @@ static void irt3_heap_get_candidates(LOH_params_t *params, int max_candidates,
           candidate) {
         continue;
       }
+#endif
+      // 先记录候选统计（来源：irt3=5）
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+      double f[FEATURE_DIM];
+      calculate_object_features(params, candidate, f);
+      for (int k = 0; k < FEATURE_DIM; ++k) {
+        params->cand_feat_sum[5][k] += f[k];
+        params->cand_feat_sumsq[5][k] += f[k] * f[k];
+      }
+      params->cand_feat_count[5]++;
 #endif
       if (loh_seen_add(params, candidate)) {
         params->candidates[start_idx + added++] = candidate;
@@ -5131,6 +5287,16 @@ static void size_buckets_get_candidates(LOH_params_t *params,
           curr = curr->prev;
           continue;
         }
+#endif
+        // 先记录候选统计（来源：size=2）
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+        double f[FEATURE_DIM];
+        calculate_object_features(params, curr->obj, f);
+        for (int k = 0; k < FEATURE_DIM; ++k) {
+          params->cand_feat_sum[2][k] += f[k];
+          params->cand_feat_sumsq[2][k] += f[k] * f[k];
+        }
+        params->cand_feat_count[2]++;
 #endif
         // 融合去重：尺寸候选加入前先通过 seen 去重
         if (loh_seen_add(params, curr->obj)) {

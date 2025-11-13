@@ -31,6 +31,7 @@ import array
 import csv
 import json
 from datetime import datetime
+import random
 
 # Constants - must match those in LOH.c
 CONTEXT_DIM = 38  # 状态向量维度
@@ -552,6 +553,33 @@ class LOHActorCritic:
 def main():
     print("🚀 LOH Actor-Critic Enhanced Training Starting...")
     print(f"Python version: {sys.version}")
+
+    # ------------------ Seed handling (ENV only) ------------------
+    # Priority: LOH_RL_SEED > SEED. If present, apply to python random, numpy and torch.
+    try:
+        loh_seed_raw = os.environ.get("LOH_RL_SEED")
+        seed = None
+        if loh_seed_raw is not None and loh_seed_raw != "":
+            seed = int(loh_seed_raw)
+        else:
+            seed_raw = os.environ.get("SEED")
+            if seed_raw is not None and seed_raw != "":
+                seed = int(seed_raw)
+        if seed is not None:
+            # Set PYTHONHASHSEED for reproducible hashing
+            os.environ['PYTHONHASHSEED'] = str(seed)
+            random.seed(seed)
+            np.random.seed(seed)
+            try:
+                import torch as _torch
+                _torch.manual_seed(seed)
+                if _torch.cuda.is_available():
+                    _torch.cuda.manual_seed_all(seed)
+            except Exception:
+                pass
+            print(f"[seed] Applied LOH_RL_SEED={seed} to random/numpy/torch")
+    except Exception:
+        pass
 
     try:
         ac = LOHActorCritic()

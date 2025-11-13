@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Print actual script filename at runtime (dynamic)
+import os, sys
+_loh_script_name = os.path.basename(__file__) if '__file__' in globals() and __file__ else (os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else '<unknown>')
+print(f"[LOH SCRIPT] { _loh_script_name }")
+
 """
 LOH Actor-Critic using stable-baselines3 - 修复版本
 
@@ -464,7 +469,7 @@ def main():
             total_timesteps=50000,
             callback=callbacks,
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_fixed_run",
         )
 
         # 保存最终模型

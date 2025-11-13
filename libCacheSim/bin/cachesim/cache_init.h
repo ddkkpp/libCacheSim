@@ -77,6 +77,15 @@ static inline cache_t *create_cache(const char *trace_path,
       {"wtinyLFU", WTinyLFU_init},
       {"adaptcache", LOH_init},  // 向后兼容，重定向到LOH
       {"loh", LOH_init},
+      /* blocked PPO variant of LOH: selectable at runtime as "loh-blocked-ppo"
+       */
+      {"loh-mr-blocked", LOH_mr_blocked_init},
+      /* underscore aliases to accept env values like LOH_mr_blocked */
+      {"loh_mr_blocked", LOH_mr_blocked_init},
+      /* no-blocking MR wrapper that delegates to existing implementation and is
+       * selectable as "loh-mr-noblocked" */
+      {"loh-mr-noblocked", LOH_mr_noblocked_init},
+      {"loh_mr_noblocked", LOH_mr_noblocked_init},
 #ifdef ENABLE_3L_CACHE
       {"3LCache", ThreeLCache_init},
 #endif

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Print actual script filename at runtime (dynamic)
+import os, sys
+_loh_script_name = os.path.basename(__file__) if '__file__' in globals() and __file__ else (os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else '<unknown>')
+print(f"[LOH SCRIPT] { _loh_script_name }")
 
 #该版本训练时后台写权重
 
@@ -972,7 +976,7 @@ def main():
             total_timesteps=int(1e12),  # 无限训练，直到C端终止
             callback=None,  # 无回调
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_1013_run",
         )
 
         # 5. 保存最终模型
@@ -1135,7 +1139,7 @@ def main():
             total_timesteps=int(1e12),
             log_interval=1,
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_1013_run",
         )
 
         training_end_time = datetime.now()

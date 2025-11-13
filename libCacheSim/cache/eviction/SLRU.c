@@ -503,8 +503,10 @@ static void SLRU_cool(cache_t *cache, const request_t *req, const int id) {
   prepend_obj_to_head(&params->lru_heads[id - 1], &params->lru_tails[id - 1],
                       obj);
   obj->SLRU.lru_id = id - 1;
-  params->lru_n_bytes[id] -= obj->obj_size;
-  params->lru_n_bytes[id - 1] += obj->obj_size;
+  // Keep byte accounting consistent with insert/promote paths, which include
+  // both object size and metadata size.
+  params->lru_n_bytes[id] -= obj->obj_size + cache->obj_md_size;
+  params->lru_n_bytes[id - 1] += obj->obj_size + cache->obj_md_size;
   params->lru_n_objs[id]--;
   params->lru_n_objs[id - 1]++;
 

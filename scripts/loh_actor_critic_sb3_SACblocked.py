@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Print actual script filename at runtime (dynamic)
+import os, sys
+_loh_script_name = os.path.basename(__file__) if '__file__' in globals() and __file__ else (os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else '<unknown>')
+print(f"[LOH SCRIPT] { _loh_script_name }")
 
 #该版本根据callback函数管理训练/推理状态切换
 
@@ -16,26 +20,12 @@ import time
 from datetime import datetime
 from typing import Optional
 
-# ====== 调试/统计输出全局控制 ======
-# 0: 无调试输出  1: 仅关键统计  2: 详细调试
-LOH_DEBUG_LEVEL = 2
-
-def LOH_DEBUG_BASIC():
-    return LOH_DEBUG_LEVEL >= 1
-
-def LOH_DEBUG_VERBOSE():
-    return LOH_DEBUG_LEVEL >= 2
-
 from stable_baselines3 import PPO  # 保留作参考
 from stable_baselines3 import SAC
 from stable_baselines3.common.buffers import ReplayBuffer
 import numpy as np
 
 # 常数定义
-FEATURE_DIM = 6
-CONTEXT_DIM = 26
-STATE_DIM = 28  # CONTEXT_DIM + 2 global features
-SHM_KEY = 9876
 LOH_DEBUG_LEVEL = 2
 
 def LOH_DEBUG_BASIC():
@@ -104,7 +94,33 @@ def _env_float(name: str, default: Optional[float]) -> Optional[float]:
 # --- 常量和共享内存结构定义 ---
 SHM_KEY = 9876
 FEATURE_DIM = 6
-CONTEXT_DIM = 26  # 26维状态向量
+
+# 动态解析状态维度（与 C 端 -DLOH_INCLUDE_CACHE_FEATURES/LOH_STATE_DIM 对齐）
+def _env_truthy(name: str) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return False
+    return v.strip().lower() in {"1", "true", "yes", "on"}
+
+def _get_state_dim() -> int:
+    """基础维度 (26/38) + 可选候选特征附加 72 维"""
+    base = 26
+    raw = os.environ.get("LOH_STATE_DIM")
+    if raw:
+        try:
+            dim = int(raw)
+            if dim in (26, 38):
+                base = dim
+        except Exception:
+            pass
+    else:
+        if _env_truthy("LOH_INCLUDE_CACHE_FEATURES"):
+            base = 38
+    cand_enabled_raw = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
+    cand_enabled = cand_enabled_raw in {"1", "true", "yes", "on"}
+    return base + (72 if cand_enabled else 0)
+
+CONTEXT_DIM = _get_state_dim()  # 26/38 (+72) 维状态向量
 STATE_DIM = CONTEXT_DIM  # 与C端一致
 
 # 【移除】惩罚队列常量 - 改为动态读取
@@ -141,6 +157,37 @@ def create_shared_memory_class(context_dim):
     return SharedMemoryData
 
 SharedMemoryData = create_shared_memory_class(CONTEXT_DIM)
+
+# 可选：打印 sizeof/offset，用于与 C 端核对对齐
+if _env_truthy("LOH_PRINT_SHM_LAYOUT"):
+    try:
+        _sz = ctypes.sizeof(SharedMemoryData)
+        print(f"[SHM] Python SharedMemoryData sizeof={_sz} bytes (STATE_DIM={STATE_DIM})")
+        for _fname, _ in SharedMemoryData._fields_:
+            try:
+                _off = getattr(SharedMemoryData, _fname).offset
+                print(f"[SHM] field {_fname:>22s} @ offset {_off}")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def _print_candidate_block(state_arr: np.ndarray):
+    """打印候选特征段（72维），与 C 端顺序一致: 每来源6特征的 mean,var 扁平展开"""
+    total = state_arr.shape[0]
+    if total == 26:
+        return  # 无附加段
+    if total == 38:
+        return  # 无候选段
+    # 可能是 26+72 或 38+72
+    if total not in (26+72, 38+72):
+        return
+    base_off = 26 if total == 98 else 38
+    cand_total = total - base_off
+    if cand_total != 72:
+        return
+    flat = ", ".join([f"{state_arr[base_off + j]:.6f}" for j in range(cand_total)])
+    print(f"[candidate_features]: [{flat}]")
 
 # --- 自定义 ReplayBuffer：支持延迟奖励修正 ---
 class RetrospectiveReplayBuffer(ReplayBuffer):
@@ -1025,12 +1072,30 @@ class LohEnv(gym.Env):
                 print(f"[global_features]: [{initial_observation[0]:.6f}, {initial_observation[1]:.6f}]")
                 request_features = ", ".join([f"{initial_observation[i]:.6f}" for i in range(2, 26)])
                 print(f"[request_features]: [{request_features}]")
+                # 候选特征（如启用 +72 维）
+                try:
+                    base_dim = 26
+                    cand_dim = CONTEXT_DIM - base_dim
+                    if cand_dim >= 72 and len(initial_observation) >= base_dim + 72:
+                        cand_slice = initial_observation[base_dim:base_dim + 72]
+                        print(f"[candidate_features]: [{', '.join([f'{x:.6f}' for x in cand_slice])}]")
+                except Exception:
+                    pass
             elif CONTEXT_DIM == 38:
                 print(f"[global_features]: [{initial_observation[0]:.6f}, {initial_observation[1]:.6f}]")
                 request_features = ", ".join([f"{initial_observation[i]:.6f}" for i in range(2, 26)])
                 print(f"[request_features]: [{request_features}]")
                 cache_features = ", ".join([f"{initial_observation[i]:.6f}" for i in range(26, 38)])
                 print(f"[cache_features]: [{cache_features}]")
+                # 候选特征（如启用 +72 维）
+                try:
+                    base_dim = 38
+                    cand_dim = CONTEXT_DIM - base_dim
+                    if cand_dim >= 72 and len(initial_observation) >= base_dim + 72:
+                        cand_slice = initial_observation[base_dim:base_dim + 72]
+                        print(f"[candidate_features]: [{', '.join([f'{x:.6f}' for x in cand_slice])}]")
+                except Exception:
+                    pass
 
         # 记录当前状态版本，供下一步动作对齐
         self.last_state_version = int(initial_data.state_version)
@@ -1359,6 +1424,15 @@ class LohEnv(gym.Env):
                 print(f"[global_features]: [{new_observation[0]:.6f}, {new_observation[1]:.6f}]")
                 request_features = ", ".join([f"{new_observation[i]:.6f}" for i in range(2, 26)])
                 print(f"[request_features]: [{request_features}]")
+                # 候选特征（如启用 +72 维）
+                try:
+                    base_dim = 26
+                    cand_dim = CONTEXT_DIM - base_dim
+                    if cand_dim >= 72 and len(new_observation) >= base_dim + 72:
+                        cand_slice = new_observation[base_dim:base_dim + 72]
+                        print(f"[candidate_features]: [{', '.join([f'{x:.6f}' for x in cand_slice])}]")
+                except Exception:
+                    pass
             elif CONTEXT_DIM == 38:
                 # 38维状态向量输出
                 print(f"[global_features]: [{new_observation[0]:.6f}, {new_observation[1]:.6f}]")
@@ -1366,6 +1440,15 @@ class LohEnv(gym.Env):
                 print(f"[request_features]: [{request_features}]")
                 cache_features = ", ".join([f"{new_observation[i]:.6f}" for i in range(26, 38)])
                 print(f"[cache_features]: [{cache_features}]")
+                # 候选特征（如启用 +72 维）
+                try:
+                    base_dim = 38
+                    cand_dim = CONTEXT_DIM - base_dim
+                    if cand_dim >= 72 and len(new_observation) >= base_dim + 72:
+                        cand_slice = new_observation[base_dim:base_dim + 72]
+                        print(f"[candidate_features]: [{', '.join([f'{x:.6f}' for x in cand_slice])}]")
+                except Exception:
+                    pass
 
         # 7. 【修改】计算初始奖励（基于global_features的加权命中率）
         # reward = alpha * obj_hit_ratio + beta * byte_hit_ratio
@@ -1974,7 +2057,7 @@ def main():
             total_timesteps=int(1e12),
             log_interval=1,
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_sacblocked_run",
         )
 
         training_end_time = datetime.now()

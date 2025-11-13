@@ -24,7 +24,31 @@ import torch
 
 # 常数定义
 FEATURE_DIM = 6
-CONTEXT_DIM = 26
+def _env_truthy(name: str) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return False
+    return v.strip().lower() in {"1", "true", "yes", "on"}
+
+def get_state_dim() -> int:
+    """基础维度 (26/38) + 可选候选特征附加 72 维"""
+    base = 26
+    raw = os.environ.get("LOH_STATE_DIM")
+    if raw is not None and raw.strip() != "":
+        try:
+            dim = int(raw)
+            if dim in (26, 38):
+                base = dim
+        except Exception:
+            pass
+    else:
+        if _env_truthy("LOH_INCLUDE_CACHE_FEATURES"):
+            base = 38
+    cand_enabled_raw = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
+    cand_enabled = cand_enabled_raw in {"1", "true", "yes", "on"}
+    return base + (72 if cand_enabled else 0)
+
+CONTEXT_DIM = get_state_dim()
 STATE_DIM = CONTEXT_DIM
 SHM_KEY = 9876
 
@@ -98,6 +122,19 @@ def create_shared_memory_class(context_dim):
     return SharedMemoryData
 
 SharedMemoryData = create_shared_memory_class(CONTEXT_DIM)
+
+if _env_truthy("LOH_PRINT_SHM_LAYOUT"):
+    try:
+        sz = ctypes.sizeof(SharedMemoryData)
+        print(f"[SHM] Python SharedMemoryData sizeof={sz} bytes (STATE_DIM={STATE_DIM})")
+        for name, _ in SharedMemoryData._fields_:
+            try:
+                off = getattr(SharedMemoryData, name).offset
+                print(f"[SHM] field {name:>20s} @ offset {off}")
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 class LOHInferenceService:
     """LOH推理服务 - 仅用于推理，不进行训练"""

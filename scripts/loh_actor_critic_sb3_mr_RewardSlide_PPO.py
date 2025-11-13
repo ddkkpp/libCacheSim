@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
+# Print actual script filename at runtime (dynamic)
+import os, sys
+_loh_script_name = os.path.basename(__file__) if '__file__' in globals() and __file__ else (os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else '<unknown>')
+print(f"[LOH SCRIPT] { _loh_script_name }")
 
-#该版本根据callback函数管理训练/推理状态切换
+#该版本对reward滑动平均并调整PPO参数
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -29,18 +33,6 @@ def LOH_DEBUG_VERBOSE():
 from stable_baselines3 import PPO  # 保留作参考
 # from stable_baselines3 import SAC
 
-# 常数定义
-FEATURE_DIM = 6
-CONTEXT_DIM = 26
-STATE_DIM = 28  # CONTEXT_DIM + 2 global features
-SHM_KEY = 9876
-LOH_DEBUG_LEVEL = 2
-
-def LOH_DEBUG_BASIC():
-    return LOH_DEBUG_LEVEL >= 1
-
-def LOH_DEBUG_VERBOSE():
-    return LOH_DEBUG_LEVEL >= 2
 
 from stable_baselines3 import PPO  # 保留作参考
 # from stable_baselines3 import SAC
@@ -207,6 +199,10 @@ class LohEnv(gym.Env):
         # 存储上次使用的权重，用于reset时快速响应
         self._last_weights = np.ones(FEATURE_DIM, dtype=np.float32) / FEATURE_DIM  # 初始均匀分布
 
+        # ========== 方案2：多步累积奖励（滑动窗口）==========
+        self._reward_window_size = int(os.environ.get("LOH_REWARD_WINDOW", "5"))
+        self._reward_window = []  # 存储最近N步的即时奖励
+
     # BG线程配置（暂时禁用，仅保留注释用于排查需要时快速恢复）
     # try:
     #     self._bg_sleep_us = int(os.environ.get("LOH_BG_SLEEP_US", "200"))
@@ -236,6 +232,9 @@ class LohEnv(gym.Env):
             print(
                 "   IPC config: semaphore_requested="
                 f"{int(self._sem_requested)}, poll_sleep_us={self._poll_sleep_us}"
+            )
+            print(
+                f"   Reward smoothing: window_size={self._reward_window_size} (exponential decay)"
             )
 
         # 计算结构字段偏移，便于对单字段进行原子式写入，避免整块覆盖造成竞态
@@ -551,6 +550,9 @@ class LohEnv(gym.Env):
         if hasattr(self, '_previous_byte_miss_ratio'):
             delattr(self, '_previous_byte_miss_ratio')
 
+        # 清空奖励滑动窗口（每个episode重新开始）
+        self._reward_window = []
+
         print(f"✅ Episode #{self.episode_count} Reset Complete:")
         print(f"   [seq {int(initial_data.state_version)}] Initial state aligned (state_version)")
         print(f"   Initial miss_ratio: {initial_miss_ratio:.4f}")
@@ -840,10 +842,41 @@ class LohEnv(gym.Env):
         # 7. 计算奖励
         obj_hit_ratio = 1.0 - new_miss_ratio
         byte_hit_ratio = 1.0 - new_byte_miss_ratio
-        reward = self.reward_alpha * obj_hit_ratio + self.reward_beta * byte_hit_ratio
+
+        # 步骤7.1: 计算即时奖励（原有的加权组合）
+        immediate_reward = self.reward_alpha * obj_hit_ratio + self.reward_beta * byte_hit_ratio
+
+        # 步骤7.2: 应用滑动窗口平滑（方案2）
+        self._reward_window.append(immediate_reward)
+        if len(self._reward_window) > self._reward_window_size:
+            self._reward_window.pop(0)
+
+        # 计算指数衰减权重：[0.5^(n-1), 0.5^(n-2), ..., 0.5^1, 0.5^0]
+        window_len = len(self._reward_window)
+        decay_weights = np.array([0.5 ** i for i in range(window_len - 1, -1, -1)])
+        decay_weights /= decay_weights.sum()
+
+        # 加权平均得到平滑后的奖励
+        smoothed_reward = np.average(self._reward_window, weights=decay_weights)
 
         if LOH_DEBUG_VERBOSE():
-            print(f"[Step {self.current_step}] Final reward: {self.reward_alpha:.3f} * {obj_hit_ratio:.4f} + {self.reward_beta:.3f} * {byte_hit_ratio:.4f} = {reward:.6f}")
+            print(f"[Step {self.current_step}] Reward calculation:")
+            print(f"  Immediate: {self.reward_alpha:.3f} * {obj_hit_ratio:.4f} + "
+                  f"{self.reward_beta:.3f} * {byte_hit_ratio:.4f} = {immediate_reward:.6f}")
+            print(f"  Window: {[f'{r:.4f}' for r in self._reward_window]}")
+            print(f"  Weights: {[f'{w:.3f}' for w in decay_weights]}")
+            print(f"  Smoothed: {smoothed_reward:.6f} (delta: {smoothed_reward - immediate_reward:+.6f})")
+
+        # 使用平滑后的奖励
+        reward = smoothed_reward
+
+        # 暴露最近一次即时奖励与平滑奖励，供回调记录到TensorBoard
+        try:
+            self._last_immediate_reward = float(immediate_reward)
+            self._last_smoothed_reward = float(smoothed_reward)
+        except Exception:
+            self._last_immediate_reward = None
+            self._last_smoothed_reward = None
 
         # 8. 保存性能指标
         self._previous_miss_ratio = new_miss_ratio
@@ -999,6 +1032,38 @@ class LOHTrainingCallback(BaseCallback):
         self.step_count += 1
         if self.step_count % 100 == 0:  # 每100步记录一次，避免日志过多
             self._log_with_timestamp(f"推理步骤: step #{self.step_count}", "STEP")
+
+            # 记录 environment-exposed rewards 和 weights 到 TensorBoard（如果可用）
+            try:
+                env = self.env_ref
+                if env is not None:
+                    # immediate / smoothed reward
+                    if hasattr(env, '_last_immediate_reward') and env._last_immediate_reward is not None:
+                        self.logger.record('loh/immediate_reward', float(env._last_immediate_reward))
+                    if hasattr(env, '_last_smoothed_reward') and env._last_smoothed_reward is not None:
+                        self.logger.record('loh/smoothed_reward', float(env._last_smoothed_reward))
+
+                    # weights and norm
+                    if hasattr(env, '_last_weights') and env._last_weights is not None:
+                        try:
+                            w = np.array(env._last_weights, dtype=np.float32)
+                            for wi in range(min(len(w), FEATURE_DIM)):
+                                self.logger.record(f'loh/weight_{wi}', float(w[wi]))
+                            try:
+                                self.logger.record('loh/weights_norm', float(np.linalg.norm(w)))
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+
+                    # flush logger
+                    try:
+                        self.logger.dump(step=self.num_timesteps)
+                    except Exception:
+                        pass
+            except Exception:
+                if LOH_DEBUG_BASIC():
+                    self._log_with_timestamp('Warning: failed to record env metrics to TB', 'DEBUG')
         return True  # 继续训练
 
     def _on_rollout_end(self) -> None:
@@ -1024,8 +1089,6 @@ def main():
     parser = argparse.ArgumentParser(description="LOH Actor-Critic with stable-baselines3")
     parser.add_argument("--miss-ratio-weight", type=float, default=1.0,
                        help="Weight for miss ratio in reward calculation (default: 1.0)")
-    parser.add_argument("--tensorboard-log", type=str, default="",
-                       help="Optional TensorBoard log directory")
     args = parser.parse_args()
 
     # 验证权重参数有效性
@@ -1061,36 +1124,40 @@ def main():
             "MlpPolicy",
             env,
             verbose=1,
-            n_steps=512,
-            batch_size=32,
-            n_epochs=10,
+            n_steps=1024,        # 【调整】512 → 1024: 增大rollout以捕获延迟反馈
+            batch_size=64,       # 【调整】32 → 64: 增大batch稳定训练
+            n_epochs=8,          # 【调整】10 → 8: 适当减少epoch（样本信息量增加）
             learning_rate=1e-4,
             clip_range=0.2,
             ent_coef=0.02,
             vf_coef=0.5,
             max_grad_norm=0.5,
+            tensorboard_log=tensorboard_log,
             policy_kwargs=dict(
                 net_arch=dict(pi=[128, 128], vf=[128, 128]),
                 activation_fn=torch.nn.ReLU,
             ),
-            gae_lambda=0.95,
+            gae_lambda=0.98,     # 【调整】0.95 → 0.98: 增大以考虑更长期影响
             use_sde=False,
             sde_sample_freq=-1,
             target_kl=0.02,
-            tensorboard_log=tensorboard_log,
         )
 
         # 4. 创建训练状态回调函数
         training_callback = LOHTrainingCallback(env, verbose=1)
 
         # 5. 开始训练（使用回调函数）
+        # 5. 开始训练（使用回调函数）
         if LOH_DEBUG_BASIC():
             print("🧠 start train model with callback-based state management")
-            print(f"📋 training configuration (callback-optimized version):")
+            print(f"📋 training configuration (callback-optimized + reward smoothing):")
             print(f"   - state dimension: {CONTEXT_DIM}")
             print(f"   - action dimension: {FEATURE_DIM}")
-            print(f"   - rollout steps: 512")
-            print(f"   - training epochs: 10")
+            print(f"   - rollout steps: 1024 (increased for delayed feedback)")
+            print(f"   - batch size: 64 (increased for stability)")
+            print(f"   - training epochs: 8 (adjusted for richer samples)")
+            print(f"   - gae_lambda: 0.98 (increased for long-term credit)")
+            print(f"   - reward window: {env._reward_window_size} (exponential decay)")
 
         # 记录训练开始时间
         training_start_time = datetime.now()
@@ -1101,7 +1168,7 @@ def main():
             total_timesteps=int(1e12),  # 无限训练，直到C端终止
             callback=training_callback,  # 使用训练状态回调
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_rewardslide_run",
         )
 
         # 5. 保存最终模型
@@ -1264,7 +1331,7 @@ def main():
             total_timesteps=int(1e12),
             log_interval=1,
             progress_bar=True,
-            tb_log_name="loh_sac_run",
+            tb_log_name="loh_rewardslide_run",
         )
 
         training_end_time = datetime.now()

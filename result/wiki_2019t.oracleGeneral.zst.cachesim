@@ -22,3 +22,130 @@ data/WikiCDN/wiki_2019t.oracleGeneral.zst Cacheus cache size       39GiB, 207646
 data/WikiCDN/wiki_2019t.oracleGeneral.zst LRB-BMR cache size       39GiB, 207646002 req, miss ratio 0.1902, byte miss ratio 0.1313
 data/WikiCDN/wiki_2019t.oracleGeneral.zst GLCache cache size       39GiB, 207646002 req, miss ratio 0.2319, byte miss ratio 0.2088
 data/WikiCDN/wiki_2019t.oracleGeneral.zst ThreeLCache-BMR cache size       39GiB, 207646002 req, miss ratio 0.1829, byte miss ratio 0.1261
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH cache size    40GiB,        207646002 req, miss ratio 0.1898, byte miss ratio 0.1391, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-BMR cache size    40GiB,        207646002 req, miss ratio 0.1921, byte miss ratio 0.1432, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size    40GiB,        207646002 req, miss ratio 0.2306, byte miss ratio 0.1619, throughput 0.23 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LRU cache size     6GiB,         10000000 req, miss ratio 0.5228, byte miss ratio 0.4162, throughput 2.39 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst ThreeLCache-BMR cache size     6GiB,         10000000 req, miss ratio 0.4640, byte miss ratio 0.3439, throughput 0.36 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4823, byte miss ratio 0.3687, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     5MiB,             2000 req, miss ratio 0.9450, byte miss ratio 0.8974, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     1GiB,          1000000 req, miss ratio 0.7205, byte miss ratio 0.6132, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   225MiB,           100000 req, miss ratio 0.8692, byte miss ratio 0.8233, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     1GiB,          1000000 req, miss ratio 0.7202, byte miss ratio 0.6128, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   225MiB,           100000 req, miss ratio 0.8691, byte miss ratio 0.8230, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     1GiB,          1000000 req, miss ratio 0.7205, byte miss ratio 0.6133, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4860, byte miss ratio 0.3751, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4804, byte miss ratio 0.3656, throughput 0.00 MQPS              --1030_183716 pen-d?-SAC 5e-5 512 4 1 1000
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4803, byte miss ratio 0.3656, throughput 0.01 MQPS		  --1030_213330 pen-d?-SAC 5e-5 128 8 1 1000
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4803, byte miss ratio 0.3654, throughput 0.01 MQPS              --1030_231012 pen-d?-SAC 5e-5 256 16 1 3000
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LRU cache size     6GiB,         10000000 req, miss ratio 0.5228, byte miss ratio 0.4162, throughput 2.68 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   225MiB,           100000 req, miss ratio 0.8691, byte miss ratio 0.8231, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     1GiB,          1000000 req, miss ratio 0.7205, byte miss ratio 0.6136, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4794, byte miss ratio 0.3652, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4804, byte miss ratio 0.3665, throughput 0.02 MQPS              --1031_015607 mr-PPO
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4857, byte miss ratio 0.3677, throughput 0.12 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4893, byte miss ratio 0.3729, throughput 0.11 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR(reward-slide) cache size    40GiB,        207646002 req, miss ratio 0.1929, byte miss ratio 0.1421, throughput 0.04 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4791, byte miss ratio 0.3638, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4792, byte miss ratio 0.3637, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4790, byte miss ratio 0.3624, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4816, byte miss ratio 0.3696, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4803, byte miss ratio 0.3655, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4804, byte miss ratio 0.3656, throughput 0.01 MQPS              --1104_193330 pen-d?-SAC 5e-5 256 16 1 3000
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size    40GiB,        207646002 req, miss ratio 0.2211, byte miss ratio 0.1726, throughput 0.02 MQPS		  --(TD3-mr)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size    40GiB,        207646002 req, miss ratio 0.1928, byte miss ratio 0.1422, throughput 0.02 MQPS		  --(SAC-mr)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4804, byte miss ratio 0.3657, throughput 0.01 MQPS              --1106_093058 mr-SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4863, byte miss ratio 0.3658, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.5161, byte miss ratio 0.4107, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4779, byte miss ratio 0.3656, throughput 0.01 MQPS              --pen-d-TD3
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4780, byte miss ratio 0.3619, throughput 0.01 MQPS              --pen-d-TD3
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4998, byte miss ratio 0.3824, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4979, byte miss ratio 0.3901, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4957, byte miss ratio 0.3795, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4965, byte miss ratio 0.3867, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.5075, byte miss ratio 0.3868, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4808, byte miss ratio 0.3589, throughput 0.01 MQPS              --1106_231034 loh-thread48 noise0.1
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4944, byte miss ratio 0.3846, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.5020, byte miss ratio 0.3866, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4828, byte miss ratio 0.3717, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4859, byte miss ratio 0.3770, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4862, byte miss ratio 0.3823, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4806, byte miss ratio 0.3658, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4866, byte miss ratio 0.3764, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4822, byte miss ratio 0.3671, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4830, byte miss ratio 0.3602, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4805, byte miss ratio 0.3655, throughput 0.01 MQPS              --pen-d-SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4813, byte miss ratio 0.3683, throughput 0.03 MQPS              --mr-PPO
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4856, byte miss ratio 0.3672, throughput 0.01 MQPS              --pen-d-TD3 grad=2
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.5119, byte miss ratio 0.4023, throughput 0.01 MQPS              --pen-d-TD3 1108_014010
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4835, byte miss ratio 0.3710, throughput 0.01 MQPS              --pen-d-TD3 1108_020729
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4877, byte miss ratio 0.3685, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4800, byte miss ratio 0.3651, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4862, byte miss ratio 0.3728, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4948, byte miss ratio 0.3844, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4977, byte miss ratio 0.3937, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4789, byte miss ratio 0.3697, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4804, byte miss ratio 0.3655, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4801, byte miss ratio 0.3653, throughput 0.00 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4804, byte miss ratio 0.3657, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4801, byte miss ratio 0.3654, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4808, byte miss ratio 0.3660, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     6GiB,         10000000 req, miss ratio 0.4807, byte miss ratio 0.3660, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   393MiB,           200000 req, miss ratio 0.8356, byte miss ratio 0.7660, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     2GiB,          2000000 req, miss ratio 0.6523, byte miss ratio 0.5321, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     2GiB,          2000000 req, miss ratio 0.6529, byte miss ratio 0.5327, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     2GiB,          2000000 req, miss ratio 0.6530, byte miss ratio 0.5330, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     2GiB,          2000000 req, miss ratio 0.6531, byte miss ratio 0.5328, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   393MiB,           200000 req, miss ratio 0.8351, byte miss ratio 0.7657, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     2GiB,          2000000 req, miss ratio 0.6532, byte miss ratio 0.5332, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LRU cache size     3GiB,          3000000 req, miss ratio 0.6489, byte miss ratio 0.5464, throughput 1.33 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst ThreeLCache-BMR cache size     3GiB,          3000000 req, miss ratio 0.5994, byte miss ratio 0.4698, throughput 0.13 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst GDSF cache size     3GiB,          3000000 req, miss ratio 0.6056, byte miss ratio 0.5524, throughput 0.23 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst Cacheus cache size     3GiB,          3000000 req, miss ratio 0.6183, byte miss ratio 0.5049, throughput 0.26 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst Sieve cache size     3GiB,          3000000 req, miss ratio 0.6089, byte miss ratio 0.4866, throughput 1.40 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4858, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LRB-BMR cache size     3GiB,          3000000 req, miss ratio 0.6145, byte miss ratio 0.4923, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6069, byte miss ratio 0.4859, throughput 0.01 MQPS              --1110_233455 pen_d_SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6089, byte miss ratio 0.4856, throughput 0.01 MQPS              --1110_234753 pen_d_TD3
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6068, byte miss ratio 0.4859, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   225MiB,           100000 req, miss ratio 0.8693, byte miss ratio 0.8231, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   225MiB,           100000 req, miss ratio 0.8692, byte miss ratio 0.8228, throughput 0.03 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size   225MiB,           100000 req, miss ratio 0.8692, byte miss ratio 0.8231, throughput 0.02 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6069, byte miss ratio 0.4857, throughput 0.01 MQPS		  mr-SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6247, byte miss ratio 0.5123, throughput 0.02 MQPS		  mr-TD3
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6069, byte miss ratio 0.4860, throughput 0.02 MQPS		  mr-PPO
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size    40GiB,        207646002 req, miss ratio 0.1928, byte miss ratio 0.1420, throughput 0.01 MQPS		  1111_022923 pen_d_SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6062, byte miss ratio 0.4854, throughput 0.01 MQPS		  1111_092603 pen_d_SAC temp0.8
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6065, byte miss ratio 0.4864, throughput 0.01 MQPS		  1111_093620 pen_d_SAC temp0.5
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4860, throughput 0.01 MQPS		  1111_104721 pen_d_SAC ent_coef='auto_0.5'
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6068, byte miss ratio 0.4862, throughput 0.01 MQPS		  1111_105220 pen_d_SAC ent_coef='auto_0.2'
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6071, byte miss ratio 0.4860, throughput 0.01 MQPS		  1111_110801 pen_d_SAC ent_coef='auto_1.0'(default)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6071, byte miss ratio 0.4861, throughput 0.01 MQPS		  1111_173233 pen_d_SAC learning_start=4000
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4860, throughput 0.01 MQPS		  1111_225744 pen_d_SAC ent_coef='auto_3.0'
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6069, byte miss ratio 0.4859, throughput 0.01 MQPS		  1111_232759 pen_d_SAC ent_coef='auto_1.0'(default)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6069, byte miss ratio 0.4858, throughput 0.01 MQPS		  1112_091649 pen_d_SAC ent_coef='auto_2.0'
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6068, byte miss ratio 0.4858, throughput 0.01 MQPS		  1112_092240 pen_d_SAC ent_coef='auto_1.5'
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4862, throughput 0.01 MQPS		  1112_093143 pen_d_SAC GRADIENT_STEPS=2
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4856, throughput 0.00 MQPS		  1112_093841 pen_d_SAC GRADIENT_STEPS=8
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6065, byte miss ratio 0.4855, throughput 0.01 MQPS		  1112_102230 pen_d_SAC LOH_OBS_KEEP=nohit
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6060, byte miss ratio 0.4850, throughput 0.01 MQPS		  1112_103344 pen_d_SAC LOH_OBS_KEEP=nohit temp0.8
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4861, throughput 0.01 MQPS		  1112_104205 pen_d_SAC ent_coef='auto_1.0'(default)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4859, throughput 0.01 MQPS		  1112_104707 pen_d_SAC ent_coef='auto_2.0'
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4859, throughput 0.01 MQPS		  1112_111121 pen_log_SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6072, byte miss ratio 0.4861, throughput 0.01 MQPS
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6065, byte miss ratio 0.4855, throughput 0.01 MQPS		  1112_151606 pen_d_SAC
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6073, byte miss ratio 0.4866, throughput 0.01 MQPS		  1112_152205 +miss(neg)(w=1)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6066, byte miss ratio 0.4858, throughput 0.01 MQPS		  1112_152834 +trend(slope)(w=0.5)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4859, throughput 0.01 MQPS		  1112_153403 +miss(neg)(w=1)+trend(slope)(w=0.5), +deltas(mean)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6066, byte miss ratio 0.4855, throughput 0.01 MQPS		  1112_162428 +deltas(mean)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6071, byte miss ratio 0.4860, throughput 0.01 MQPS		  1112_163452 +miss(neg)(w=2)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6065, byte miss ratio 0.4856, throughput 0.01 MQPS		  1112_164233 +miss(improve)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6066, byte miss ratio 0.4860, throughput 0.01 MQPS		  1112_164813 +trend(delta)(w=0.5)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6072, byte miss ratio 0.4861, throughput 0.01 MQPS		  1112_165337 +miss(neg，w=1)+trend(slope)(w=0.5)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4860, throughput 0.01 MQPS		  1112_170054 +miss(neg)(w=1.0), +deltas(mean)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6068, byte miss ratio 0.4859, throughput 0.01 MQPS		  1112_170854 +trend(slope)(w=0.5), +deltas(mean)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6067, byte miss ratio 0.4858, throughput 0.01 MQPS		  1112_171554 +miss(neg)(w=1.0)+trend(delta)(w=0.5), +deltas(mean)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4859, throughput 0.01 MQPS		  1112_201701 pen_log_SAC(version: divide log)
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4862, throughput 0.01 MQPS		  1112_214357 INCLUDE_CACHE_FEATURES
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6070, byte miss ratio 0.4862, throughput 0.01 MQPS		  1112_215139 INCLUDE_CACHE_FEATURES
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.6071, byte miss ratio 0.4861, throughput 0.01 MQPS		  1113_013954 pen_d_SAC INCLUDE_CACHE_FEATURES INCLUDE_CANDIDATE

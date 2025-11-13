@@ -20,3 +20,5 @@
 ./data/TencentCBS/1063.oracleGeneral.zst ThreeLCache-BMR cache size     5GiB,        360960512 req, miss ratio 0.2500, byte miss ratio 0.2057, throughput 0.42 MQPS
 ./data/TencentCBS/1063.oracleGeneral.zst GDSF cache size     5GiB,        360960512 req, miss ratio 0.0548, byte miss ratio 0.0588, throughput 0.31 MQPS
 ./data/TencentCBS/1063.oracleGeneral.zst ThreeLCache-BMR cache size   482MiB,        360960512 req, miss ratio 0.6535, byte miss ratio 0.6776, throughput 0.28 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     5GiB,        360960512 req, miss ratio 0.3204, byte miss ratio 0.3174, throughput 0.18 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     5GiB,        360960512 req, miss ratio 0.3474, byte miss ratio 0.3272, throughput 0.04 MQPS

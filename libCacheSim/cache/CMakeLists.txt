@@ -58,6 +58,8 @@ set(eviction_sources_c
         eviction/TwoQ.c
         eviction/WTinyLFU.c
         eviction/LOH.c           # LOH cache algorithm (renamed from AdaptCache)
+    eviction/LOH_mr_blocked.c # LOH MR variant (blocked)
+    eviction/LOH_mr_noblocked.c # LOH MR variant (non-blocking)
 
         # these are sub-algorithms used by other algorithms
         eviction/CR_LFU.c
