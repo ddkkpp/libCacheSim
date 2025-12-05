@@ -76,26 +76,20 @@ static inline cache_t *create_cache(const char *trace_path,
       {"twoq", TwoQ_init},
       {"wtinyLFU", WTinyLFU_init},
       {"adaptcache", LOH_init},  // 向后兼容，重定向到LOH
-      {"loh", LOH_init},
-      /* blocked PPO variant of LOH: selectable at runtime as "loh-blocked-ppo"
-       */
+      {"loh",
+       LOH_init},  // 默认LOH算法（unified版本，支持blocked/nonblocked/penalty模式）
+      {"LOH-penalty", LOH_penalty_init},  // penalty机制版本（独立实现）
+      {"loh-penalty", LOH_penalty_init},  // penalty机制版本（小写别名）
+      /* blocked MR variant: backward compatibility aliases */
       {"loh-mr-blocked", LOH_mr_blocked_init},
-      /* underscore aliases to accept env values like LOH_mr_blocked */
-      {"loh_mr_blocked", LOH_mr_blocked_init},
+      {"LOH-mr-blocked", LOH_mr_blocked_init},
       /* no-blocking MR wrapper that delegates to existing implementation and is
        * selectable as "loh-mr-noblocked" */
       {"loh-mr-noblocked", LOH_mr_noblocked_init},
       {"loh_mr_noblocked", LOH_mr_noblocked_init},
-#ifdef ENABLE_3L_CACHE
       {"3LCache", ThreeLCache_init},
-#endif
-#ifdef ENABLE_GLCACHE
       {"GLCache", GLCache_init},
-      {"gl-cache", GLCache_init},
-#endif
-#ifdef ENABLE_LRB
       {"lrb", LRB_init},
-#endif
   };
 
   cache_t *(*init_func)(common_cache_params_t, const char *) = NULL;

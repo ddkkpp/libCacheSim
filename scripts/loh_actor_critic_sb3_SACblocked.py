@@ -91,11 +91,15 @@ def _env_float(name: str, default: Optional[float]) -> Optional[float]:
     except ValueError:
         return default
 
+
+# 是否启用 log1p(raw) 特征与“原始权重”模式
+LOH_FEATURE_LOG1P = _env_flag("LOH_FEATURE_LOG1P", False)
+
 # --- 常量和共享内存结构定义 ---
 SHM_KEY = 9876
 FEATURE_DIM = 6
 
-# 动态解析状态维度（与 C 端 -DLOH_INCLUDE_CACHE_FEATURES/LOH_STATE_DIM 对齐）
+# 动态解析状态维度（与 C 端 -DLOH_INCLUDE_CACHE_FEATURES / LOH_INCLUDE_CANDIDATE_FEATURES 对齐）
 def _env_truthy(name: str) -> bool:
     v = os.environ.get(name)
     if v is None:
@@ -103,21 +107,13 @@ def _env_truthy(name: str) -> bool:
     return v.strip().lower() in {"1", "true", "yes", "on"}
 
 def _get_state_dim() -> int:
-    """基础维度 (26/38) + 可选候选特征附加 72 维"""
-    base = 26
-    raw = os.environ.get("LOH_STATE_DIM")
-    if raw:
-        try:
-            dim = int(raw)
-            if dim in (26, 38):
-                base = dim
-        except Exception:
-            pass
-    else:
-        if _env_truthy("LOH_INCLUDE_CACHE_FEATURES"):
-            base = 38
-    cand_enabled_raw = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
-    cand_enabled = cand_enabled_raw in {"1", "true", "yes", "on"}
+    """基础维度 (26/38) + 可选候选特征附加 72 维，完全由 LOH_INCLUDE_* 决定。"""
+    base = 38
+    cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "").strip().lower()
+    if cache_flag in {"0", "false", "no", "off"}:
+        base = 26
+    cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
+    cand_enabled = cand_flag in {"1", "true", "yes", "on"}
     return base + (72 if cand_enabled else 0)
 
 CONTEXT_DIM = _get_state_dim()  # 26/38 (+72) 维状态向量
@@ -1149,16 +1145,21 @@ class LohEnv(gym.Env):
         self.current_step += 1
 
         # ========== 步骤1: 将RL动作转换为缓存权重 ==========
-        # RL算法输出的是logits，需要通过softmax转换为概率分布（权重）
+        # 默认：对动作向量做 softmax，得到正且和为 1 的权重；
+        # 当 LOH_FEATURE_LOG1P 为真时：直接使用连续动作向量作为权重
+        # （可为负数且不要求和为 1），便于配合 C 端 log1p(raw) 特征模式。
         action_start = get_monotonic_time()
-        action_tensor = torch.from_numpy(action)
-        weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
+        if LOH_FEATURE_LOG1P:
+            weights = action.astype(np.float64)
+        else:
+            action_tensor = torch.from_numpy(action)
+            weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
         action_end = get_monotonic_time()
 
         # 【新增】时间分解：推理时间（总是打印，不管多快）
         inference_duration = action_end - action_start
         if LOH_DEBUG_BASIC():
-            print(f"[TIMING][Python] Model inference (softmax): {inference_duration:.6f} seconds")
+            print(f"[TIMING][Python] Model inference (softmax/raw): {inference_duration:.6f} seconds")
 
         if LOH_DEBUG_VERBOSE() and action_end - action_start > 0.001:
             print(f"[{action_end:.6f}] action conversion took {action_end - action_start:.6f} seconds")

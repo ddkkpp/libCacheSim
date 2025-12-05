@@ -30,9 +30,11 @@ SHM_KEY = 9876
 FEATURE_DIM = 6
 
 def get_state_dim():
-    """获取状态向量维度，默认为26维"""
-    state_dim = os.environ.get('LOH_STATE_DIM', '26')
-    return int(state_dim)
+    """获取状态向量维度，完全由 LOH_INCLUDE_CACHE_FEATURES 决定，不再读取 LOH_STATE_DIM。"""
+    flag = os.environ.get('LOH_INCLUDE_CACHE_FEATURES', '').strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return 26
+    return 38
 
 CONTEXT_DIM = get_state_dim()
 STATE_DIM = CONTEXT_DIM
@@ -497,7 +499,7 @@ if __name__ == "__main__":
     print()
     print("【使用说明】:")
     print("1. 确保C端LOH缓存模拟器已经启动并创建了共享内存")
-    print("2. 设置环境变量 LOH_STATE_DIM 来指定状态向量维度 (26 或 38)")
+    print("2. 如需切换 26/38 维，请在构建/运行前设置 LOH_INCLUDE_CACHE_FEATURES=0/1")
     print("3. 训练过程中可以按 Ctrl+C 安全停止并保存模型")
     print("4. 训练日志保存在 ./runs/<timestamp>/ 目录下")
     print("5. 可以使用 tensorboard --logdir ./runs/<timestamp>/sb3_logs 查看训练曲线")
@@ -707,7 +709,13 @@ if USE_ML:
             self.current_step += 1
 
             # 转换动作为权重
-            weights = torch.nn.functional.softmax(torch.tensor(action), dim=-1).numpy()
+            # 默认：对动作向量做 softmax，得到正且和为 1 的权重；
+            # 当环境变量 LOH_FEATURE_LOG1P 为真时：直接使用连续动作向量作为权重
+            # （可为负数且不要求和为 1），便于配合 C 端 log1p(raw) 特征模式。
+            if os.environ.get("LOH_FEATURE_LOG1P", "0").strip().lower() in {"1", "true", "yes", "on"}:
+                weights = np.asarray(action, dtype=np.float64)
+            else:
+                weights = torch.nn.functional.softmax(torch.tensor(action), dim=-1).numpy()
 
             # 发送权重
             if not self.send_weights(weights):

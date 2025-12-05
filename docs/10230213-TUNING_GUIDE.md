@@ -77,7 +77,7 @@ exclude_recent_steps (50) ← 应该 << buffer_size (约5%)
 
 ```bash
 # 小规模测试：10K请求，检查各模块是否工作
-bash test_loh_rl_sb3.sh \
+bash ./scripts/test_loh_rl_sb3.sh \
     data/MetaCDN/meta_reag.oracleGeneral.zst \
     26 \
     0.1 \
@@ -97,7 +97,7 @@ bash test_loh_rl_sb3.sh \
 
 ```bash
 # 完整运行：处理所有请求
-bash test_loh_rl_sb3.sh \
+bash ./scripts/test_loh_rl_sb3.sh \
     data/MetaCDN/meta_reag.oracleGeneral.zst \
     26 \
     0.1 \
@@ -372,7 +372,7 @@ class AdaptiveReplayBuffer(RetrospectiveReplayBuffer):
 ### 快速测试（10K请求）
 
 ```bash
-bash test_loh_rl_sb3.sh \
+bash ./scripts/test_loh_rl_sb3.sh \
     data/MetaCDN/meta_reag.oracleGeneral.zst \
     26 0.1 1.0 200 10000
 
@@ -385,7 +385,7 @@ bash test_loh_rl_sb3.sh \
 ### 完整运行（所有请求）
 
 ```bash
-bash test_loh_rl_sb3.sh \
+bash ./scripts/test_loh_rl_sb3.sh \
     data/MetaCDN/meta_reag.oracleGeneral.zst \
     26 0.1 1.0 200
 

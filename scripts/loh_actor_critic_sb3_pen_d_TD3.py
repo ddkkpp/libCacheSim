@@ -166,21 +166,13 @@ def _env_truthy(name: str) -> bool:
     return v.strip().lower() in {"1", "true", "yes", "on"}
 
 def get_state_dim() -> int:
-    """返回完整 CONTEXT_DIM (基础 26/38 + 可选候选特征 72)"""
-    base = 26
-    raw = os.environ.get("LOH_STATE_DIM")
-    if raw is not None and raw.strip() != "":
-        try:
-            dim = int(raw)
-            if dim in (26, 38):
-                base = dim
-        except Exception:
-            pass
-    else:
-        if _env_truthy("LOH_INCLUDE_CACHE_FEATURES"):
-            base = 38
-    cand_enabled_raw = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
-    cand_enabled = cand_enabled_raw in {"1", "true", "yes", "on"}
+    """返回完整 CONTEXT_DIM (基础 26/38 + 可选候选特征 72)，完全由 LOH_INCLUDE_* 决定。"""
+    base = 38
+    cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "").strip().lower()
+    if cache_flag in {"0", "false", "no", "off"}:
+        base = 26
+    cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
+    cand_enabled = cand_flag in {"1", "true", "yes", "on"}
     return base + (72 if cand_enabled else 0)
 
 CONTEXT_DIM = get_state_dim()

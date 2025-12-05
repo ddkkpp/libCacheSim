@@ -20,6 +20,6 @@ tensorboard --logdir ./runs --port 6006
 
 LOH_PARALLEL_SAFE=1
 
-LOH_PARALLEL_SAFE=1 TD3_ACTION_NOISE=0.05 LOH_SHM_KEY=12003 LOH_OBS_KEEP=nohit CACHESIM_NUM_REQ=10000000 PYTHON_SCRIPT=loh_actor_critic_sb3_pen_d_TD3.py EVICTION_ALGO=LOH bash test_loh_rl_sb3.sh data/WikiCDN/wiki_2019t.oracleGeneral.zst
+LOH_PARALLEL_SAFE=1 TD3_ACTION_NOISE=0.05 LOH_SHM_KEY=12003 LOH_OBS_KEEP=nohit CACHESIM_NUM_REQ=10000000 PYTHON_SCRIPT=loh_actor_critic_sb3_pen_d_TD3.py EVICTION_ALGO=LOH bash ./scripts/test_loh_rl_sb3.sh data/WikiCDN/wiki_2019t.oracleGeneral.zst
 
 还有文件的打印语句没有改._maybe_set_num("TD3_BATCH_SIZE", "batch_size", int)和            batch_size=int(os.environ.get("TD3_BATCH_SIZE", "256")),           # previous/SB3 default 256区别是什么，环境变量设置时通过哪个生效，能只保留一个吗

@@ -426,7 +426,7 @@ export LOH_SEM_TIMEOUT_S=2.0  # 改为2.0秒 → 20秒检测
 
 ```bash
 # 启用详细日志
-LOH_DEBUG_LEVEL=2 bash test_loh_rl_sb3.sh
+LOH_DEBUG_LEVEL=2 bash ./scripts/test_loh_rl_sb3.sh
 
 # 在日志中查找：
 grep "Consecutive sem_wait timeouts" ac_sb3_*.log
@@ -438,11 +438,11 @@ grep "Model saved" ac_sb3_*.log
 
 ```bash
 # 1. Ctrl+C（推荐）
-bash test_loh_rl_sb3.sh
+bash ./scripts/test_loh_rl_sb3.sh
 # 运行中按 Ctrl+C
 
 # 2. 自然结束
-CACHESIM_NUM_REQ=1000 bash test_loh_rl_sb3.sh
+CACHESIM_NUM_REQ=1000 bash ./scripts/test_loh_rl_sb3.sh
 
 # 3. 脚本停止（推荐）
 python3 scripts/loh_stop.py

@@ -194,10 +194,10 @@ cache_t *GLCache_init(const common_cache_params_t ccache_params,
 cache_t *LOH_init(const common_cache_params_t ccache_params,
                   const char *cache_specific_params);
 
-// Alternate LOH variants: new MR naming wrappers.
-// Registerable at runtime as "loh-mr-blocked" and "loh-mr-noblocked".
-// These wrappers delegate to the existing implementations but expose the
-// new initializer symbols.
+cache_t *LOH_penalty_init(const common_cache_params_t ccache_params,
+                          const char *cache_specific_params);
+
+// Alternate LOH variants: MR naming wrappers for backward compatibility
 cache_t *LOH_mr_blocked_init(const common_cache_params_t ccache_params,
                              const char *cache_specific_params);
 

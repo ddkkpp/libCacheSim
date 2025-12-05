@@ -38,7 +38,7 @@
 ```bash
 # 主测试（根目录的 test_loh_rl_sb3.sh）
 cd /home/dingkp/libCacheSim
-CACHESIM_NUM_REQ=10000000 LOH_DEBUG_BASIC=1 bash test_loh_rl_sb3.sh data/WikiCDN/wiki_2019t.oracleGeneral.zst
+CACHESIM_NUM_REQ=10000000 LOH_DEBUG_BASIC=1 bash ./scripts/test_loh_rl_sb3.sh data/WikiCDN/wiki_2019t.oracleGeneral.zst
 
 # 纯penalty奖励测试
 bash test_scripts/10282026-test_pure_penalty_reward.sh

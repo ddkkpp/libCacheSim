@@ -36,7 +36,14 @@ from stable_baselines3 import PPO  # 保留作参考
 # 常数定义
 FEATURE_DIM = 6
 
-# 动态解析状态维度（与 C 端 -DLOH_INCLUDE_CACHE_FEATURES/LOH_STATE_DIM 对齐）
+# 特征/权重模式开关：
+#   - 默认：C 端使用 1/(1+x) 等归一化，Python 端对动作用 softmax 得到正且和为 1 的权重；
+#   - 当环境变量 LOH_FEATURE_LOG1P 为真时：
+#       * C 端（例如 `LOH_mr_blocked.c`）使用 log1p(raw) 特征（size 按字节计），
+#       * Python 端直接使用连续动作向量作为权重（可为负数且无需归一化，不再 softmax）。
+LOH_FEATURE_LOG1P = False
+
+# 动态解析状态维度（与 C 端 -DLOH_INCLUDE_CACHE_FEATURES / LOH_INCLUDE_CANDIDATE_FEATURES 对齐）
 def _env_truthy(name: str) -> bool:
     v = os.environ.get(name)
     if v is None:
@@ -44,22 +51,41 @@ def _env_truthy(name: str) -> bool:
     return v.strip().lower() in {"1", "true", "yes", "on"}
 
 def get_state_dim() -> int:
-    """获取完整 CONTEXT_DIM：基础维度 26/38 + 候选特征附加 72"""
-    base = 26
-    raw = os.environ.get("LOH_STATE_DIM")
-    if raw is not None and raw.strip() != "":
-        try:
-            dim = int(raw)
-            if dim in (26, 38):
-                base = dim
-        except Exception:
-            pass
-    else:
-        if _env_truthy("LOH_INCLUDE_CACHE_FEATURES"):
-            base = 38
-    cand_enabled_raw = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
-    cand_enabled = cand_enabled_raw in {"1", "true", "yes", "on"}
-    return base + (72 if cand_enabled else 0)
+    """获取完整 CONTEXT_DIM：由多个可选模块组成。
+
+    状态向量结构：
+    - GLOBAL_DIM = 2 (hit_ratio, byte_hit_ratio)
+    - HIT_MISS_DIM = 24 if LOH_INCLUDE_HIT_MISS_FEATURES else 0
+    - CACHE_DIM = 12 if LOH_INCLUDE_CACHE_FEATURES else 0
+    - CAND_FEATURE_DIM = 72 if LOH_INCLUDE_CANDIDATE_FEATURES else 0
+    - SAMPLE_FEATURE_DIM = N_SAMPLES*6 if LOH_INCLUDE_SAMPLE_FEATURES else 0 (32个最低分对象)
+    """
+    GLOBAL_DIM = 2
+
+    # Hit/Miss 特征统计 (24维)
+    hit_miss_flag = os.environ.get("LOH_INCLUDE_HIT_MISS_FEATURES", "0").strip().lower()
+    hit_miss_dim = 24 if hit_miss_flag in {"1", "true", "yes", "on"} else 0
+
+    # Cache 特征统计 (12维)
+    cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "0").strip().lower()
+    cache_dim = 12 if cache_flag in {"1", "true", "yes", "on"} else 0
+
+    # 候选集合统计 (72维)
+    cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
+    cand_dim = 72 if cand_flag in {"1", "true", "yes", "on"} else 0
+
+    # 最低分对象采样特征 (N_SAMPLES*6维)
+    sample_flag = os.environ.get("LOH_INCLUDE_SAMPLE_FEATURES", "1").strip().lower()
+    N_SAMPLES = 32  # 必须与 C 端一致
+    sample_dim = (N_SAMPLES * 6) if sample_flag in {"1", "true", "yes", "on"} else 0
+
+    total = GLOBAL_DIM + hit_miss_dim + cache_dim + cand_dim + sample_dim
+
+    if LOH_DEBUG_BASIC():
+        print(f"[LOH] State dimension breakdown: GLOBAL={GLOBAL_DIM}, HIT_MISS={hit_miss_dim}, "
+              f"CACHE={cache_dim}, CAND={cand_dim}, SAMPLE={sample_dim} (N={N_SAMPLES}×6), TOTAL={total}")
+
+    return total
 
 CONTEXT_DIM = get_state_dim()
 STATE_DIM = CONTEXT_DIM
@@ -117,6 +143,12 @@ def _env_flag(name: str, default: bool) -> bool:
     return default
 
 
+# 运行期特征/权重模式：是否启用 log1p(raw) + 原始权重模式
+LOH_FEATURE_LOG1P = _env_flag("LOH_FEATURE_LOG1P", False)
+if LOH_DEBUG_BASIC():
+    print(f"[LOH] Python LOH_FEATURE_LOG1P={LOH_FEATURE_LOG1P}")
+
+
 def _env_float(name: str, default: Optional[float]) -> Optional[float]:
     raw = os.environ.get(name)
     if raw is None or raw == "":
@@ -145,6 +177,11 @@ def create_shared_memory_class(context_dim):
             ("state_version", ctypes.c_uint64),
             ("ack_version", ctypes.c_uint64),
             ("timestamp", ctypes.c_int64),
+            # 调试验证字段（与 C 端对齐）
+            ("struct_magic", ctypes.c_uint32),       # 0x4C4F4821 ("LOH!")
+            ("context_dim_check", ctypes.c_uint32),  # 应与 CONTEXT_DIM 匹配
+            ("feature_dim_check", ctypes.c_uint32),  # 应与 FEATURE_DIM 匹配
+            ("struct_size_check", ctypes.c_uint32),  # sizeof(shm_data_t)
         ]
     return SharedMemoryData
 
@@ -315,9 +352,54 @@ class LohEnv(gym.Env):
             os.chmod(shm_path, 0o666)  # 确保权限
             print(f"✅ Shared memory connected: {shm_path}")
 
+            # 验证共享内存结构
+            self._validate_shared_memory()
+
         except Exception as e:
             print(f"❌ Shared memory connection failed: {e}")
             raise
+
+    def _validate_shared_memory(self):
+        """验证共享内存结构与C端一致性"""
+        try:
+            data = self._read_shm()
+
+            # 打印Python端结构体信息
+            py_size = ctypes.sizeof(SharedMemoryData)
+            print(f"[SHM VALIDATE] Python sizeof(SharedMemoryData) = {py_size} bytes")
+            print(f"[SHM VALIDATE] CONTEXT_DIM = {CONTEXT_DIM}, FEATURE_DIM = {FEATURE_DIM}")
+
+            # 检查魔数
+            if hasattr(data, 'struct_magic') and data.struct_magic != 0:
+                if data.struct_magic == 0x4C4F4821:  # "LOH!"
+                    print(f"✅ [SHM VALIDATE] Magic number matched: 0x{data.struct_magic:08X}")
+                else:
+                    print(f"⚠️ [SHM VALIDATE] Magic number mismatch: got 0x{data.struct_magic:08X}, expected 0x4C4F4821")
+
+                # 检查维度
+                if data.context_dim_check != CONTEXT_DIM:
+                    print(f"❌ [SHM VALIDATE] CONTEXT_DIM mismatch: C={data.context_dim_check}, Python={CONTEXT_DIM}")
+                else:
+                    print(f"✅ [SHM VALIDATE] CONTEXT_DIM matched: {CONTEXT_DIM}")
+
+                if data.feature_dim_check != FEATURE_DIM:
+                    print(f"❌ [SHM VALIDATE] FEATURE_DIM mismatch: C={data.feature_dim_check}, Python={FEATURE_DIM}")
+                else:
+                    print(f"✅ [SHM VALIDATE] FEATURE_DIM matched: {FEATURE_DIM}")
+
+                # 检查结构体大小
+                if data.struct_size_check != py_size:
+                    print(f"⚠️ [SHM VALIDATE] struct size mismatch: C={data.struct_size_check}, Python={py_size}")
+                    print(f"  This may indicate alignment or padding differences between C and Python")
+                else:
+                    print(f"✅ [SHM VALIDATE] struct size matched: {py_size} bytes")
+            else:
+                print("[SHM VALIDATE] No validation data from C side yet (magic=0), will validate on first sync")
+
+        except Exception as e:
+            print(f"⚠️ [SHM VALIDATE] Validation failed: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _init_semaphores(self):
         """初始化命名信号量，若失败则回退至轮询模式"""
@@ -659,8 +741,22 @@ class LohEnv(gym.Env):
         self.current_step += 1
 
         # ========== 步骤1: 将RL动作转换为缓存权重 ==========
-        # RL算法输出的是logits，需要通过softmax转换为概率分布（权重）
+        # 默认：对动作向量做 softmax，得到正且和为 1 的权重；
+        # 当 LOH_FEATURE_LOG1P 为真时：直接使用连续动作向量作为权重
+        # （可为负数且不要求和为 1），便于配合 C 端 log1p(raw) 特征模式。
         action_start = get_monotonic_time()
+        # if LOH_FEATURE_LOG1P:
+        #     # 直接用原始动作向量作为权重（float64 以便 C 端 double）
+        #     weights = action.astype(np.float64)
+        # else:
+        #     action_tensor = torch.from_numpy(action)
+        #     weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
+        #打印action logits
+        if LOH_DEBUG_VERBOSE():
+            action_logits_fmt = ", ".join([f"{float(action[i]):.3f}" for i in range(FEATURE_DIM)])
+            print(f"[Step {self.current_step}] Action logits: [{action_logits_fmt}]")
+
+         # 根据 LOH_FEATURE_LOG1P 选择权重转换方式
         action_tensor = torch.from_numpy(action)
         weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
         action_end = get_monotonic_time()
@@ -865,8 +961,13 @@ class LohEnv(gym.Env):
 
         # 6. 使用状态作为新观测
         new_observation = np.array(data.state, dtype=np.float32)
+        # 【实验】将 observation 全部设为 0.5，测试学习是否依赖观测
+        #new_observation = np.full_like(new_observation, 0.5, dtype=np.float32)
+
         new_miss_ratio = data.miss_ratio
         new_byte_miss_ratio = data.byte_miss_ratio
+        #new_miss_ratio = 0.5
+        #new_byte_miss_ratio = 0.5
 
         if LOH_DEBUG_VERBOSE():
             print(f"[Step {self.current_step}] Using state (miss_ratio: {new_miss_ratio:.4f}) — [seq {int(data.state_version)}]")
@@ -1058,78 +1159,111 @@ class LOHTrainingCallback(BaseCallback):
         self.env_ref._set_training_mode(False)
 
     def _on_step(self) -> bool:
-        """每个step后调用"""
+        """每个step后调用 - 记录详细的TensorBoard指标"""
         self.step_count += 1
-        if self.step_count % 100 == 0:  # 每100步记录一次，避免日志过多
+
+        # 每100步记录一次详细指标到 TensorBoard
+        if self.step_count % 100 == 0:
             self._log_with_timestamp(f"推理步骤: step #{self.step_count}", "STEP")
-            # 仅记录即时 reward 到 TensorBoard（不记录平滑或权重）
+
             try:
                 env = self.env_ref
+                if env is None:
+                    return True
+
+                # ========== 1. 记录即时 reward ==========
                 val = None
-                if env is not None:
-                    # fallback order: _last_immediate_reward, _last_smoothed_reward, reward, _last_reward
-                    if hasattr(env, '_last_immediate_reward') and env._last_immediate_reward is not None:
-                        val = float(env._last_immediate_reward)
-                    elif hasattr(env, '_last_smoothed_reward') and env._last_smoothed_reward is not None:
-                        val = float(env._last_smoothed_reward)
-                    else:
-                        # try common alternatives
-                        try:
-                            if hasattr(env, 'reward'):
-                                rv = getattr(env, 'reward')
-                                if rv is not None:
-                                    val = float(rv)
-                        except Exception:
-                            pass
-                        if val is None and hasattr(env, '_last_reward'):
-                            try:
-                                rv = getattr(env, '_last_reward')
-                                if rv is not None:
-                                    val = float(rv)
-                            except Exception:
-                                pass
+                if hasattr(env, '_last_immediate_reward') and env._last_immediate_reward is not None:
+                    val = float(env._last_immediate_reward)
+                elif hasattr(env, '_last_smoothed_reward') and env._last_smoothed_reward is not None:
+                    val = float(env._last_smoothed_reward)
+                else:
+                    # fallback alternatives
+                    if hasattr(env, 'reward') and env.reward is not None:
+                        val = float(env.reward)
+                    elif hasattr(env, '_last_reward') and env._last_reward is not None:
+                        val = float(env._last_reward)
 
                 if val is not None:
-                    self.logger.record('loh/reward', val)
-                    try:
-                        self.logger.dump(step=self.num_timesteps)
-                    except Exception:
-                        pass
-                # 额外：每100步也记录当前权重及范数，便于跟踪权重变化（与 rollout_end 保持一致）
+                    self.logger.record('reward/reward_immediate', val)
+
+                # ========== 2. 记录 hit ratio（对象和字节）==========
+                try:
+                    if hasattr(env, '_previous_miss_ratio'):
+                        obj_hit = 1.0 - float(env._previous_miss_ratio)
+                        self.logger.record('reward/hit_ratio_current', obj_hit)
+                    if hasattr(env, '_previous_byte_miss_ratio'):
+                        byte_hit = 1.0 - float(env._previous_byte_miss_ratio)
+                        self.logger.record('reward/byte_hit_ratio_current', byte_hit)
+                except Exception:
+                    pass
+
+                # ========== 3. 记录当前权重及范数 ==========
                 try:
                     if hasattr(env, '_last_weights') and env._last_weights is not None:
                         weights = env._last_weights
                         for i in range(min(len(weights), FEATURE_DIM)):
-                            try:
-                                self.logger.record(f'loh/weight_{i}', float(weights[i]))
-                            except Exception:
-                                pass
-                        try:
-                            import numpy as _np
-                            self.logger.record('loh/weights_norm', float(_np.linalg.norm(weights)))
-                        except Exception:
-                            pass
-                        try:
-                            self.logger.dump(step=self.num_timesteps)
-                        except Exception:
-                            pass
+                            self.logger.record(f'weight/weight_{i}', float(weights[i]))
+
+                        import numpy as _np
+                        wnorm = float(_np.linalg.norm(weights))
+                        self.logger.record('weight/weights_norm', wnorm)
                 except Exception:
                     pass
-            except Exception:
+
+                # ========== 4. 记录环境统计（step计数）==========
+                try:
+                    if hasattr(env, 'current_step'):
+                        self.logger.record('loh/env_step', int(env.current_step))
+                    if hasattr(env, 'episode_count'):
+                        self.logger.record('loh/episode_count', int(env.episode_count))
+                except Exception:
+                    pass
+
+                # ========== 5. dump 到 TensorBoard ==========
+                try:
+                    self.logger.dump(step=self.num_timesteps)
+                except Exception:
+                    pass
+
+            except Exception as e:
                 if LOH_DEBUG_BASIC():
-                    self._log_with_timestamp('Warning: failed to record immediate reward to TB', 'DEBUG')
+                    self._log_with_timestamp(f'Warning: failed to record metrics to TB: {e}', 'DEBUG')
 
         return True  # 继续训练
 
     def _on_rollout_end(self) -> None:
-        """推理阶段结束 - 另一个关键时机！"""
+        """推理阶段结束 - 记录rollout统计到TensorBoard"""
         self._log_with_timestamp(f"<<< 推理阶段结束 (rollout #{self.rollout_count}) - 通知C端进入训练模式", "ROLLOUT")
         self._log_with_timestamp(f"本轮推理收集了 {self.env_ref.current_step} 步数据", "STATS")
+
         # 告诉C端即将进入训练阶段，使用缓存权重
         self.env_ref._set_training_mode(True)
-        # Rollout-end TensorBoard recording disabled here.
-        # We intentionally avoid writing weights/reward at rollout_end to reduce duplicate logs.
-        # Weight/reward logging occurs every 100 steps inside `_on_step`.
+
+        # ========== 记录 rollout 结束时的统计到 TensorBoard ==========
+        try:
+            env = self.env_ref
+
+            # 1. 记录最终权重（本轮rollout最后使用的权重）
+            if hasattr(env, '_last_weights') and env._last_weights is not None:
+                weights = env._last_weights
+                for i in range(min(len(weights), FEATURE_DIM)):
+                    self.logger.record(f'weight/rollout_end_weight_{i}', float(weights[i]))
+
+                import numpy as _np
+                wnorm = float(_np.linalg.norm(weights))
+                self.logger.record('weight/rollout_end_weights_norm', wnorm)
+
+            # 2. 记录 rollout 计数
+            self.logger.record('loh/rollout_count', self.rollout_count)
+            self.logger.record('loh/rollout_steps', int(env.current_step) if hasattr(env, 'current_step') else 0)
+
+            # 3. dump
+            self.logger.dump(step=self.num_timesteps)
+
+        except Exception as e:
+            if LOH_DEBUG_BASIC():
+                self._log_with_timestamp(f'Warning: failed to record rollout_end metrics: {e}', 'DEBUG')
 
     def _on_training_end(self) -> None:
         """整个训练结束"""

@@ -1,34 +1,49 @@
 #!/bin/bash
-# 测试LOH算法与stable-baselines3 RL集成的脚本
+# LOH 与 stable-baselines3 RL 集成测试脚本
+# 简化版：统一使用环境变量配置，移除冗余的命令行参数
 
 # 使用说明函数
 usage() {
-    echo "Usage: $0 [trace_file] [state_dim] [cache_size] [miss_ratio_weight] [python_script] [eviction_algo]"
-    echo "  trace_file:         Path to trace file (optional, default: data/MetaCDN/meta_reag.oracleGeneral.zst)"
-    echo "  state_dim:          State dimension (optional, default: 26)"
-    echo "  cache_size:         Cache size as ratio (optional, default: 0.1)"
-    echo "  miss_ratio_weight:  Weight for object miss ratio in reward (optional, default: 1.0, byte_miss_ratio_weight = 1.0 - miss_ratio_weight)"
-    echo "  python_script:      Python script to run (optional, default: loh_actor_critic_sb3.py)"
-    echo "  eviction_algo:      Eviction algorithm name passed to cachesim (optional, default: LOH). Examples: LOH, loh-mr-blocked, loh-mr-noblocked"
+    echo "Usage: $0 [trace_file] [cache_size]"
+    echo "  trace_file:  Path to trace file (optional, default: data/MetaCDN/meta_reag.oracleGeneral.zst)"
+    echo "  cache_size:  Cache size as ratio (optional, default: 0.1)"
     echo
-    echo "Environment Variables:"
-    echo "  LEARNING_STARTS:      Number of steps before training starts (default: 1000)"
-    echo "  EXCLUDE_RECENT_STEPS: Number of recent steps to exclude from sampling (default: 100)"
-    echo "  PYTHON_SCRIPT:        Python script to run (default: loh_actor_critic_sb3.py)"
-    echo "  EVICTION_ALGO:        Eviction algorithm to pass to cachesim (default: LOH)"
-    echo "  RL_UPDATE_INTERVAL:   Interval for RL updates (optional, no default)"
-    echo "  CACHESIM_NUM_REQ:     Number of requests to process (optional, processes entire trace by default)"
+    echo "Environment Variables (all optional):"
+    echo
+    echo "  === Algorithm Selection ==="
+    echo "  LOH_RL_ALGO:                     RL algorithm: PPO, SAC, TD3 (default: SAC)"
+    echo
+    echo "  === State Dimension (C compile-time) ==="
+    echo "  Note: First 2 dims (hit_ratio, byte_hit_ratio) always passed for reward calculation"
+    echo "  LOH_INCLUDE_TOPK_CANDIDATE_FEATURES: Include TopK candidate features, 192 dims (default: 0)"
+    echo "  LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES: Include AvgTopK average features, 24 dims (default: 1)"
+    echo "  LOH_INCLUDE_REQUEST:              Include recent request history (REQUEST_HISTORY_LEN×6 dims, default: 0)"
+    echo "  LOH_INCLUDE_CACHE_FEATURES:      Include cache features, 12 dims (default: 0)"
+    echo "  LOH_INCLUDE_CANDIDATE_FEATURES:  Include candidate statistics, 72 dims (default: 0)"
+    echo "  LOH_INCLUDE_HIT_MISS_FEATURES:   Include hit/miss features, 24 dims (default: 0)"
+    echo
+    echo "  === RL Observation (Python runtime) ==="
+    echo "  RL_STATE_USE_MISSRATIO:          Include first 2 dims in RL observation (default: 1)"
+    echo "                                   Set to 0 to exclude hit_ratio, byte_hit_ratio from RL obs"
+    echo
+    echo "  === Reward/Penalty ==="
+    echo "  LOH_MISS_RATIO_WEIGHT:           Weight for object miss ratio (default: 1.0)"
+    echo "  LOH_ENABLE_PENALTY:              Enable penalty mechanism (default: 0, requires rebuild)"
+    echo "                                   ⚠️ This affects C compilation - will trigger auto rebuild"
+    echo
+    echo "  === Misc ==="
+    echo "  RL_UPDATE_INTERVAL:              RL update interval (optional)"
+    echo "  CACHESIM_NUM_REQ:                Number of requests to process (optional)"
+    echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 1)"
+    echo "  LOH_ENABLE_PROFILING:            Enable profiling timer stats (default: 0)"
     echo
     echo "Examples:"
     echo "  $0"
     echo "  $0 /path/to/trace.gz"
-    echo "  $0 /path/to/trace.gz 26"
-    echo "  $0 /path/to/trace.gz 26 0.2"
-    echo "  $0 /path/to/trace.gz 26 0.2 0.8    # 80% object miss ratio, 20% byte miss ratio"
-    echo "  $0 /path/to/trace.gz 26 0.2 0.8 loh_actor_critic_sb3_SACblocked.py  # Use blocked MR variant (loh-mr-blocked)"
-    echo "  LEARNING_STARTS=500 EXCLUDE_RECENT_STEPS=50 $0 /path/to/trace.gz"
-    echo "  PYTHON_SCRIPT=loh_actor_critic_sb3_SACblocked.py CACHESIM_NUM_REQ=100000 $0 /path/to/trace.gz"
-    echo "  RL_UPDATE_INTERVAL=1000 CACHESIM_NUM_REQ=100000 $0 /path/to/trace.gz  # With RL update interval"
+    echo "  $0 /path/to/trace.gz 0.2"
+    echo "  LOH_RL_ALGO=PPO $0 /path/to/trace.gz"
+    echo "  RL_STATE_USE_MISSRATIO=0 $0 /path/to/trace.gz   # RL obs excludes miss ratios"
+    echo "  LOH_ENABLE_PENALTY=1 $0 /path/to/trace.gz       # Enable penalty (triggers rebuild)"
     exit 1
 }
 
@@ -37,48 +52,41 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     usage
 fi
 
-echo "=== Testing LOH with stable-baselines3 Reinforcement Learning ==="
+echo "=== LOH + stable-baselines3 RL Integration Test ==="
 echo
 
-# 预清理：避免上一轮残留影响本次运行。
-# 并行安全模式：设置 LOH_PARALLEL_SAFE=1 将跳过全局 pkill/stop，仅按本次 LOH_SHM_KEY 做局部清理。
+# 打印与评分模式相关的核心环境变量，便于区分本次运行属于哪种模式
+echo "[config] LOH_SCORE_USE_IRT=${LOH_SCORE_USE_IRT:-<unset>}"
+echo "[config] LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND:-<unset>}"
+echo "[config] LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
+echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-1}"
+echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
+
+# 预清理：避免上一轮残留影响本次运行
 if [ "${LOH_PARALLEL_SAFE:-0}" = "1" ]; then
-    echo "[pre-stop] Parallel-safe mode enabled: skip global stop/kill."
-    # 仅在提供了 LOH_SHM_KEY 时，尝试清理对应共享内存文件（不影响其它实例）
+    echo "[pre-stop] Parallel-safe mode: skip global cleanup"
     if [ -n "${LOH_SHM_KEY:-}" ] && [ -f "/dev/shm/loh_ac_${LOH_SHM_KEY}" ]; then
         rm -f "/dev/shm/loh_ac_${LOH_SHM_KEY}" || true
-        echo "[pre-stop] Removed /dev/shm/loh_ac_${LOH_SHM_KEY}"
     fi
 else
-    echo "[pre-stop] 停止可能残留的上一次运行..."
+    echo "[pre-stop] Cleaning up previous runs..."
     if [ -x scripts/stop_loh_rl.sh ]; then
         ./scripts/stop_loh_rl.sh || true
     else
-        # 兜底：尽量不报错地清理（注意：会影响所有匹配进程，不适合并行场景）
         pkill -f "scripts/loh_actor_critic_sb3.*\.py" || true
         pkill -f "_build_dbg/bin/cachesim.* LOH" || true
-        # 如果未设置 LOH_SHM_KEY，这里只做通配清理，不会误删其他实例
-        if [ -n "${LOH_SHM_KEY:-}" ]; then
-            [ -f "/dev/shm/loh_ac_${LOH_SHM_KEY}" ] && rm -f "/dev/shm/loh_ac_${LOH_SHM_KEY}" || true
-        else
-            # 保守清理：不使用 rm /dev/shm/loh_ac_*，避免误删其他并行实例
-            true
-        fi
     fi
-    echo "[pre-stop] 完成。"
+    echo "[pre-stop] Done."
 fi
 
-# --- 【新增】Python脚本选择 ---
-# 优先级：第5个位置参数 > 环境变量 PYTHON_SCRIPT > 默认值
-if [ -n "$5" ]; then
-    PYTHON_SCRIPT="$5"
-    echo "使用您指定的Python脚本（位置参数5）: $PYTHON_SCRIPT"
-elif [ -n "${PYTHON_SCRIPT:-}" ]; then
-    echo "使用环境变量指定的Python脚本: $PYTHON_SCRIPT"
-else
-    PYTHON_SCRIPT="loh_actor_critic_sb3.py"
-    echo "未指定Python脚本，使用默认: $PYTHON_SCRIPT"
-fi
+# Python 脚本固定为统一脚本（已整合 PPO/SAC/TD3）
+PYTHON_SCRIPT="loh_actor_critic_sb3.py"
+
+# Eviction 算法固定为 LOH（C 端已整合）
+EVICTION_ALGO="LOH"
+
+# 状态维度由环境变量控制（不再通过命令行）
+echo "State dimension controlled by LOH_INCLUDE_* environment variables"
 
 # 验证Python脚本文件是否存在
 if [ ! -f "scripts/$PYTHON_SCRIPT" ]; then
@@ -88,119 +96,47 @@ if [ ! -f "scripts/$PYTHON_SCRIPT" ]; then
     exit 1
 fi
 
-# --- 【修复】状态向量维度配置（尊重环境并与构建宏一致） ---
-# 解析优先级：
-# 1) 位置参数 $2 明确给出 26/38
-# 2) 已存在的环境变量 LOH_STATE_DIM（若有效）
-# 3) 环境变量 LOH_INCLUDE_CACHE_FEATURES（1->38, 0->26）
-# 4) 默认：38（包含缓存特征）以与构建默认保持一致
-if [ -n "$2" ]; then
-    STATE_DIM="$2"
-    if [ "$STATE_DIM" != "26" ] && [ "$STATE_DIM" != "38" ]; then
-        echo -e "\033[0;31m错误: 状态向量维度必须是26或38，您提供的是: $STATE_DIM\033[0m"
-        echo "用法: $0 [trace_file] [state_dim] [cache_size]"
-        echo "示例: $0 data/meta.zst 26 0.1      # 使用26维状态向量，缓存大小0.1"
-        echo "示例: $0 data/meta.zst 38 0.05     # 使用38维状态向量，缓存大小0.05"
-        exit 1
-    fi
-    export LOH_STATE_DIM="$STATE_DIM"
-    echo "使用您指定的状态向量维度: ${STATE_DIM}维（位置参数2）"
-else
-    # 未提供位置参数，按环境/宏推导
-    if [ -n "${LOH_STATE_DIM:-}" ]; then
-        if [ "${LOH_STATE_DIM}" = "26" ] || [ "${LOH_STATE_DIM}" = "38" ]; then
-            echo "沿用环境变量 LOH_STATE_DIM=${LOH_STATE_DIM} 维"
-        else
-            echo "[WARN] 环境 LOH_STATE_DIM='${LOH_STATE_DIM}' 非法，尝试根据 LOH_INCLUDE_CACHE_FEATURES 推导"
-            if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ] && [ "${LOH_INCLUDE_CACHE_FEATURES}" = "0" ]; then
-                export LOH_STATE_DIM="26"
-            else
-                export LOH_STATE_DIM="38"
-            fi
-            echo "已解析状态向量维度为: ${LOH_STATE_DIM} 维"
-        fi
-    else
-        # 根据 LOH_INCLUDE_CACHE_FEATURES 推导，否则默认 38
-        if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ]; then
-            if [ "${LOH_INCLUDE_CACHE_FEATURES}" = "0" ]; then
-                export LOH_STATE_DIM="26"
-            else
-                export LOH_STATE_DIM="38"
-            fi
-            echo "根据 LOH_INCLUDE_CACHE_FEATURES=${LOH_INCLUDE_CACHE_FEATURES} 推导状态维度: ${LOH_STATE_DIM} 维"
-        else
-            export LOH_STATE_DIM="38"
-            echo "未指定状态向量维度，默认: 38维（包含缓存特征）"
-        fi
-    fi
-fi
+# --- 【简化】状态向量维度配置 ---
+# 状态维度完全由 C/Python 代码中的默认值和环境变量控制，不再通过命令行参数指定
+# 默认值：GLOBAL(2) + SAMPLE(192) = 194 维
+# 如需调整，可设置环境变量：LOH_INCLUDE_SAMPLE_FEATURES, LOH_INCLUDE_CACHE_FEATURES 等
+echo "状态向量维度由环境变量控制（默认：GLOBAL(2)+SAMPLE(192)=194维）"
 
 # --- 【新增】可选的 eviction algorithm 选择 ---
-# 优先级：第6个位置参数 > 环境变量 EVICTION_ALGO > 默认值
-if [ -n "$6" ]; then
-    EVICTION_ALGO="$6"
-    echo "使用您指定的 eviction 算法（位置参数6）: $EVICTION_ALGO"
-elif [ -n "${EVICTION_ALGO:-}" ]; then
-    echo "使用环境变量指定的 eviction 算法: $EVICTION_ALGO"
-else
-    EVICTION_ALGO="LOH"
-    echo "未指定 eviction 算法，使用默认: $EVICTION_ALGO"
-fi
-
-# 小写/大写不敏感，但保持原始大小写用于日志显示
-
-
-# --- 【新增】缓存大小配置 ---
-# 检查是否提供了缓存大小参数（第三个参数）
-if [ -n "$3" ]; then
-    CACHE_SIZE="$3"
-    # 验证cache_size是有效数值
-    if ! [[ "$CACHE_SIZE" =~ ^[0-9]*\.?[0-9]+$ ]] || (( $(echo "$CACHE_SIZE <= 0" | bc -l) )) || (( $(echo "$CACHE_SIZE > 1" | bc -l) )); then
-        echo "错误: 缓存大小必须是0到1之间的数值，您输入的是: $CACHE_SIZE"
-        usage
-    fi
-    echo "使用您指定的缓存大小: $CACHE_SIZE"
-else
-    CACHE_SIZE="0.1"
-    echo "未指定缓存大小，使用默认: $CACHE_SIZE"
-fi
-
-# 检查是否提供了miss ratio权重参数（第四个参数）
-if [ -n "$4" ]; then
-    MISS_RATIO_WEIGHT="$4"
-    # 验证miss_ratio_weight是有效数值
-    if ! [[ "$MISS_RATIO_WEIGHT" =~ ^[0-9]*\.?[0-9]+$ ]] || (( $(echo "$MISS_RATIO_WEIGHT < 0" | bc -l) )) || (( $(echo "$MISS_RATIO_WEIGHT > 1" | bc -l) )); then
-        echo "错误: miss ratio权重必须是0到1之间的数值，您输入的是: $MISS_RATIO_WEIGHT"
-        usage
-    fi
-    BYTE_MISS_RATIO_WEIGHT=$(echo "1.0 - $MISS_RATIO_WEIGHT" | bc -l)
-    echo "使用您指定的权重: miss_ratio_weight=$MISS_RATIO_WEIGHT, byte_miss_ratio_weight=$BYTE_MISS_RATIO_WEIGHT"
-else
-    MISS_RATIO_WEIGHT="1.0"
-    BYTE_MISS_RATIO_WEIGHT="0.0"
-    echo "未指定权重，使用默认: miss_ratio_weight=$MISS_RATIO_WEIGHT, byte_miss_ratio_weight=$BYTE_MISS_RATIO_WEIGHT"
-fi
-
-# --- 【核心功能】: 处理trace文件参数 ---
-# 设置默认的trace文件路径
+# --- 参数解析 ---
+# 参数1: trace文件路径
 DEFAULT_TRACE_FILE="data/MetaCDN/meta_reag.oracleGeneral.zst"
-
-
-# 检查是否提供了trace文件和请求数参数
 if [ -n "$1" ]; then
     TRACE_FILE="$1"
-    echo "使用您指定的trace文件: $TRACE_FILE"
+    echo "Using trace file: $TRACE_FILE"
 else
     TRACE_FILE="$DEFAULT_TRACE_FILE"
-    echo "未指定trace文件，使用默认路径: $TRACE_FILE"
+    echo "Using default trace file: $TRACE_FILE"
 fi
 
 # 验证数据文件是否存在
 if [ ! -f "$TRACE_FILE" ]; then
-    echo -e "\033[0;31m错误: Trace文件 '$TRACE_FILE' 不存在! 请检查路径。\033[0m"
+    echo -e "\033[0;31mError: Trace file '$TRACE_FILE' not found!\033[0m"
     exit 1
 fi
-# --- 功能结束 ---
+
+# 参数2: 缓存大小
+if [ -n "$2" ]; then
+    CACHE_SIZE="$2"
+    if ! [[ "$CACHE_SIZE" =~ ^[0-9]*\.?[0-9]+$ ]] || (( $(echo "$CACHE_SIZE <= 0" | bc -l) )) || (( $(echo "$CACHE_SIZE > 1" | bc -l) )); then
+        echo "Error: cache_size must be between 0 and 1, got: $CACHE_SIZE"
+        usage
+    fi
+    echo "Using cache size: $CACHE_SIZE"
+else
+    CACHE_SIZE="0.1"
+    echo "Using default cache size: $CACHE_SIZE"
+fi
+
+# Miss ratio 权重从环境变量读取（不再通过位置参数）
+MISS_RATIO_WEIGHT="${LOH_MISS_RATIO_WEIGHT:-1.0}"
+BYTE_MISS_RATIO_WEIGHT=$(echo "1.0 - $MISS_RATIO_WEIGHT" | bc -l)
+echo "Using weights: miss_ratio_weight=$MISS_RATIO_WEIGHT, byte_miss_ratio_weight=$BYTE_MISS_RATIO_WEIGHT"
 
 # 设置错误处理和调试
 set -e  # 遇到错误时停止执行
@@ -233,15 +169,70 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}开始测试LOH算法与stable-baselines3强化学习的集成...${NC}"
 
-echo "Configuring build for LOH_STATE_DIM=${LOH_STATE_DIM} (26->no cache, 38->with cache)"
-# 统一通过构建宏控制（不再修改源码）——始终重建以确保宏生效
-echo "📦 Rebuilding libCacheSim with LOH_INCLUDE_CACHE_FEATURES derived from LOH_STATE_DIM..."
-bash scripts/debug.sh -c
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Build failed. Please fix any compile errors.${NC}"
-    exit 1
-fi
-echo "✅ Rebuild completed successfully"
+# ==== 构建策略说明（现在只在读到特定环境变量时才构建）====
+# 1) 默认行为
+#    - 不触发任何构建，直接复用已有的 _build_dbg/bin/cachesim。
+#    - 如果该可执行文件不存在，则报错提示你手动构建。
+#
+# 2) 编译相关环境变量（触发增量构建）
+#    - 若设置了以下任意环境变量，将在进入模拟前调用一次 scripts/debug.sh（不加 -c），进行增量构建：
+#        * LOH_INCLUDE_HIT_MISS_FEATURES    # 显式控制是否包含 hit/miss 统计 (24维)
+#        * LOH_INCLUDE_CACHE_FEATURES       # 显式控制是否包含 cache 特征 (12维)
+#        * LOH_INCLUDE_CANDIDATE_FEATURES   # 显式控制是否包含 candidate 特征 (72维)
+#        * LOH_INCLUDE_TOPK_CANDIDATE_FEATURES  # 显式控制是否包含 TopK 候选特征 (192维)
+#        * LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES  # 显式控制是否包含 AvgTopK 平均特征 (24维)
+#        * LOH_DEBUG_LEVEL                  # 显式控制 C 端调试日志级别（0-4）
+#    - 注：前2维(hit_ratio, byte_hit_ratio)始终传递，不再通过宏控制
+#    - 这些变量会在 scripts/debug.sh 中被转换为编译宏，通常意味着你希望修改 C 侧特征维度/候选特征布局或调试日志级别。
+#    - 一旦设置，我们假定你"需要重建"，因此不会再做额外比较，直接增量构建一次。
+# ============================================================
+
+# 整个检查+（可选）构建过程用 flock 串行化，避免并发冲突。
+(
+    flock 9
+
+    # 是否存在编译相关环境变量（LOH_INCLUDE_* / LOH_DEBUG_LEVEL / LOH_ENABLE_PENALTY），决定是否需要构建
+    NEED_REBUILD=0
+     if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ] || \
+         [ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ] || \
+         [ -n "${LOH_INCLUDE_HIT_MISS_FEATURES:-}" ] || \
+         [ -n "${LOH_INCLUDE_TOPK_CANDIDATE_FEATURES:-}" ] || \
+         [ -n "${LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES:-}" ] || \
+         [ -n "${LOH_INCLUDE_REQUEST:-}" ] || \
+         [ -n "${LOH_DEBUG_LEVEL:-}" ] || \
+         [ -n "${LOH_ENABLE_PENALTY:-}" ]; then
+        NEED_REBUILD=1
+    fi
+
+    if [ "${NEED_REBUILD}" = "1" ]; then
+        echo "[build] 检测到编译相关环境变量，将触发构建"
+    fi
+
+    if [ ! -x "_build_dbg/bin/cachesim" ]; then
+        if [ "${NEED_REBUILD}" = "1" ]; then
+            echo "[build] 未找到 _build_dbg/bin/cachesim，且检测到编译相关环境变量，执行一次增量构建..."
+            bash scripts/debug.sh
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Build failed. Please fix any compile errors.${NC}"
+                exit 1
+            fi
+            echo "✅ Rebuild completed successfully"
+        else
+            echo -e "${RED}[build] 未找到 _build_dbg/bin/cachesim。请先手动运行 scripts/debug.sh 构建项目。${NC}"
+            exit 1
+        fi
+    elif [ "${NEED_REBUILD}" = "1" ]; then
+        echo "[build] 检测到编译相关环境变量，复用现有 _build_dbg 目录执行一次增量构建..."
+        bash scripts/debug.sh
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Build failed. Please fix any compile errors.${NC}"
+            exit 1
+        fi
+        echo "✅ Rebuild completed successfully"
+    else
+        echo "[build] 未设置编译相关环境变量，直接复用已有 _build_dbg/bin/cachesim（不触发构建）"
+    fi
+) 9>/tmp/libcachesim_build.lock
 
 # 设置Python环境 (新增stable-baselines3和gymnasium)
 echo "Setting up Python environment..."
@@ -256,40 +247,15 @@ umask 0  # Set umask to allow full permissions
 PYTHON_LOG_FILE="ac_sb3_${RUN_TIMESTAMP}.log"
 export PYTHONUNBUFFERED=1
 
-# 构建Python脚本参数
-PYTHON_ARGS="--miss-ratio-weight $MISS_RATIO_WEIGHT"
-
-# 支持通过环境变量配置learning-starts
-if [ -n "${LEARNING_STARTS:-}" ]; then
-    PYTHON_ARGS="$PYTHON_ARGS --learning-starts $LEARNING_STARTS"
-    echo "Using learning-starts=$LEARNING_STARTS"
-fi
-
-# 支持通过环境变量配置exclude-recent-steps
-if [ -n "${EXCLUDE_RECENT_STEPS:-}" ]; then
-    PYTHON_ARGS="$PYTHON_ARGS --exclude-recent-steps $EXCLUDE_RECENT_STEPS"
-    echo "Using exclude-recent-steps=$EXCLUDE_RECENT_STEPS"
-fi
-
-# --- 【新增】支持通过环境变量设置随机种子（LOH_RL_SEED 或 SEED） ---
-# 目的：允许在一行内联环境变量运行（例如：LOH_RL_SEED=42 bash test_loh_rl_sb3.sh ...），
-# 并把种子传递给 Python（--seed）和设置 PYTHONHASHSEED，以提高可重复性。
-if [ -n "${LOH_RL_SEED:-}" ]; then
-    # 优先使用 LOH_RL_SEED
-    export LOH_RL_SEED
-    export PYTHONHASHSEED="${LOH_RL_SEED}"
-    echo "Using LOH_RL_SEED=${LOH_RL_SEED} (exported to Python environment, PYTHONHASHSEED set)"
-elif [ -n "${SEED:-}" ]; then
-    # 向后兼容: 如果只设置了 SEED，也导出为 LOH_RL_SEED
-    export LOH_RL_SEED="${SEED}"
-    export PYTHONHASHSEED="${SEED}"
-    echo "Using SEED=${SEED} (exported as LOH_RL_SEED to Python environment, PYTHONHASHSEED set)"
-fi
+# Python 脚本不再需要命令行参数，全部通过环境变量配置
+# 导出必要的环境变量给 Python 使用
+export LOH_MISS_RATIO_WEIGHT="${MISS_RATIO_WEIGHT}"
 
 echo -e "${YELLOW}Starting stable-baselines3 training script... (Log: ${PYTHON_LOG_FILE})${NC}"
 echo "Python script: scripts/$PYTHON_SCRIPT"
-echo "Python arguments: $PYTHON_ARGS"
-python3 "scripts/$PYTHON_SCRIPT" $PYTHON_ARGS \
+echo "RL Algorithm: ${LOH_RL_ALGO:-SAC}"
+echo "Miss ratio weight: ${LOH_MISS_RATIO_WEIGHT}"
+python3 "scripts/$PYTHON_SCRIPT" \
     > "${PYTHON_LOG_FILE}" 2>&1 &
 PYTHON_PID=$!
 
@@ -339,15 +305,21 @@ else
     TRACE_TYPE="oracleGeneral"
 fi
 
-echo "Using trace file: $TRACE_FILE (type: $TRACE_TYPE, cache size: $CACHE_SIZE)"
+echo "Using trace file: $TRACE_FILE (type: $TRACE_TYPE, cache size ratio: $CACHE_SIZE)"
 
 # 执行缓存模拟器 - 输出到文件以便调试
 echo -e "${YELLOW}Running cachesim with the following parameters:${NC}"
 echo "  Trace file: $TRACE_FILE"
 echo "  Trace type: $TRACE_TYPE"
-echo "  Cache size: $CACHE_SIZE"
+echo "  Cache size ratio: $CACHE_SIZE"
 echo "  Eviction: $EVICTION_ALGO (with SB3 RL)"
-echo "  Processing all requests in trace file"
+if [ -n "${CACHESIM_NUM_REQ:-}" ]; then
+    echo "  Num requests: $CACHESIM_NUM_REQ"
+else
+    echo "  Num requests: ALL"
+fi
+echo "  Python script: ${PYTHON_SCRIPT:-<unset>}"
+echo "  LOH_FIXED_WEIGHTS: ${LOH_FIXED_WEIGHTS:-<unset>}"
 
 # 执行缓存模拟
 CACHESIM_LOG_FILE="cachesim_sb3_${RUN_TIMESTAMP}.log"

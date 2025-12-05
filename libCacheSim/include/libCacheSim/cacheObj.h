@@ -135,8 +135,10 @@ typedef struct {
   int32_t loh_state;            // Object lifecycle state (loh_obj_state_t)
   // Hot-path cached pointers to auxiliary nodes (set by LOH policy)
   void *loh_freq_node;     // points to loh_freq_node_t in LOH.c
-  void *loh_size_node;     // points to size_node_t in LOH.c
+  void *loh_size_node;     // points to size_node_t
+                           // (LOH_penalty.c/LOH_mr_noblocked.c legacy)
   int16_t loh_irt_pos[3];  // index in each IRT heap (-1 if not present)
+  int16_t loh_size_pos;    // index in size heap (-1 if not present) for LOH.c
 } LOH_obj_metadata_t;
 
 typedef struct {

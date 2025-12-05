@@ -40,7 +40,7 @@ penalty = 1.0 / (1.0 + revisit_distance / 1000.0)
 
 ```bash
 # 使用默认参数，26维状态，10% 缓存，10000请求
-bash test_loh_rl_sb3.sh data/MetaCDN/meta_reag.oracleGeneral.zst 26 0.1 1.0 200 10000
+bash ./scripts/test_loh_rl_sb3.sh data/MetaCDN/meta_reag.oracleGeneral.zst 26 0.1 1.0 200 10000
 ```
 
 参数说明：

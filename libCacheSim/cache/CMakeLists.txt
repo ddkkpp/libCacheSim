@@ -57,9 +57,10 @@ set(eviction_sources_c
         eviction/SLRUv0.c        # an inefficient version but easier to understand
         eviction/TwoQ.c
         eviction/WTinyLFU.c
-        eviction/LOH.c           # LOH cache algorithm (renamed from AdaptCache)
-    eviction/LOH_mr_blocked.c # LOH MR variant (blocked)
-    eviction/LOH_mr_noblocked.c # LOH MR variant (non-blocking)
+        eviction/LOH.c           # LOH cache algorithm - unified version (supports blocked/nonblocked/penalty modes)
+        eviction/LOH_penalty.c   # LOH penalty mechanism variant (independent implementation)
+        eviction/LOH_mr_blocked.c   # LOH MR variant (blocked) - legacy wrapper
+        eviction/LOH_mr_noblocked.c # LOH MR variant (non-blocking) - legacy wrapper
 
         # these are sub-algorithms used by other algorithms
         eviction/CR_LFU.c

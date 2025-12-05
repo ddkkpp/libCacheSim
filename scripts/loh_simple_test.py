@@ -18,9 +18,11 @@ FEATURE_DIM = 6
 
 # 获取状态向量维度
 def get_state_dim():
-    """获取状态向量维度，默认为26维"""
-    state_dim = os.environ.get('LOH_STATE_DIM', '26')
-    return int(state_dim)
+    """获取状态向量维度，完全由 LOH_INCLUDE_CACHE_FEATURES 决定，不再读取 LOH_STATE_DIM。"""
+    flag = os.environ.get('LOH_INCLUDE_CACHE_FEATURES', '').strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return 26
+    return 38
 
 CONTEXT_DIM = get_state_dim()
 STATE_DIM = CONTEXT_DIM

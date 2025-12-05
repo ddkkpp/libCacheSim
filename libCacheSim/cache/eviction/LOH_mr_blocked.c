@@ -12,31 +12,96 @@
 #include <strings.h>
 #include <time.h>
 
-// 不管是否训练，继续等待权重
-// 使用PPO
+// ============================================================
+// LOH-mr-blocked 版本 - 运行时环境变量总览
+// ============================================================
+// 1) RL / 权重相关
+//   - LOH_ENABLE_RL        : 是否启用与 Python 的 RL 同步
+//                            默认: 1（启用）
+//   - LOH_DISABLE_RL       : 与 LOH_ENABLE_RL 互斥；若显式设为 1/true 则关闭 RL
+//                            默认: 未设置（忽略，使用 LOH_ENABLE_RL
+//                            或内置默认）
+//   - LOH_FIXED_WEIGHTS    : 固定 6 维特征权重，格式 "w1,w2,w3,w4,w5,w6"
+//                            默认: 未设置（使用编译时内置默认权重
+//                            [1,0,0,0,0,0]）
+//   - miss-ratio-weight    : 通过 cache_specific_params 传入，例如
+//                            "miss-ratio-weight=1.0"，控制奖励中 miss/byte 比例
+//                            默认: 1.0（只看对象 miss ratio）
+//
+// 2) 共享内存 / 信号量相关
+//   - LOH_SHM_KEY          : 共享内存与信号量 key 后缀
+//                            默认: "9876"（文件 /dev/shm/loh_ac_9876）
+//   - LOH_ENABLE_SEMAPHORE : 强制启用 POSIX 命名信号量
+//                            默认: 未设置（若 LOH_DISABLE_SEMAPHORE
+//                            未设，则启用）
+//   - LOH_DISABLE_SEMAPHORE: 强制禁用 POSIX 命名信号量
+//                            默认: 未设置（不禁用）
+//   - LOH_WAIT_MODE        : 等待 Python ACK 的模式
+//                            取值: "blocked" | "nonblocked"/"non-blocked"
+//                            默认: "blocked"（严格等待权重更新）
+//
+// 3) 特征变换 / 归一化相关
+//   - LOH_FEATURE_LOG1P            : 启用 log1p(raw) 形式的特征
+//                                    默认: 0（关闭）
+//   - LOH_FEATURE_LOG1P_RECIPROCAL: 启用 log1p+1/(1+x) reciprocal 形式
+//                                    默认: 0（关闭；若 LOG1P=1 则忽略此项）
+//   - （此变体当前未启用 LOH_ENABLE_FEATURE_NORMALIZATION 以及 NORM_MAX_*
+//   环境项，
+//      需要与 LOH.c 一致时可按相同方式扩展。）
+//
+// 4) Penalty / Ghost cache 相关
+//   - LOH_ENABLE_PENALTY    : 是否开启 penalty 队列与延迟惩罚
+//                             默认: 0（关闭；可在编译期通过 -D 开启）
+//
+// 5) 其它说明
+//   - 编译期宏（如 LOH_INCLUDE_HIT_MISS_FEATURES / LOH_INCLUDE_SAMPLE_FEATURES
+//   等）
+//     通过 -D 控制，不受环境变量影响，但会改变 CONTEXT_DIM 与共享内存布局。
+// ============================================================
 
-// 状态向量配置由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1 控制（未定义则按0处理）
+// Penalty 机制开关（运行时从环境变量读取）
+#ifndef LOH_ENABLE_PENALTY
+#define LOH_ENABLE_PENALTY 0  // 默认关闭
+#endif
+
+// 等待模式：blocked（阻塞等待）/ nonblocked（非阻塞，使用旧权重）
+// 运行时从环境变量 LOH_WAIT_MODE 读取
+static int loh_wait_mode_blocked = 1;  // 默认阻塞模式
+
+// 状态向量配置由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1 控制
+// 若未显式定义，则在此默认关闭缓存特征：
+#ifndef LOH_INCLUDE_CACHE_FEATURES
+#define LOH_INCLUDE_CACHE_FEATURES 0
+#endif
 
 // 候选特征汇总开关（编译期）：0 关闭，1 开启（附加72维）
 #ifndef LOH_INCLUDE_CANDIDATE_FEATURES
 #define LOH_INCLUDE_CANDIDATE_FEATURES 0
 #endif
 
-// LOH 调试模式控制
-// 根据编译模式自动确定调试级别
-#ifdef NDEBUG
-#define LOH_DEBUG_LEVEL 0  // 发布模式：不输出调试信息
-#else
-// 为调试构建开启详细验证与日志
-#define LOH_DEBUG_LEVEL 1
+// Hit/Miss 特征统计开关（编译期）：0 关闭，1 开启（24维）
+#ifndef LOH_INCLUDE_HIT_MISS_FEATURES
+#define LOH_INCLUDE_HIT_MISS_FEATURES 1
 #endif
 
-// 可以通过编译时定义 LOH_DEBUG_LEVEL 来覆盖默认设置
+// 蓄水池采样特征开关（编译期）：0 关闭，1 开启
+#ifndef LOH_INCLUDE_SAMPLE_FEATURES
+#define LOH_INCLUDE_SAMPLE_FEATURES 0
+#endif
+
+// 蓄水池采样配置
+#define N_SAMPLES \
+  32  // 采样池容量：保留32个最低分对象（每次驱逐取最低4个，共8组）
+#define SAMPLES_PER_EVICTION 4  // 每次驱逐时采样的对象数
+
+// LOH 调试模式控制
+// 如果未在编译命令中显式定义 LOH_DEBUG_LEVEL，则根据编译模式自动确定
 #ifndef LOH_DEBUG_LEVEL
 #ifdef NDEBUG
 #define LOH_DEBUG_LEVEL 0  // 发布模式：不输出调试信息
 #else
-#define LOH_DEBUG_LEVEL 2  // 调试模式：输出详细调试信息
+
+#define LOH_DEBUG_LEVEL 1
 #endif
 #endif
 
@@ -135,6 +200,13 @@ typedef struct {
   perf_counter_t sync_total;         // sync_with_actor_critic() 总耗时
   perf_counter_t sync_update_state;  // update_state_vector() 耗时
   perf_counter_t sync_misc;  // sync中除update_state_vector外的其他操作耗时
+#if LOH_ENABLE_PENALTY
+  // Ghost cache & penalty 相关
+  perf_counter_t ghost_cache_lookup;  // ghost_cache 查找
+  perf_counter_t ghost_cache_insert;  // ghost_cache 插入
+  perf_counter_t penalty_enqueue;     // 惩罚入队
+  perf_counter_t penalty_write_shm;   // 惩罚批量写入共享内存
+#endif
   // IRT 修复路径与回退的计数（非时间）：用于确认是否触发线性扫描/索引修复
   uint64_t irt_fixups;         // IRT 更新过程中发生修复/回退的总次数
   uint64_t irt_linear_scans;   // IRT 更新过程中执行线性扫描的次数
@@ -171,6 +243,46 @@ typedef struct {
 #define PERF_NOW(ts) ((void)0)
 #define PERF_ACCUM(params, field, ts0) ((void)0)
 #endif
+
+// 特征归一化模式开关：运行期从环境读取一次后缓存
+//   - loh_feature_log1p=1 时：所有特征统一采用 log1p(raw)，并允许 Python 端直接
+//     使用原始连续动作作为权重（不再 softmax）。
+//   - loh_feature_log1p_reciprocal=1 时：使用 "log1p+1/(1+x)" 的 reciprocal
+//   模式。
+//   - 若两者都未显式开启，则使用旧的 1/(1+x)、f/(f+1)、1/(1+A*MB) 形式。
+static int loh_feature_log1p = 0;  // 对应环境 LOH_FEATURE_LOG1P
+static int loh_feature_log1p_reciprocal =
+    0;  // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
+
+// 解析布尔环境变量工具：1/true/yes/on -> 1，0/false/no/off -> 0，其他保持默认
+static int loh_parse_bool_env(const char *val, int default_value) {
+  if (!val || !val[0]) return default_value;
+  if (strcasecmp(val, "1") == 0 || strcasecmp(val, "true") == 0 ||
+      strcasecmp(val, "yes") == 0 || strcasecmp(val, "on") == 0) {
+    return 1;
+  }
+  if (strcasecmp(val, "0") == 0 || strcasecmp(val, "false") == 0 ||
+      strcasecmp(val, "no") == 0 || strcasecmp(val, "off") == 0) {
+    return 0;
+  }
+  return default_value;
+}
+
+// 按环境变量初始化特征模式（仅在 init 时调用一次）
+static void loh_init_feature_mode_from_env(void) {
+  const char *raw = getenv("LOH_FEATURE_LOG1P");
+  const char *rec = getenv("LOH_FEATURE_LOG1P_RECIPROCAL");
+
+  loh_feature_log1p = (raw && raw[0] && strcmp(raw, "0") != 0);
+  loh_feature_log1p_reciprocal = 0;
+
+  if (!loh_feature_log1p) {
+    loh_feature_log1p_reciprocal = (rec && rec[0] && strcmp(rec, "0") != 0);
+  }
+
+  LOH_DEBUG_PRINT_BASIC("[LOH] feature mode: LOG1P=%d, RECIPROCAL=%d\n",
+                        loh_feature_log1p, loh_feature_log1p_reciprocal);
+}
 
 // 共享内存头文件
 #include <errno.h>
@@ -227,11 +339,22 @@ static void LOH_print_cache(const cache_t *cache);
 #define FEATURE_DIM 6  // 用于评分的特征数量
 
 // 根据配置选择状态向量维度
-#if LOH_INCLUDE_CACHE_FEATURES
-#define BASE_STATE_DIM 38  // [0-1] 全局, [2-25] 特征统计, [26-37] 缓存状态
+// 基础维度计算：全局指标(2) + Hit/Miss特征(24) + Cache特征(12)
+#define GLOBAL_DIM 2  // hit_ratio, byte_hit_ratio
+
+#if LOH_INCLUDE_HIT_MISS_FEATURES
+#define HIT_MISS_DIM 24  // 6特征 × 2(hit/miss) × 2(mean/var)
 #else
-#define BASE_STATE_DIM 26  // [0-1] 全局, [2-25] 特征统计（无缓存状态）
+#define HIT_MISS_DIM 0
 #endif
+
+#if LOH_INCLUDE_CACHE_FEATURES
+#define CACHE_DIM 12  // 6特征 × 2(mean/var)
+#else
+#define CACHE_DIM 0
+#endif
+
+#define BASE_STATE_DIM (GLOBAL_DIM + HIT_MISS_DIM + CACHE_DIM)
 
 #if LOH_INCLUDE_CANDIDATE_FEATURES
 #define CAND_FEATURE_DIM 72  // 6(来源)*6(特征)*2(均值/方差)
@@ -239,10 +362,29 @@ static void LOH_print_cache(const cache_t *cache);
 #define CAND_FEATURE_DIM 0
 #endif
 
-#define CONTEXT_DIM (BASE_STATE_DIM + CAND_FEATURE_DIM)
+#if LOH_INCLUDE_SAMPLE_FEATURES
+#define SAMPLE_FEATURE_DIM \
+  (N_SAMPLES * FEATURE_DIM)  // N_SAMPLES个最低分对象 × 6特征
+#else
+#define SAMPLE_FEATURE_DIM 0
+#endif
+
+#define CONTEXT_DIM (BASE_STATE_DIM + CAND_FEATURE_DIM + SAMPLE_FEATURE_DIM)
 
 #define SHM_KEY 9876  // 共享内存段键
 #define SEM_KEY 9877  // 信号量键
+
+// ===== Penalty 队列相关定义（仅在启用 penalty 时使用）=====
+#define PENALTY_QUEUE_INIT_CAPACITY 16  // 初始容量
+#define PENALTY_QUEUE_GROW_STEP 16      // 每次扩容增加的数量
+
+// Penalty 条目结构（与 LOH.c 保持一致）
+typedef struct {
+  uint64_t penalty_version;    // 要惩罚的历史状态版本号
+  int64_t eviction_to_access;  // 驱逐到访问的距离（用于计算惩罚）
+  int64_t obj_size;            // 对象大小（用于字节惩罚计算）
+  uint64_t obj_id;             // 触发惩罚的对象ID（用于调试）
+} penalty_entry_t;
 
 // C 与 Python 共享的 Actor-Critic（行为者-评论者）网络结构
 typedef struct {
@@ -261,10 +403,9 @@ typedef struct {
   // 策略网络输出的特征权重（6 维）
   double weights[FEATURE_DIM];
 
-  // 用于奖励计算的性能指标
-  double miss_ratio;       // 当前未命中率
-  double byte_miss_ratio;  // 当前字节未命中率
-  double reward;           // 当前奖励值
+  // 【修改】传递驱逐统计而非即时reward
+  uint64_t total_evicted_bytes;  // 当前周期累计驱逐的字节数
+  uint64_t total_evicted_count;  // 当前周期累计驱逐的对象数
 
   // 请求-响应版本号，用于避免陈旧请求/响应
   uint64_t state_version;  // C端发送状态时的序号
@@ -272,6 +413,18 @@ typedef struct {
 
   // 用于同步的时间戳
   int64_t timestamp;
+
+#if LOH_ENABLE_PENALTY
+  // 【优化】延迟惩罚数据（仅传递数量，详细数据在同步时批量传输）
+  int pending_penalty_count;  // 当前周期待处理的惩罚数量
+  // 惩罚详细数据将在同步时单独传输（避免共享内存膨胀）
+#endif
+
+  // 【调试字段】用于验证C/Python两端共享内存结构一致性
+  uint32_t struct_magic;       // 魔数：0x4C4F4821 ("LOH!")
+  uint32_t context_dim_check;  // 应与 CONTEXT_DIM 匹配
+  uint32_t feature_dim_check;  // 应与 FEATURE_DIM 匹配
+  uint32_t struct_size_check;  // sizeof(shm_data_t)
 } shm_data_t;
 
 #define FREQ_MAX 255         // 单独跟踪的最大频率
@@ -290,6 +443,12 @@ typedef struct LOH_ghost_entry {
   int64_t last_access_counter;  // 最后访问的逻辑时间戳
   int64_t irt_values[3];        // 【简化】：直接存储 IRT 值，无需复杂窗口
   time_t evict_time;            // 驱逐时间（用于 LRU 清理）
+
+#if LOH_ENABLE_PENALTY
+  uint64_t eviction_version;  // 【新增】驱逐时的state_version（用于惩罚）
+  int64_t
+      eviction_timestamp;  // 【新增】驱逐时的逻辑时间戳（用于精确计算驱逐到访问距离）
+#endif
 
   // 双向队列指针（参考 FIFO.c 的实现）
   struct LOH_ghost_entry *prev;  // 前一个 ghost 条目
@@ -453,6 +612,13 @@ typedef struct {
   double epoch_byte_miss_count;  // RL训练：累积字节失误，用于字节级性能评估
   double epoch_byte_count;       // RL训练：累积字节总数，配合字节失误计算性能
 
+#if LOH_ENABLE_PENALTY
+  uint64_t
+      epoch_evicted_bytes;  // 当前周期累计驱逐的字节数（用于字节惩罚分量归一化）
+  uint64_t
+      epoch_evicted_count;  // 当前周期累计驱逐的对象数（用于对象惩罚分量归一化）
+#endif
+
   // 学习参数
   int64_t learning_interval;  // 权重更新的间隔
   int64_t requests_since_update;
@@ -478,10 +644,134 @@ typedef struct {
   double cand_feat_sumsq[6][FEATURE_DIM];
   uint64_t cand_feat_count[6];
 #endif
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  // 蓄水池采样：保留评分最低的对象特征样本（每次驱逐取4个最低分，共8组=32个）
+  double lowest_score_samples[N_SAMPLES][FEATURE_DIM];  // 最低分对象的特征
+  uint64_t
+      group_count;  // 当前 Epoch 内的采样组数（每次驱逐产生1组，共8组填满）
+  uint64_t samples_filled;  // 样本池中已填充的样本数（<=N_SAMPLES）
+  // 临时存储：记录当前驱逐中最低分的4个对象（在 LOH_to_evict 中填充）
+  cache_obj_t *current_lowest_4[SAMPLES_PER_EVICTION];
+  double current_lowest_scores[SAMPLES_PER_EVICTION];
+  int current_lowest_count;
+#endif
 #if LOH_PERF_PROFILING
   loh_perf_t perf;  // 轻量性能剖析计数器
 #endif
+
+#if LOH_ENABLE_PENALTY
+  // Penalty 机制：记录未命中的惩罚，周期性写入共享内存供 Python 使用
+  penalty_entry_t *penalty_queue;  // 惩罚队列（动态数组）
+  int penalty_queue_size;          // 队列当前大小
+  int penalty_queue_capacity;      // 队列容量
+  int pending_penalty_count;       // 待处理的惩罚计数
+#endif
 } LOH_params_t;
+
+// === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
+
+static double calculate_irt_feature(int64_t irt_value) {
+  // 约定：调用者必须保证 IRT 已初始化且为正；否则直接中断调试
+  g_assert(irt_value > 0);
+
+  double v = (double)irt_value;
+  if (loh_feature_log1p) {
+    // LOG1P 模式：直接 log1p(raw)
+    return log1p(v);
+  }
+
+  if (loh_feature_log1p_reciprocal) {
+    v = log1p(v);
+  }
+  return 1.0 / (1.0 + v);
+}
+
+// 基础特征变换函数：入参为“raw” 数值，不再依赖 params
+static double calculate_recency(int64_t recency_raw) {
+  g_assert(recency_raw >= 0);
+
+  double v = (double)recency_raw;
+  if (loh_feature_log1p) {
+    return log1p(v);
+  }
+
+  return loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(v)))
+                                      : (1.0 / (1.0 + v));
+}
+
+static double calculate_frequency(int64_t freq_raw) {
+  g_assert(freq_raw >= 0);
+
+  double f = (double)freq_raw;
+  if (loh_feature_log1p) {
+    return log1p(f);
+  }
+
+  const double K = 1.0;
+  if (loh_feature_log1p_reciprocal) f = log1p(f);
+  return (f > 0.0) ? (f / (f + K)) : 0.0;
+}
+
+static double calculate_size(int64_t size_bytes) {
+  g_assert(size_bytes >= 0);
+
+  double size_bytes_d = (double)size_bytes;
+
+  if (loh_feature_log1p) {
+    return log1p(size_bytes_d);
+  }
+
+  double size_mb = size_bytes_d / (1024.0 * 1024.0);
+  const double A = 1.0;
+  return loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(A * size_mb)))
+                                      : (1.0 / (1.0 + A * size_mb));
+}
+
+// 计算对象的六个特征值：recency, frequency, size, irt1, irt2, irt3
+static void calculate_object_features(LOH_params_t *params, cache_obj_t *obj,
+                                      double *features) {
+  g_assert(params != NULL);
+  g_assert(obj != NULL);
+  g_assert(params->current_timestamp >= obj->LOH.last_access_counter);
+
+  int64_t delta = params->current_timestamp - obj->LOH.last_access_counter;
+  int64_t recency_raw = delta;
+  int64_t freq_raw = (int64_t)obj->LOH.access_count;
+  int64_t size_bytes = (int64_t)obj->obj_size;
+
+  // 统一通过四个基础特征函数计算
+  features[0] = calculate_recency(recency_raw);
+  features[1] = calculate_frequency(freq_raw);
+  features[2] = calculate_size(size_bytes);
+  features[3] = calculate_irt_feature(obj->LOH.irt_values[0]);
+  features[4] = calculate_irt_feature(obj->LOH.irt_values[1]);
+  features[5] = calculate_irt_feature(obj->LOH.irt_values[2]);
+
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature0(recency) - value=%.6f\n",
+      features[0]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature1(frequency) - value=%.6f\n",
+      features[1]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature2(size) - value=%.6f\n", features[2]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature3(latest_IRT) - value=%.6f\n",
+      features[3]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature4(2nd_IRT) - value=%.6f\n",
+      features[4]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature5(3rd_IRT) - value=%.6f\n",
+      features[5]);
+
+  // [DEBUG] Final feature vector
+  LOH_DEBUG_PRINT_DETAILED(
+      "[calculate_object_features] Final feature vector - [%.6f, %.6f, %.6f, "
+      "%.6f, %.6f, %.6f]\n",
+      features[0], features[1], features[2], features[3], features[4],
+      features[5]);
+}
 
 #if LOH_PERF_PROFILING
 static void loh_print_perf_summary(LOH_params_t *params) {
@@ -869,9 +1159,34 @@ static void add_to_ghost_cache(LOH_params_t *params, cache_obj_t *obj,
   }
   ghost_entry->evict_time = time(NULL);
 
+#if LOH_ENABLE_PENALTY
+  // 【新增】记录驱逐版本号和时间戳（用于penalty机制）
+  if (params->shm_file != NULL) {
+    shm_data_t shm_data;
+    rewind(params->shm_file);
+    if (fread(&shm_data, sizeof(shm_data_t), 1, params->shm_file) == 1) {
+      ghost_entry->eviction_version = shm_data.state_version;
+    } else {
+      ghost_entry->eviction_version = 0;  // 读取失败时使用0
+    }
+  } else {
+    ghost_entry->eviction_version = 0;  // 无共享内存时使用0
+  }
+  ghost_entry->eviction_timestamp = params->current_timestamp;
+#endif
+
+#if LOH_ENABLE_PENALTY
+  PERF_TS ts_insert;
+  PERF_NOW(ts_insert);
+#endif
+
   // 插入到哈希表
   g_hash_table_insert(params->ghost_cache, GINT_TO_POINTER((int)obj_id_key),
                       ghost_entry);
+
+#if LOH_ENABLE_PENALTY
+  PERF_ACCUM(params, ghost_cache_insert, ts_insert);
+#endif
 
   // 添加到 FIFO 队列头部（最新）
   ghost_prepend_to_head(params, ghost_entry);
@@ -980,6 +1295,65 @@ static void write_shared_memory(LOH_params_t *params, const shm_data_t *data) {
   fflush(params->shm_file);
   unlock_shared_memory(params);
 }
+
+// ===== Penalty 机制相关函数（仅在 LOH_ENABLE_PENALTY=1 时编译）=====
+#if LOH_ENABLE_PENALTY
+/**
+ * 将一个 penalty 条目添加到队列中
+ * @param params LOH 参数
+ * @param penalty_version 要惩罚的历史状态版本号
+ * @param eviction_to_access 驱逐到访问的距离
+ * @param obj_size 对象大小
+ * @param obj_id 对象ID（用于调试）
+ * @return 成功返回 true，失败返回 false
+ */
+static bool enqueue_penalty(LOH_params_t *params, uint64_t penalty_version,
+                            int64_t eviction_to_access, int64_t obj_size,
+                            uint64_t obj_id) {
+  PERF_TS ts_enqueue;
+  PERF_NOW(ts_enqueue);
+
+  if (params == NULL) return false;
+
+  // 检查队列是否需要扩容
+  if (params->penalty_queue_size >= params->penalty_queue_capacity) {
+    // 线性扩容：每次增加固定数量
+    int new_capacity = params->penalty_queue_capacity + PENALTY_QUEUE_GROW_STEP;
+
+    penalty_entry_t *new_queue =
+        realloc(params->penalty_queue, new_capacity * sizeof(penalty_entry_t));
+    if (new_queue == NULL) {
+      LOH_DEBUG_PRINT_ERROR(
+          "[LOH] ERROR: Failed to expand penalty queue from %d to %d\n",
+          params->penalty_queue_capacity, new_capacity);
+      return false;
+    }
+
+    params->penalty_queue = new_queue;
+    params->penalty_queue_capacity = new_capacity;
+    LOH_DEBUG_PRINT_BASIC(
+        "[LOH] Expanded penalty queue to capacity %d (realloc may copy data)\n",
+        new_capacity);
+  }
+
+  // 添加原始数据到本地队列
+  int idx = params->penalty_queue_size;
+  params->penalty_queue[idx].penalty_version = penalty_version;
+  params->penalty_queue[idx].eviction_to_access = eviction_to_access;
+  params->penalty_queue[idx].obj_size = obj_size;
+  params->penalty_queue[idx].obj_id = obj_id;
+  params->penalty_queue_size++;
+
+  LOH_DEBUG_PRINT_BASIC(
+      "[C→Queue] 📝 Penalty #%d: version=%lu, evict_to_access=%ld, "
+      "size=%ld, obj_id=%lu (queue: %d/%d)\n",
+      idx, penalty_version, eviction_to_access, obj_size, obj_id,
+      params->penalty_queue_size, params->penalty_queue_capacity);
+
+  PERF_ACCUM(params, penalty_enqueue, ts_enqueue);
+  return true;
+}
+#endif  // LOH_ENABLE_PENALTY
 
 // POSIX 信号量初始化与清理
 static bool loh_sem_init(LOH_params_t *params) {
@@ -1097,108 +1471,117 @@ static void loh_sem_close(LOH_params_t *params, bool unlink_names) {
   params->sem_owner = false;
 }
 
-/**
- * @brief IRT 特征值计算函数 - 将原始 IRT 值转换为 [0,1] 范围的特征值
- * 使用归一化公式：1/(1+IRT)，IRT 越大，特征值越小（访问间隔长 =
- * 被驱逐可能性高）
- * @param irt_value 原始 IRT 值
- * @return 归一化的 IRT 特征值
+/** 旧版 calculate_irt_feature/calculate_object_features 已被上方统一实现替代。
  */
-static double calculate_irt_feature(int64_t irt_value) {
-  // 【修复】处理未初始化IRT值：INT64_MAX -> 接近0的特征值（最佳淘汰候选）
-  if (irt_value == INT64_MAX || irt_value <= 0) {
-    return 0.0;  // 无IRT历史或无效值，特征为0（最适合淘汰）
-  }
-  return 1.0 / (1.0 + (double)irt_value);
-}
 
-// 计算对象的六个特征值：recency, frequency, size, irt1, irt2, irt3
-static void calculate_object_features(LOH_params_t *params, cache_obj_t *obj,
-                                      double features[FEATURE_DIM]) {
-  PERF_TS _ts_feat;
-  PERF_NOW(_ts_feat);
-  // 初始化特征值
-  for (int i = 0; i < FEATURE_DIM; i++) {
-    features[i] = 0.0;
-  }
+#if LOH_INCLUDE_SAMPLE_FEATURES
+/**
+ * @brief 蓄水池采样：记录最低分对象的特征（按组采样）
+ *
+ * 算法：
+ * - 前8组（32个对象）直接填充
+ * - 第 i 组（i>8）以概率 8/i 替换池中随机的一组（4个对象同进同出）
+ *
+ * 注意：此函数使用 LOH_to_evict 中已找到的最低4个对象，避免重复计算
+ *
+ * @param params LOH参数
+ */
+static void reservoir_sample_group(LOH_params_t *params) {
+  if (params->current_lowest_count < SAMPLES_PER_EVICTION) return;
 
-  // 对象为空则直接返回零特征
-  if (obj == NULL) {
-    LOH_DEBUG_PRINT_BASIC(
-        "[calculate_object_features] ERROR: Object is NULL, returning zero "
-        "features\n");
-    return;
-  }
+  params->group_count++;
+  uint64_t i = params->group_count;
 
-  // ====================================================================
-  // 【新设计】：使用简化的 irt_values 数组计算特征
-  // ====================================================================
-
-  if (obj != NULL) {
-    // 特征 0: Recency - 从上次访问到现在的时间
-    double recency =
-        (double)(params->current_timestamp - obj->LOH.last_access_counter);
-    features[0] = 1.0 / (1.0 + recency);
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature0(recency) - time_diff=%.0f, "
-        "feature_value=%.6f\n",
-        recency, features[0]);
-
-    // 特征 1: Frequency - 去掉 log，采用 f/(f+K)
-    {
-      const double K = 1.0;  // 按要求设为 1
-      double f = (double)obj->LOH.access_count;
-      features[1] = (f <= 0.0) ? 0.0 : (f / (f + K));
+  // 计算这4个对象的特征
+  double group_features[SAMPLES_PER_EVICTION][FEATURE_DIM];
+  for (int obj_idx = 0; obj_idx < SAMPLES_PER_EVICTION; obj_idx++) {
+    cache_obj_t *obj = params->current_lowest_4[obj_idx];
+    if (obj) {
+      calculate_object_features(params, obj, group_features[obj_idx]);
+    } else {
+      memset(group_features[obj_idx], 0, sizeof(double) * FEATURE_DIM);
     }
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature1(frequency) - f=%d, K=1.0, "
-        "feature_value=%.6f\n",
-        obj->LOH.access_count, features[1]);
+  }
 
-    // 特征 3, 4, 5: IRT - 使用简化的irt_values数组
-    features[3] = calculate_irt_feature(obj->LOH.irt_values[0]);  // 最新IRT
-    features[4] = calculate_irt_feature(obj->LOH.irt_values[1]);  // 第2新IRT
-    features[5] = calculate_irt_feature(obj->LOH.irt_values[2]);  // 第3新IRT
+  if (i <= 8) {
+    // 前8组直接填充（0-7组，共32个样本）
+    int base_idx = (int)((i - 1) * SAMPLES_PER_EVICTION);
+    for (int obj_idx = 0; obj_idx < SAMPLES_PER_EVICTION; obj_idx++) {
+      int idx = base_idx + obj_idx;
+      memcpy(params->lowest_score_samples[idx], group_features[obj_idx],
+             sizeof(double) * FEATURE_DIM);
+      params->samples_filled++;
+    }
 
     LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature3(latest_IRT) - irt=%ld, "
-        "feature_value=%.6f\n",
-        obj->LOH.irt_values[0], features[3]);
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature4(2nd_IRT) - irt=%ld, "
-        "feature_value=%.6f\n",
-        obj->LOH.irt_values[1], features[4]);
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature5(3rd_IRT) - irt=%ld, "
-        "feature_value=%.6f\n",
-        obj->LOH.irt_values[2], features[5]);
+        "[RESERVOIR] Direct fill group %llu: samples %d-%d\n",
+        (unsigned long long)i, base_idx, base_idx + SAMPLES_PER_EVICTION - 1);
+
+    // BASIC级别：输出直接填充的组的首个对象特征
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
+    if (params->current_lowest_4[0]) {
+      printf("[BASIC RESERVOIR] Group %llu direct fill -> slots %d-%d\n",
+             (unsigned long long)i, base_idx,
+             base_idx + SAMPLES_PER_EVICTION - 1);
+      printf(
+          "              First obj: id=%llu features=[%.4f, %.4f, %.4f, %.4f, "
+          "%.4f, %.4f]\n",
+          (unsigned long long)params->current_lowest_4[0]->obj_id,
+          group_features[0][0], group_features[0][1], group_features[0][2],
+          group_features[0][3], group_features[0][4], group_features[0][5]);
+    }
+#endif
   } else {
-    // 理论上不会到达，这里仅为健壮性保留
+    // 以概率 8/i 替换池中随机的一组
+    uint64_t j = (uint64_t)rand() % i;
+
+    if (j < 8) {
+      // 替换第 j 组（同组4个对象同进同出）
+      int base_idx = (int)(j * SAMPLES_PER_EVICTION);
+      for (int obj_idx = 0; obj_idx < SAMPLES_PER_EVICTION; obj_idx++) {
+        int idx = base_idx + obj_idx;
+        memcpy(params->lowest_score_samples[idx], group_features[obj_idx],
+               sizeof(double) * FEATURE_DIM);
+      }
+
+      LOH_DEBUG_PRINT_VERBOSE(
+          "[RESERVOIR] Replace group %llu (prob=%.4f): samples %d-%d\n",
+          (unsigned long long)j, 8.0 / i, base_idx,
+          base_idx + SAMPLES_PER_EVICTION - 1);
+
+      // BASIC级别：输出替换信息
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
+      if (params->current_lowest_4[0]) {
+        printf(
+            "[BASIC RESERVOIR] Group %llu replaces group %llu (prob=%.4f) -> "
+            "slots %d-%d\n",
+            (unsigned long long)i, (unsigned long long)j, 8.0 / i, base_idx,
+            base_idx + SAMPLES_PER_EVICTION - 1);
+        printf(
+            "              New obj: id=%llu features=[%.4f, %.4f, %.4f, %.4f, "
+            "%.4f, %.4f]\n",
+            (unsigned long long)params->current_lowest_4[0]->obj_id,
+            group_features[0][0], group_features[0][1], group_features[0][2],
+            group_features[0][3], group_features[0][4], group_features[0][5]);
+      }
+#endif
+    }
   }
-
-  // 特征 2: Size - 去掉 log，采用 1/(1+A*MB)
-  // obj_size 单位是字节，需要归一化到合理的范围
-  // 优先使用 obj->obj_size，req 为空时也安全
-  double size_mb = (double)obj->obj_size / (1024.0 * 1024.0);  // 转换为 MB
-  {
-    const double A = 1.0;
-    features[2] = 1.0 / (1.0 + A * size_mb);
-  }
-  LOH_DEBUG_PRINT_VERBOSE(
-      "[calculate_object_features] Feature2(size) - raw_size=%llu bytes, "
-      "MB=%.6f, A=1.0, feature_value=%.6f\n",
-      (unsigned long long)obj->obj_size, size_mb, features[2]);
-
-  // [DEBUG] Final feature vector
-  LOH_DEBUG_PRINT_DETAILED(
-      "[calculate_object_features] Final feature vector - [%.6f, %.6f, %.6f, "
-      "%.6f, "
-      "%.6f, %.6f]\n",
-      features[0], features[1], features[2], features[3], features[4],
-      features[5]);
-
-  // 记录特征计算耗时在批量调用处统一计时，避免每次调用都触发系统调用
 }
+
+/**
+ * @brief 重置蓄水池采样缓冲区（在Epoch结束后调用）
+ */
+static void reset_reservoir_samples(LOH_params_t *params) {
+  params->group_count = 0;
+  params->samples_filled = 0;
+  params->current_lowest_count = 0;
+  memset(params->lowest_score_samples, 0, sizeof(params->lowest_score_samples));
+  memset(params->current_lowest_4, 0, sizeof(params->current_lowest_4));
+  memset(params->current_lowest_scores, 0,
+         sizeof(params->current_lowest_scores));
+}
+#endif
 
 static void update_state_vector(LOH_params_t *params) {
   // RL 状态计算位置 1：每当 RL_update_interval 触发时调用
@@ -1235,26 +1618,20 @@ static void update_state_vector(LOH_params_t *params) {
   // 初始化状态向量为 0
   memset(params->context_state, 0, sizeof(double) * CONTEXT_DIM);
 
-  // 状态向量结构 (38 维):
-  // [0-1]: global_perf 指标 - 对象命中率，字节命中率
-  // [2-25]: 特征表现剖析 - 每个特征在命中/未命中对象中的均值和方差
-  // (6 个特征 × 2 种统计 × 2 种事件) [26-37]: 缓存池状态摘要 -
-  // 当前池内对象的特征均值和方差 (6 个特征 × 2 种统计)
+  int offset = 0;  // 动态偏移量，根据启用的模块累加
 
-  // A. global_perf 指标 (2 维)
-  params->context_state[0] = hit_ratio;
-  params->context_state[1] = byte_hit_ratio;
+  // A. global_perf 指标 (2 维) - 始终包含
+  params->context_state[offset++] = hit_ratio;
+  params->context_state[offset++] = byte_hit_ratio;
 
-  // 【调试打印】global_perf 指标
   LOH_DEBUG_PRINT_DETAILED(
-      "[update_state_vector] global_perf [0-1] - [%.6f, %.6f]\n",
-      params->context_state[0], params->context_state[1]);
+      "[update_state_vector] global_perf [0-1] - [%.6f, %.6f]\n", hit_ratio,
+      byte_hit_ratio);
 
-  // B. 特征表现剖析 (24 维)
-  // 对于每个特征 i (6 个特征):
+#if LOH_INCLUDE_HIT_MISS_FEATURES
+  // B. 特征表现剖析 (24 维) - Hit/Miss 统计
   LOH_DEBUG_PRINT_DETAILED(
-      "[update_state_vector] hit_count=%ld, "
-      "miss_count=%ld\n",
+      "[update_state_vector] hit_count=%ld, miss_count=%ld\n",
       (long)params->hit_feature_count, (long)params->miss_feature_count);
 
   for (int i = 0; i < FEATURE_DIM; i++) {
@@ -1266,107 +1643,62 @@ static void update_state_vector(LOH_params_t *params) {
 
     // 计算命中对象特征统计
     if (params->hit_feature_count > 0) {
-      // 特征i在命中对象中的均值
       double mean = params->hit_feature_sum[i] / params->hit_feature_count;
-      params->context_state[2 + i * 4] = mean;
+      params->context_state[offset + i * 4] = mean;
 
-      // 特征i在命中对象中的方差
       if (params->hit_feature_count > 1) {
         double variance =
             (params->hit_feature_sum_sq[i] / params->hit_feature_count) -
             (mean * mean);
-        if (variance > 0) {  // 确保方差为正
-          params->context_state[2 + i * 4 + 1] = variance;
+        if (variance > 0) {
+          params->context_state[offset + i * 4 + 1] = variance;
         }
       }
-
-      LOH_DEBUG_PRINT_DETAILED(
-          "[update_state_vector] feature %d - hit - mean=%.6f, "
-          "variance=%.6f, state[%d]=%.6f, state[%d]=%.6f\n",
-          i, mean,
-          (params->hit_feature_count > 1)
-              ? ((params->hit_feature_sum_sq[i] / params->hit_feature_count) -
-                 (mean * mean))
-              : 0.0,
-          2 + i * 4, params->context_state[2 + i * 4], 2 + i * 4 + 1,
-          params->context_state[2 + i * 4 + 1]);
     }
 
     // 计算未命中对象特征统计
     if (params->miss_feature_count > 0) {
-      // 特征i在未命中对象中的均值
       double mean = params->miss_feature_sum[i] / params->miss_feature_count;
-      params->context_state[2 + i * 4 + 2] = mean;
+      params->context_state[offset + i * 4 + 2] = mean;
 
-      // 特征i在未命中对象中的方差
       if (params->miss_feature_count > 1) {
         double variance =
             (params->miss_feature_sum_sq[i] / params->miss_feature_count) -
             (mean * mean);
-        if (variance > 0) {  // 确保方差为正
-          params->context_state[2 + i * 4 + 3] = variance;
+        if (variance > 0) {
+          params->context_state[offset + i * 4 + 3] = variance;
         }
       }
-
-      LOH_DEBUG_PRINT_DETAILED(
-          "[update_state_vector] feature %d - miss- mean=%.6f, "
-          "variance=%.6f, state[%d]=%.6f, state[%d]=%.6f\n",
-          i, mean,
-          (params->miss_feature_count > 1)
-              ? ((params->miss_feature_sum_sq[i] / params->miss_feature_count) -
-                 (mean * mean))
-              : 0.0,
-          2 + i * 4 + 2, params->context_state[2 + i * 4 + 2], 2 + i * 4 + 3,
-          params->context_state[2 + i * 4 + 3]);
     }
   }
+  offset += HIT_MISS_DIM;  // 跳过 24 维
+#endif
 
 #if LOH_INCLUDE_CACHE_FEATURES
-  // C. 缓存池状态摘要 (12 维) - 仅在包含缓存特征时计算
-  // 对于每个特征 i (6 个特征):
+  // C. 缓存池状态摘要 (12 维)
   LOH_DEBUG_PRINT_DETAILED("[update_state_vector] cache_object_count=%ld\n",
                            (long)params->cache_object_count);
 
   for (int i = 0; i < FEATURE_DIM; i++) {
-    LOH_DEBUG_PRINT_DETAILED(
-        "[update_state_vector] cache_feature %d - sum=%.6f, sum_sq=%.6f\n", i,
-        params->cache_feature_sum[i], params->cache_feature_sum_sq[i]);
-
-    // 计算缓存中对象特征统计
     if (params->cache_object_count > 0) {
-      // 特征i在当前缓存中的均值
       double mean = params->cache_feature_sum[i] / params->cache_object_count;
-      params->context_state[26 + i * 2] = mean;
+      params->context_state[offset + i * 2] = mean;
 
-      // 特征i在当前缓存中的方差
       if (params->cache_object_count > 1) {
         double variance =
             (params->cache_feature_sum_sq[i] / params->cache_object_count) -
             (mean * mean);
-        if (variance > 0) {  // 确保方差为正
-          params->context_state[26 + i * 2 + 1] = variance;
+        if (variance > 0) {
+          params->context_state[offset + i * 2 + 1] = variance;
         }
       }
-
-      LOH_DEBUG_PRINT_DETAILED(
-          "[update_state_vector] cache_feature %d - mean=%.6f, "
-          "variance=%.6f, state[%d]=%.6f, state[%d]=%.6f\n",
-          i, mean,
-          (params->cache_object_count > 1) ? ((params->cache_feature_sum_sq[i] /
-                                               params->cache_object_count) -
-                                              (mean * mean))
-                                           : 0.0,
-          26 + i * 2, params->context_state[26 + i * 2], 26 + i * 2 + 1,
-          params->context_state[26 + i * 2 + 1]);
     }
   }
+  offset += CACHE_DIM;  // 跳过 12 维
 #endif
 
 #if LOH_INCLUDE_CANDIDATE_FEATURES
-  // D. 候选集合统计 (72 维): 来源序 recency,freq,size,irt1,irt2,irt3；特征序
-  // recency..irt3 输出顺序：对每个来源 s∈[0..5]，对每个特征 f∈[0..5]，先 mean
-  // 再 var
-  int base_off = BASE_STATE_DIM;  // 附加段起点
+  // D. 候选集合统计 (72 维)
   for (int s = 0; s < 6; ++s) {
     for (int f = 0; f < FEATURE_DIM; ++f) {
       double mean = 0.0, var = 0.0;
@@ -1377,15 +1709,14 @@ static void update_state_vector(LOH_params_t *params) {
         var = ex2 - mean * mean;
         if (var < 0.0) var = 0.0;
       }
-      int idx = base_off + s * (FEATURE_DIM * 2) + f * 2;
-      if (idx + 1 < CONTEXT_DIM) {  // 保护性检查
-        params->context_state[idx] = mean;
-        params->context_state[idx + 1] = var;
-      }
+      int idx = offset + s * (FEATURE_DIM * 2) + f * 2;
+      params->context_state[idx] = mean;
+      params->context_state[idx + 1] = var;
     }
   }
+  offset += CAND_FEATURE_DIM;
 
-  // 写入完成后重置累计器，开始新周期（打印将在 request_features 之后进行）
+  // 重置累计器
   for (int s = 0; s < 6; ++s) {
     params->cand_feat_count[s] = 0;
     for (int f = 0; f < FEATURE_DIM; ++f) {
@@ -1395,69 +1726,76 @@ static void update_state_vector(LOH_params_t *params) {
   }
 #endif
 
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  // E. 蓄水池采样特征 (N_SAMPLES * FEATURE_DIM 维)
+  LOH_DEBUG_PRINT_DETAILED(
+      "[update_state_vector] reservoir samples: filled=%llu/%d, "
+      "group_count=%llu\n",
+      (unsigned long long)params->samples_filled, N_SAMPLES,
+      (unsigned long long)params->group_count);
+
+  for (int s = 0; s < N_SAMPLES; ++s) {
+    for (int f = 0; f < FEATURE_DIM; ++f) {
+      params->context_state[offset++] = params->lowest_score_samples[s][f];
+    }
+  }
+
+  // 重置采样状态，为下一个 Epoch 做准备
+  reset_reservoir_samples(params);
+#endif
+
+  // 【调试打印】完整状态向量
+  LOH_DEBUG_PRINT_BASIC("[LOH State] CONTEXT_DIM=%d: global=[%.4f,%.4f]",
+                        CONTEXT_DIM, params->context_state[0],
+                        params->context_state[1]);
+#if LOH_INCLUDE_HIT_MISS_FEATURES
+  LOH_DEBUG_PRINT_BASIC(" +hit/miss(24)");
+#endif
 #if LOH_INCLUDE_CACHE_FEATURES
-  // 【调试打印】完整状态向量 (38维)
-
-  // 【还原】分组调试输出 - 38维格式 (直接按向量顺序)
-  LOH_DEBUG_PRINT_BASIC("[global_features]: [%.6f, %.6f]\n",
-                        params->context_state[0], params->context_state[1]);
-
-  LOH_DEBUG_PRINT_BASIC("[request_features]: [");
-  for (int i = 2; i < 26; i++) {
-    LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[i]);
-    if (i < 25) LOH_DEBUG_PRINT_BASIC(", ");
-  }
-  LOH_DEBUG_PRINT_BASIC("]\n");
-
-  LOH_DEBUG_PRINT_BASIC("[cache_features]: [");
-  for (int i = 26; i < 38; i++) {
-    LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[i]);
-    if (i < 37) LOH_DEBUG_PRINT_BASIC(", ");
-  }
-  LOH_DEBUG_PRINT_BASIC("]\n");
-
+  LOH_DEBUG_PRINT_BASIC(" +cache(12)");
+#endif
 #if LOH_INCLUDE_CANDIDATE_FEATURES
-  // 候选统计（72维）最后打印：6行×每行12个（6特征×均值/方差）
-  {
-    for (int s = 0; s < 6; ++s) {
-      LOH_DEBUG_PRINT_BASIC("[candidate_features_%d]: [", s + 1);
-      for (int j = 0; j < 12; ++j) {
-        int idx = base_off + s * 12 + j;
-        LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[idx]);
-        if (j < 11) LOH_DEBUG_PRINT_BASIC(", ");
-      }
-      LOH_DEBUG_PRINT_BASIC("]\n");
+  LOH_DEBUG_PRINT_BASIC(" +cand(72)");
+#endif
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  LOH_DEBUG_PRINT_BASIC(" +sample(%d: %llu/%d filled)",
+                        N_SAMPLES * FEATURE_DIM * 2,
+                        (unsigned long long)params->samples_filled, N_SAMPLES);
+#endif
+  LOH_DEBUG_PRINT_BASIC("\n");
+
+  // 【详细打印】各模块统计信息（DETAILED级别）
+#if LOH_INCLUDE_HIT_MISS_FEATURES
+  LOH_DEBUG_PRINT_DETAILED("  [Hit/Miss Stats] hit_cnt=%lld miss_cnt=%lld\n",
+                           (long long)params->hit_feature_count,
+                           (long long)params->miss_feature_count);
+#endif
+#if LOH_INCLUDE_CACHE_FEATURES
+  LOH_DEBUG_PRINT_DETAILED("  [Cache Stats] obj_count=%lld\n",
+                           (long long)params->cache_object_count);
+#endif
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  LOH_DEBUG_PRINT_DETAILED(
+      "  [Reservoir Stats] group_count=%llu samples_filled=%llu\n",
+      (unsigned long long)params->group_count,
+      (unsigned long long)params->samples_filled);
+  if (params->samples_filled > 0) {
+    LOH_DEBUG_PRINT_DETAILED(
+        "    Group 0 sample 0: [%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]\n",
+        params->lowest_score_samples[0][0], params->lowest_score_samples[0][1],
+        params->lowest_score_samples[0][2], params->lowest_score_samples[0][3],
+        params->lowest_score_samples[0][4], params->lowest_score_samples[0][5]);
+    if (params->samples_filled >= SAMPLES_PER_EVICTION) {
+      LOH_DEBUG_PRINT_DETAILED(
+          "    Group 0 sample 3: [%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]\n",
+          params->lowest_score_samples[3][0],
+          params->lowest_score_samples[3][1],
+          params->lowest_score_samples[3][2],
+          params->lowest_score_samples[3][3],
+          params->lowest_score_samples[3][4],
+          params->lowest_score_samples[3][5]);
     }
   }
-#endif
-#else
-  // 【调试打印】完整状态向量 (26维) - 不包含缓存特征
-
-  // 【还原】分组调试输出 - 26维格式 (直接按向量顺序)
-  LOH_DEBUG_PRINT_BASIC("[global_features]: [%.6f, %.6f]\n",
-                        params->context_state[0], params->context_state[1]);
-
-  LOH_DEBUG_PRINT_BASIC("[request_features]: [");
-  for (int i = 2; i < 26; i++) {
-    LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[i]);
-    if (i < 25) LOH_DEBUG_PRINT_BASIC(", ");
-  }
-  LOH_DEBUG_PRINT_BASIC("]\n");
-
-#if LOH_INCLUDE_CANDIDATE_FEATURES
-  // 候选统计（72维）最后打印：6行×每行12个（6特征×均值/方差）
-  {
-    for (int s = 0; s < 6; ++s) {
-      LOH_DEBUG_PRINT_BASIC("[candidate_features_%d]: [", s + 1);
-      for (int j = 0; j < 12; ++j) {
-        int idx = base_off + s * 12 + j;
-        LOH_DEBUG_PRINT_BASIC("%.6f", params->context_state[idx]);
-        if (j < 11) LOH_DEBUG_PRINT_BASIC(", ");
-      }
-      LOH_DEBUG_PRINT_BASIC("]\n");
-    }
-  }
-#endif
 #endif
 
   // 【保留】逐个详细输出（VERBOSE模式）
@@ -1465,9 +1803,6 @@ static void update_state_vector(LOH_params_t *params) {
     LOH_DEBUG_PRINT_VERBOSE("[update_state_vector] state[%d] = %.6f\n", i,
                             params->context_state[i]);
   }
-
-  // 【删除】状态向量内的重置逻辑 - 统一在 sync_with_actor_critic 后完全重置
-  // 原重置逻辑已移至 RL 同步后，避免在状态计算过程中改变统计数据
 }
 
 // 将状态发送到 Actor-Critic 网络并获取更新的权重
@@ -1503,15 +1838,19 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
   memcpy(shm_data.state, params->context_state, sizeof(double) * CONTEXT_DIM);
 
-  // Set current performance metrics
-  shm_data.miss_ratio =
-      (params->epoch_obj_count > 0)
-          ? (params->epoch_obj_miss_count / params->epoch_obj_count)
-          : 0.0;
-  shm_data.byte_miss_ratio =
-      (params->epoch_byte_count > 0)
-          ? (params->epoch_byte_miss_count / params->epoch_byte_count)
-          : 0.0;
+#if LOH_ENABLE_PENALTY
+  // 【修改】传递驱逐统计而非即时性能指标
+  shm_data.total_evicted_bytes = params->epoch_evicted_bytes;
+  shm_data.total_evicted_count = params->epoch_evicted_count;
+  shm_data.pending_penalty_count = params->penalty_queue_size;
+
+  LOH_DEBUG_PRINT_BASIC(
+      "[LOH sync] Sending eviction stats: total_evicted_bytes=%llu, "
+      "total_evicted_count=%llu, pending_penalty_count=%d\n",
+      (unsigned long long)shm_data.total_evicted_bytes,
+      (unsigned long long)shm_data.total_evicted_count,
+      shm_data.pending_penalty_count);
+#endif
 
   bool python_training = shm_data.is_training != 0;
 
@@ -1522,9 +1861,18 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   // 本次交互的序号（用于两端对齐日志）
   unsigned long long seq_no = (unsigned long long)shm_data.state_version;
 
-  double reward =
-      params->miss_ratio_weight * (1.0 - shm_data.miss_ratio) +
-      params->byte_miss_ratio_weight * (1.0 - shm_data.byte_miss_ratio);
+  // 【仅供日志】计算临时性能指标（不传递给Python）
+  double temp_miss_ratio =
+      (params->epoch_obj_count > 0)
+          ? (params->epoch_obj_miss_count / params->epoch_obj_count)
+          : 0.0;
+  double temp_byte_miss_ratio =
+      (params->epoch_byte_count > 0)
+          ? (params->epoch_byte_miss_count / params->epoch_byte_count)
+          : 0.0;
+  double temp_reward =
+      params->miss_ratio_weight * (1.0 - temp_miss_ratio) +
+      params->byte_miss_ratio_weight * (1.0 - temp_byte_miss_ratio);
 
   // 获取当前时间戳用于日志
   struct timespec current_time;
@@ -1545,18 +1893,121 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   clock_gettime(CLOCK_MONOTONIC, &send_time);
   double send_timestamp = send_time.tv_sec + send_time.tv_nsec / 1e9;
 
-  // 同时打印对象未命中率 (OMR)、字节未命中率 (BMR) 和计算出的奖励 (Reward)
+  // 同时打印对象未命中率 (OMR)、字节未命中率 (BMR) 和计算出的临时奖励 (Temp
+  // Reward) 注意：实际奖励将在Python端延迟计算
+#if LOH_ENABLE_PENALTY
+  LOH_DEBUG_PRINT_BASIC(
+      "[%.6f] [C-STATE] [seq %llu] Sending RL request - OMR: %.4f, BMR: %.4f, "
+      "Temp Reward: %.4f, Total Evicted Bytes: %llu, Epoch Count: %.0f\n",
+      send_timestamp, seq_no, temp_miss_ratio, temp_byte_miss_ratio,
+      temp_reward, (unsigned long long)shm_data.total_evicted_bytes,
+      params->epoch_obj_count);
+  LOH_DEBUG_PRINT_BASIC(
+      "[seq %llu] LOH DEBUG: temp_reward=%.6f, "
+      "total_evicted_bytes=%llu\n",
+      seq_no, temp_reward, (unsigned long long)shm_data.total_evicted_bytes);
+#else
   LOH_DEBUG_PRINT_DETAILED(
       "[%.6f] [C-STATE] [seq %llu] Sending RL request - OMR: %.4f, BMR: %.4f, "
-      "Reward: %.4f, ",
-      send_timestamp, seq_no, "Epoch Count: %.0f\n", seq_no,
-      shm_data.miss_ratio, shm_data.byte_miss_ratio, reward,
-      params->epoch_obj_count);
-  LOH_DEBUG_PRINT_BASIC("[seq %llu] LOH DEBUG: reward=%.6f\n", seq_no, reward);
+      "Temp Reward: %.4f, Epoch Count: %.0f\n",
+      send_timestamp, seq_no, temp_miss_ratio, temp_byte_miss_ratio,
+      temp_reward, params->epoch_obj_count);
+  LOH_DEBUG_PRINT_BASIC("[seq %llu] LOH DEBUG: temp_reward=%.6f\n", seq_no,
+                        temp_reward);
+#endif
 
-  // 将更新的数据写回共享内存
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
+  // 打印状态向量（与 Python 端格式一致）
+  printf("[C-STATE] [seq %llu] State vector (CONTEXT_DIM=%d):\n", seq_no,
+         CONTEXT_DIM);
+  printf("  Global: [%.6f, %.6f] (hit_ratio, byte_hit_ratio)\n",
+         shm_data.state[0], shm_data.state[1]);
+
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  printf("  Sample features (N_SAMPLES=%d, 6 features each):\n", N_SAMPLES);
+  for (int i = 0; i < N_SAMPLES && i < 4; i++) {  // 只打印前4个样本
+    int base = 2 + i * 6;                         // GLOBAL_DIM=2
+    printf("    [%d]: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n", i,
+           shm_data.state[base], shm_data.state[base + 1],
+           shm_data.state[base + 2], shm_data.state[base + 3],
+           shm_data.state[base + 4], shm_data.state[base + 5]);
+  }
+  if (N_SAMPLES > 4) {
+    printf("    ... (%d more samples)\n", N_SAMPLES - 4);
+  }
+#endif
+#endif
+
+  // 将更新的数据写回共享内存（包括 penalty 数据）
   rewind(params->shm_file);
-  fwrite(&shm_data, sizeof(shm_data_t), 1, params->shm_file);
+  size_t shm_written =
+      fwrite(&shm_data, sizeof(shm_data_t), 1, params->shm_file);
+
+#if LOH_ENABLE_PENALTY
+  LOH_DEBUG_PRINT_BASIC(
+      "[C][BASIC] Wrote shm_data_t: %zu items, size=%zu bytes, "
+      "pending_penalty_count=%d\n",
+      shm_written, sizeof(shm_data_t), shm_data.pending_penalty_count);
+
+  // ===【共享内存布局说明】===
+  // 共享内存文件布局（不同模式下位置固定）：
+  //   [Offset 0]              shm_data_t (包含 state, weights, total_evicted_*,
+  //   pending_penalty_count) [Offset sizeof(shm_data_t)]  penalty_entry_t 数组
+  //   (仅 LOH_ENABLE_PENALTY=1 时写入)
+  //
+  // Python 端读取方式：
+  //   1. 先读取 sizeof(shm_data_t) 字节获取 shm_data
+  //   2. 检查 shm_data.pending_penalty_count
+  //   3. 如果 > 0，继续读取 pending_penalty_count * sizeof(penalty_entry_t)
+  //   字节
+  //
+  // 数据位置确定：
+  //   - LOH_ENABLE_PENALTY=0: 只有 shm_data_t，文件大小 = sizeof(shm_data_t)
+  //   - LOH_ENABLE_PENALTY=1: shm_data_t + penalty 数组，文件大小动态变化
+  //   - pending_penalty_count 字段在所有模式下位置相同（shm_data_t 内部）
+  // ===
+
+  // 【优化】紧接着写入 penalty 数据（扩展共享内存文件）
+  if (params->penalty_queue_size > 0) {
+    PERF_TS ts_penalty_write;
+    PERF_NOW(ts_penalty_write);
+
+    size_t penalty_written =
+        fwrite(params->penalty_queue, sizeof(penalty_entry_t),
+               (size_t)params->penalty_queue_size, params->shm_file);
+
+    PERF_ACCUM(params, penalty_write_shm, ts_penalty_write);
+
+    if (penalty_written != (size_t)params->penalty_queue_size) {
+      LOH_DEBUG_PRINT_ERROR(
+          "[LOH] WARNING: Failed to write penalty data (wrote %zu/%d "
+          "entries)\n",
+          penalty_written, params->penalty_queue_size);
+    } else {
+      LOH_DEBUG_PRINT_BASIC(
+          "[C→Python] 📤 Wrote %zu penalty entries (%zu bytes each, total %zu "
+          "bytes)\n",
+          penalty_written, sizeof(penalty_entry_t),
+          penalty_written * sizeof(penalty_entry_t));
+      // 打印前 5 个 penalty 的详细信息（调试用）
+      int print_count =
+          params->penalty_queue_size < 5 ? params->penalty_queue_size : 5;
+      for (int i = 0; i < print_count; i++) {
+        penalty_entry_t *p = &params->penalty_queue[i];
+        LOH_DEBUG_PRINT_BASIC(
+            "[C→Python]   📋 penalty[%d]: version=%lu, evict_to_access=%ld, "
+            "size=%ld, obj_id=%lu\n",
+            i, p->penalty_version, p->eviction_to_access, p->obj_size,
+            p->obj_id);
+      }
+    }
+
+    // 【优化】写入完成后清空本地队列（避免重复发送）
+    params->penalty_queue_size = 0;
+    LOH_DEBUG_PRINT_BASIC("[C][BASIC] Penalty queue cleared after write\n");
+  }
+#endif
+
   fflush(params->shm_file);
 
   // 【移除】发送请求后的复查逻辑 - 不再需要
@@ -1597,6 +2048,20 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   clock_gettime(CLOCK_MONOTONIC, &start_time);
   LOH_DEBUG_PRINT_BASIC("[%ld.%09ld] start waiting for Python response\n",
                         start_time.tv_sec, start_time.tv_nsec);
+
+  // ===【非阻塞模式检查】===
+  // 如果设置了非阻塞模式且 Python 正在训练，直接返回（使用缓存的权重）
+  if (!loh_wait_mode_blocked && python_training) {
+    LOH_DEBUG_PRINT_BASIC(
+        "[seq %llu] Non-blocking mode: Python is training, skip wait and use "
+        "cached weights\n",
+        seq_no);
+    // misc计时结束 (非阻塞提前返回)
+    PERF_ACCUM(params, sync_misc, ts_misc_start);
+    // 总计时结束
+    PERF_ACCUM(params, sync_total, ts_sync_total);
+    return;
+  }
 
   // ========== 等待Python的ACK和权重更新 ==========
   // 策略：优先使用POSIX信号量（低延迟），失败时回退到轮询
@@ -1731,10 +2196,21 @@ static void sync_with_actor_critic(LOH_params_t *params) {
             "seconds\n",
             apply_end.tv_sec, apply_end.tv_nsec, seq_no, apply_duration);
 
-        LOH_DEBUG_PRINT_BASIC(
-            "[Updated weights from AC]: [%.3f, %.3f, %.3f, %.3f, %.3f, %.3f]\n",
-            params->weights[0], params->weights[1], params->weights[2],
-            params->weights[3], params->weights[4], params->weights[5]);
+        // 【重置 Epoch 统计】在成功接收权重后
+        params->epoch_obj_count = 0;
+        params->epoch_obj_miss_count = 0;
+        params->epoch_byte_count = 0;
+        params->epoch_byte_miss_count = 0;
+
+        // 清空命中/未命中统计
+        params->hit_feature_count = 0;
+        params->miss_feature_count = 0;
+        for (int i = 0; i < FEATURE_DIM; i++) {
+          params->hit_feature_sum[i] = 0.0;
+          params->hit_feature_sum_sq[i] = 0.0;
+          params->miss_feature_sum[i] = 0.0;
+          params->miss_feature_sum_sq[i] = 0.0;
+        }
 
         PERF_ACCUM(params, sync_misc, ts_misc_start);
         PERF_ACCUM(params, sync_total, ts_sync_total);
@@ -1797,12 +2273,56 @@ static void sync_with_actor_critic(LOH_params_t *params) {
         "[%.6f] [C-WEIGHTS] [seq %llu] Received weights from Python, apply "
         "duration: %.6f sec\n",
         apply_timestamp, seq_no, apply_duration);
+
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
+    // 打印接收到的权重（与 Python 端格式一致）
+    printf("[C-WEIGHTS] [seq %llu] Updated weights: [", seq_no);
+    for (int i = 0; i < FEATURE_DIM; i++) {
+      printf("%.6f", params->weights[i]);
+      if (i < FEATURE_DIM - 1) printf(", ");
+    }
+    printf("]\n");
+#endif
+    // 【重置 Epoch 统计】在成功接收权重后
+    params->epoch_obj_count = 0;
+    params->epoch_obj_miss_count = 0;
+    params->epoch_byte_count = 0;
+    params->epoch_byte_miss_count = 0;
+
+#if LOH_ENABLE_PENALTY
+    params->epoch_evicted_bytes = 0;  // 【新增】重置驱逐字节计数器
+    params->epoch_evicted_count = 0;  // 【新增】重置驱逐对象计数器
+
+    // 【优化】重置 penalty queue 并缩小到初始容量（减少内存占用）
+    params->penalty_queue_size = 0;
     LOH_DEBUG_PRINT_BASIC(
-        "[%.6f] [C-WEIGHTS] [seq %llu] New weights: [%.3f, %.3f, %.3f, %.3f, "
-        "%.3f, %.3f]\n",
-        apply_timestamp, seq_no, params->weights[0], params->weights[1],
-        params->weights[2], params->weights[3], params->weights[4],
-        params->weights[5]);
+        "[C←ACK] 🧹 Cleared penalty queue after ACK (seq %llu)\n", seq_no);
+
+    // 如果容量超过初始值，缩小回初始容量（realloc 缩小通常很快）
+    if (params->penalty_queue_capacity > PENALTY_QUEUE_INIT_CAPACITY) {
+      penalty_entry_t *smaller_queue =
+          realloc(params->penalty_queue,
+                  PENALTY_QUEUE_INIT_CAPACITY * sizeof(penalty_entry_t));
+      if (smaller_queue != NULL) {
+        params->penalty_queue = smaller_queue;
+        params->penalty_queue_capacity = PENALTY_QUEUE_INIT_CAPACITY;
+        LOH_DEBUG_PRINT_BASIC(
+            "[LOH] Shrunk penalty queue back to initial capacity %d\n",
+            PENALTY_QUEUE_INIT_CAPACITY);
+      }
+      // 如果 realloc 失败，保持原容量（不影响功能）
+    }
+#endif
+
+    // 清空命中/未命中统计
+    params->hit_feature_count = 0;
+    params->miss_feature_count = 0;
+    for (int i = 0; i < FEATURE_DIM; i++) {
+      params->hit_feature_sum[i] = 0.0;
+      params->hit_feature_sum_sq[i] = 0.0;
+      params->miss_feature_sum[i] = 0.0;
+      params->miss_feature_sum_sq[i] = 0.0;
+    }
 
     PERF_ACCUM(params, sync_misc, ts_misc_start);
     PERF_ACCUM(params, sync_total, ts_sync_total);
@@ -1829,16 +2349,29 @@ static void sync_with_actor_critic(LOH_params_t *params) {
       params->weights[2], params->weights[3], params->weights[4],
       params->weights[5]);
 
+  // 【重置 Epoch 统计】即使超时也要重置（Epoch 已结束）
+  params->epoch_obj_count = 0;
+  params->epoch_obj_miss_count = 0;
+  params->epoch_byte_count = 0;
+  params->epoch_byte_miss_count = 0;
+
+  // 清空命中/未命中统计
+  params->hit_feature_count = 0;
+  params->miss_feature_count = 0;
+  for (int i = 0; i < FEATURE_DIM; i++) {
+    params->hit_feature_sum[i] = 0.0;
+    params->hit_feature_sum_sq[i] = 0.0;
+    params->miss_feature_sum[i] = 0.0;
+    params->miss_feature_sum_sq[i] = 0.0;
+  }
+
   // misc操作计时结束
   PERF_ACCUM(params, sync_misc, ts_misc_start);
   // sync总计时结束
   PERF_ACCUM(params, sync_total, ts_sync_total);
 }
 
-// 辅助函数的前向声明
-static double calculate_score(LOH_params_t *params, cache_obj_t *obj);
-static double calculate_score_with_features(LOH_params_t *params,
-                                            const double features[FEATURE_DIM]);
+// 辅助函数的前向声明（评分逻辑已在 LOH_to_evict 中内联实现）
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
 // ===== Detailed validation helpers =====
@@ -1994,9 +2527,6 @@ static void adjust_history_capacity_if_needed(LOH_params_t *params,
                                               cache_t *cache);
 
 // 特征计算函数
-static double calculate_recency(LOH_params_t *params, cache_obj_t *obj);
-static double calculate_frequency(LOH_params_t *params, cache_obj_t *obj);
-static double calculate_size(LOH_params_t *params, cache_obj_t *obj);
 
 // frequency 表操作函数
 static void freq_table_init(LOH_params_t *params);
@@ -2085,8 +2615,11 @@ cache_t *LOH_mr_blocked_init(const common_cache_params_t ccache_params,
   LOH_DEBUG_PRINT_DETAILED("LOH Debug Level: %d\n", LOH_DEBUG_LEVEL);
   LOH_DEBUG_PRINT_DETAILED("Cache size: %lu\n", ccache_params.cache_size);
 
+  // 初始化特征模式：只在首次调用时读取环境变量
+  loh_init_feature_mode_from_env();
+
   cache_t *cache =
-      cache_struct_init("LOH_mr_blocked", ccache_params, cache_specific_params);
+      cache_struct_init("LOH-mr-blocked", ccache_params, cache_specific_params);
   cache->cache_init = LOH_mr_blocked_init;
   cache->cache_free = LOH_free;
   cache->get = LOH_get;
@@ -2133,6 +2666,41 @@ cache_t *LOH_mr_blocked_init(const common_cache_params_t ccache_params,
   params->weights[4] = 0.0;  // irt2
   params->weights[5] = 0.0;  // irt3
 
+  // 如果设置了固定权重环境变量，则覆盖默认权重
+  const char *fixed_w = getenv("LOH_FIXED_WEIGHTS");
+  if (fixed_w && fixed_w[0] != '\0') {
+    char *buf = g_strdup(fixed_w);
+    char *p = buf;
+    char *tok;
+    double tmp[FEATURE_DIM];
+    int idx = 0;
+    while ((tok = strsep(&p, ",; ")) != NULL) {
+      if (!*tok) continue;
+      char *endptr = NULL;
+      double v = strtod(tok, &endptr);
+      if (endptr == tok) continue;
+      if (idx < FEATURE_DIM) {
+        tmp[idx++] = v;
+      }
+    }
+    if (idx == FEATURE_DIM) {
+      for (int i = 0; i < FEATURE_DIM; i++) {
+        params->weights[i] = tmp[i];
+      }
+      LOH_DEBUG_PRINT_BASIC(
+          "[LOH INIT] LOH_FIXED_WEIGHTS from env: [%.3f, %.3f, %.3f, %.3f, "
+          "%.3f, %.3f]\n",
+          params->weights[0], params->weights[1], params->weights[2],
+          params->weights[3], params->weights[4], params->weights[5]);
+    } else {
+      LOH_DEBUG_PRINT_BASIC(
+          "[LOH INIT] LOH_FIXED_WEIGHTS='%s' parsed %d values (need %d), "
+          "keeping default weights\n",
+          fixed_w, idx, FEATURE_DIM);
+    }
+    g_free(buf);
+  }
+
   // 初始化特征统计数据
   memset(&params->recent_stats, 0, sizeof(feature_stats_t));
   // 【删除recentstats初始化】：不再需要STATS_WINDOW相关stats
@@ -2169,15 +2737,52 @@ cache_t *LOH_mr_blocked_init(const common_cache_params_t ccache_params,
   params->epoch_byte_miss_count = 0;
   params->epoch_byte_count = 0;
 
+#if LOH_ENABLE_PENALTY
+  params->epoch_evicted_bytes = 0;  // 【新增】初始化驱逐字节计数器
+  params->epoch_evicted_count = 0;  // 【新增】初始化驱逐对象计数器
+#endif
+
   // Initialize context state
   memset(params->context_state, 0, sizeof(double) * CONTEXT_DIM);
+
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  // 初始化蓄水池采样字段
+  params->group_count = 0;
+  params->samples_filled = 0;
+  params->current_lowest_count = 0;
+  memset(params->lowest_score_samples, 0, sizeof(params->lowest_score_samples));
+  memset(params->current_lowest_4, 0, sizeof(params->current_lowest_4));
+  memset(params->current_lowest_scores, 0,
+         sizeof(params->current_lowest_scores));
+  LOH_DEBUG_PRINT_BASIC(
+      "[LOH INIT] Reservoir sampling enabled: N_SAMPLES=%d (每组%d个×8组), "
+      "sample_dim=%d\n",
+      N_SAMPLES, SAMPLES_PER_EVICTION, SAMPLE_FEATURE_DIM);
+#endif
 
   // 初始化reward权重（默认只考虑miss ratio）
   params->miss_ratio_weight = 1.0;       // 默认权重：只考虑对象miss ratio
   params->byte_miss_ratio_weight = 0.0;  // 默认权重：不考虑字节miss ratio
 
   // 初始化文件式共享内存
-  params->enable_rl = 1;  // 默认启用，可通过参数关闭
+  params->enable_rl = 1;  // 默认启用，可通过参数或环境关闭
+
+  // 运行时环境：允许通过 LOH_ENABLE_RL / LOH_DISABLE_RL 覆盖开关
+  {
+    const char *env_enable = getenv("LOH_ENABLE_RL");
+    const char *env_disable = getenv("LOH_DISABLE_RL");
+    if (env_enable && env_enable[0] != '\0') {
+      params->enable_rl = loh_parse_bool_env(env_enable, params->enable_rl);
+    } else if (env_disable && env_disable[0] != '\0') {
+      int disable = loh_parse_bool_env(env_disable, 0);
+      if (disable == 1)
+        params->enable_rl = 0;
+      else if (disable == 0)
+        params->enable_rl = 1;
+    }
+    LOH_DEBUG_PRINT_BASIC("[LOH INIT] enable_rl=%d (after env)\n",
+                          params->enable_rl);
+  }
   params->shm_filename = NULL;
   params->shm_file = NULL;
   params->sem_ready = NULL;
@@ -2196,6 +2801,40 @@ cache_t *LOH_mr_blocked_init(const common_cache_params_t ccache_params,
       params->shm_filename = g_strdup_printf("/dev/shm/loh_ac_%d", SHM_KEY);
     }
     params->shm_file = fopen(params->shm_filename, "r+b");
+
+    // 打印共享内存结构体大小信息，用于调试
+    LOH_DEBUG_PRINT_BASIC("[LOH INIT] shm_data_t size=%zu bytes\n",
+                          sizeof(shm_data_t));
+    LOH_DEBUG_PRINT_BASIC("  - CONTEXT_DIM=%d (state array=%zu bytes)\n",
+                          CONTEXT_DIM, sizeof(double) * CONTEXT_DIM);
+    LOH_DEBUG_PRINT_BASIC("  - GLOBAL_DIM=%d, HIT_MISS_DIM=%d, CACHE_DIM=%d\n",
+                          GLOBAL_DIM, HIT_MISS_DIM, CACHE_DIM);
+    LOH_DEBUG_PRINT_BASIC("  - CAND_FEATURE_DIM=%d, SAMPLE_FEATURE_DIM=%d\n",
+                          CAND_FEATURE_DIM, SAMPLE_FEATURE_DIM);
+
+    // 如果成功打开共享内存，写入验证字段
+    if (params->shm_file) {
+      shm_data_t verify_data;
+      memset(&verify_data, 0, sizeof(shm_data_t));
+      verify_data.struct_magic = 0x4C4F4821;  // "LOH!"
+      verify_data.context_dim_check = CONTEXT_DIM;
+      verify_data.feature_dim_check = FEATURE_DIM;
+      verify_data.struct_size_check = (uint32_t)sizeof(shm_data_t);
+
+      fseek(params->shm_file, 0, SEEK_SET);
+      size_t written =
+          fwrite(&verify_data, sizeof(shm_data_t), 1, params->shm_file);
+      fflush(params->shm_file);
+
+      if (written == 1) {
+        LOH_DEBUG_PRINT_BASIC(
+            "[LOH INIT] Shared memory structure validated and initialized\n");
+      } else {
+        LOH_DEBUG_PRINT_ERROR(
+            "[LOH INIT] WARNING: Failed to write validation data to shared "
+            "memory\n");
+      }
+    }
   }
 
   /*
@@ -2243,6 +2882,50 @@ cache_t *LOH_mr_blocked_init(const common_cache_params_t ccache_params,
           "only\n");
     }
   }
+
+  // ===【读取等待模式环境变量（LOH_WAIT_MODE）】===
+  {
+    const char *wait_mode_str = getenv("LOH_WAIT_MODE");
+    if (wait_mode_str != NULL) {
+      if (strcasecmp(wait_mode_str, "blocked") == 0) {
+        loh_wait_mode_blocked = 1;
+        LOH_DEBUG_PRINT_BASIC("[LOH] Wait mode: BLOCKED (等待权重更新)\n");
+      } else if (strcasecmp(wait_mode_str, "nonblocked") == 0 ||
+                 strcasecmp(wait_mode_str, "non-blocked") == 0) {
+        loh_wait_mode_blocked = 0;
+        LOH_DEBUG_PRINT_BASIC(
+            "[LOH] Wait mode: NON-BLOCKED (训练时使用缓存权重)\n");
+      } else {
+        LOH_DEBUG_PRINT_BASIC(
+            "[LOH] WARNING: Invalid LOH_WAIT_MODE='%s', using default "
+            "(BLOCKED)\n",
+            wait_mode_str);
+      }
+    } else {
+      LOH_DEBUG_PRINT_BASIC("[LOH] Wait mode: default (BLOCKED)\n");
+    }
+  }
+
+#if LOH_ENABLE_PENALTY
+  // ===【初始化 Penalty 队列】===
+  params->penalty_queue =
+      malloc(PENALTY_QUEUE_INIT_CAPACITY * sizeof(penalty_entry_t));
+  if (params->penalty_queue == NULL) {
+    LOH_DEBUG_PRINT_ERROR(
+        "[LOH] ERROR: Failed to allocate penalty queue (capacity=%d)\n",
+        PENALTY_QUEUE_INIT_CAPACITY);
+    // 处理错误：可以设置 capacity=0 或终止程序
+    params->penalty_queue_capacity = 0;
+    params->penalty_queue_size = 0;
+  } else {
+    params->penalty_queue_capacity = PENALTY_QUEUE_INIT_CAPACITY;
+    params->penalty_queue_size = 0;
+    params->pending_penalty_count = 0;
+    LOH_DEBUG_PRINT_BASIC(
+        "[LOH INIT] Penalty queue initialized (capacity=%d)\n",
+        PENALTY_QUEUE_INIT_CAPACITY);
+  }
+#endif
 
   if (params->enable_rl && params->shm_file == NULL) {
     // 如果文件不存在，则创建它
@@ -2403,6 +3086,15 @@ static void LOH_free(cache_t *cache) {
     params->shm_filename = NULL;
   }
 
+#if LOH_ENABLE_PENALTY
+  // 释放 Penalty 队列
+  if (params->penalty_queue) {
+    free(params->penalty_queue);
+    params->penalty_queue = NULL;
+    LOH_DEBUG_PRINT_BASIC("[LOH FREE] Penalty queue freed\n");
+  }
+#endif
+
 #if LOH_PERF_PROFILING
   // 打印一次性能概要，方便 no-RL 下快速定位热点
   loh_print_perf_summary(params);
@@ -2501,14 +3193,22 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   bool will_hit = (obj_before_access != NULL);
 
   // 记录访问前的特征（考虑 ghost cache 历史）
-  double features[FEATURE_DIM] = {0};
+  double features[FEATURE_DIM];
   if (obj_before_access != NULL) {
     // 缓存命中：计算命中对象的访问前特征
-    features[0] =
-        calculate_recency(params, obj_before_access);  // recency 未更新
-    features[1] =
-        calculate_frequency(params, obj_before_access);  // frequency 未加 1
-    features[2] = calculate_size(params, obj_before_access);
+    // 原始值（raw）
+    int64_t recency_raw =
+        params->current_timestamp - obj_before_access->LOH.last_access_counter;
+    int access_count_raw = obj_before_access->LOH.access_count;
+    int64_t size_bytes_raw = (int64_t)obj_before_access->obj_size;
+    int64_t irt_raw0 = obj_before_access->LOH.irt_values[0];
+    int64_t irt_raw1 = obj_before_access->LOH.irt_values[1];
+    int64_t irt_raw2 = obj_before_access->LOH.irt_values[2];
+
+    // 变换后的特征值
+    features[0] = calculate_recency(recency_raw);  // recency 未更新
+    features[1] = calculate_frequency((int64_t)access_count_raw);  // 未加 1
+    features[2] = calculate_size(size_bytes_raw);
 
     // 【修复】：访问前 IRT 直接使用对象的 IRT 值，无需后退一步
     features[3] =
@@ -2517,46 +3217,114 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
         calculate_irt_feature(obj_before_access->LOH.irt_values[1]);  // IRT2
     features[5] =
         calculate_irt_feature(obj_before_access->LOH.irt_values[2]);  // IRT3
+
+    // 调试：命中时 raw 与特征的对比
+    LOH_DEBUG_PRINT_DETAILED(
+        "[LOH_get] hit raw_vs_feat - obj_id=%llu, recency_raw=%lld, "
+        "recency_feat=%.6f, freq_raw=%d, freq_feat=%.6f, size_bytes=%lld, "
+        "size_feat=%.6f, irt_raw=[%lld,%lld,%lld], irt_feat=[%.6f,%.6f,%.6f]\n",
+        (unsigned long long)obj_before_access->obj_id, (long long)recency_raw,
+        features[0], access_count_raw, features[1], (long long)size_bytes_raw,
+        features[2], (long long)irt_raw0, (long long)irt_raw1,
+        (long long)irt_raw2, features[3], features[4], features[5]);
   } else {
     // 缓存未命中：检查 ghost cache 中的历史信息
+#if LOH_ENABLE_PENALTY
+    PERF_TS ts_lookup;
+    PERF_NOW(ts_lookup);
+#endif
+
     LOH_ghost_entry_t *ghost_entry =
         params->ghost_cache
             ? (LOH_ghost_entry_t *)g_hash_table_lookup(
                   params->ghost_cache, GINT_TO_POINTER((int)req->obj_id))
             : NULL;
+
+#if LOH_ENABLE_PENALTY
+    PERF_ACCUM(params, ghost_cache_lookup, ts_lookup);
+#endif
+
     if (ghost_entry) {
-      // 【统一】：内联计算 ghost cache 特征
-      // Recency: 从 ghost cache 的最后访问时间计算
+#if LOH_ENABLE_PENALTY
+      // 【新增】检测到 ghost cache miss - 记录原始数据，延迟计算惩罚
+      if (params->is_warmed_up && ghost_entry->eviction_version > 0) {
+        // 【精确】使用驱逐时刻到当前访问的距离
+        int64_t eviction_to_access =
+            params->current_timestamp - ghost_entry->eviction_timestamp;
+
+        // 确保距离至少为1（避免除零）
+        if (eviction_to_access < 1) eviction_to_access = 1;
+
+        // 只记录原始数据：eviction_to_access 和 obj_size
+        // 惩罚将在Python端使用当时的 epoch_evicted_bytes 和 epoch_evicted_count
+        // 计算
+        enqueue_penalty(params, ghost_entry->eviction_version,
+                        eviction_to_access, ghost_entry->obj_size, req->obj_id);
+
+        LOH_DEBUG_PRINT_BASIC(
+            "[LOH] Ghost miss detected: obj_id=%llu, evict_version=%llu, "
+            "evict_to_access=%ld, size=%ld, epoch_evicted_bytes=%llu, "
+            "epoch_evicted_count=%llu\n",
+            (unsigned long long)req->obj_id,
+            (unsigned long long)ghost_entry->eviction_version,
+            eviction_to_access, ghost_entry->obj_size,
+            (unsigned long long)params->epoch_evicted_bytes,
+            (unsigned long long)params->epoch_evicted_count);
+      }
+#endif
+
+      // ghost cache 特征与对象特征保持同一归一化逻辑，直接用 ghost 的原始值
       int64_t current_irt =
           params->current_timestamp - ghost_entry->last_access_counter;
-      features[0] = 1.0 / (1.0 + (double)current_irt);  // 直接使用 recency 公式
+      int64_t recency_raw = current_irt;
+      int64_t freq_raw = (int64_t)ghost_entry->access_count;
+      int64_t size_bytes = (int64_t)ghost_entry->obj_size;
 
-      // Frequency: 从 ghost cache 的访问次数计算（无 log）
-      if (ghost_entry->access_count > 0) {
-        const double K = 1.0;
-        double f = (double)ghost_entry->access_count;
-        features[1] = f / (f + K);
-      }
-
-      // Size: 从请求大小计算（无 log）
-      double size_mb = (double)req->obj_size / (1024.0 * 1024.0);  // 转换为 MB
-      {
-        const double A = 1.0;
-        features[2] = 1.0 / (1.0 + A * size_mb);
-      }
-
-      // 【修复】：ghost cache 中直接使用 IRT 值（访问前特征）
-      // IRT 特征直接从 ghost_entry 获取
+      features[0] = calculate_recency(recency_raw);
+      features[1] = calculate_frequency(freq_raw);
+      features[2] = calculate_size(size_bytes);
       features[3] = calculate_irt_feature(ghost_entry->irt_values[0]);
       features[4] = calculate_irt_feature(ghost_entry->irt_values[1]);
       features[5] = calculate_irt_feature(ghost_entry->irt_values[2]);
+
+      // 调试：miss(ghost) 情况下 raw 与特征的对比
+      LOH_DEBUG_PRINT_DETAILED(
+          "[LOH_get] miss(ghost) raw_vs_feat - obj_id=%llu, recency_raw=%lld, "
+          "recency_feat=%.6f, freq_raw=%lld, freq_feat=%.6f, size_bytes=%lld, "
+          "size_feat=%.6f, irt_raw=[%lld,%lld,%lld], "
+          "irt_feat=[%.6f,%.6f,%.6f]\n",
+          (unsigned long long)req->obj_id, (long long)current_irt, features[0],
+          (long long)freq_raw, features[1], (long long)size_bytes, features[2],
+          (long long)ghost_entry->irt_values[0],
+          (long long)ghost_entry->irt_values[1],
+          (long long)ghost_entry->irt_values[2], features[3], features[4],
+          features[5]);
     } else {
-      // 【修复】：完全新对象，至少应该计算 size 特征
-      // Recency 和 Frequency 无历史信息，保持为 0
-      // 但 Size 特征可以从请求中计算
-      double size_mb = (double)req->obj_size / (1024.0 * 1024.0);  // 转换为 MB
-      const double A_new = 1.0;
-      features[2] = 1.0 / (1.0 + A_new * size_mb);
+      // 完全新对象：raw 初始值按约定设置（与模式无关）
+      int64_t size_bytes = (int64_t)req->obj_size;
+      int64_t recency_raw = INT64_MAX;
+      int64_t freq_raw = 0;
+      int64_t irt_raw0 = INT64_MAX;
+      int64_t irt_raw1 = INT64_MAX;
+      int64_t irt_raw2 = INT64_MAX;
+
+      features[0] = calculate_recency(recency_raw);
+      features[1] = calculate_frequency(freq_raw);
+      features[2] = calculate_size(size_bytes);
+      features[3] = calculate_irt_feature(irt_raw0);
+      features[4] = calculate_irt_feature(irt_raw1);
+      features[5] = calculate_irt_feature(irt_raw2);
+
+      // 调试：全新对象（无 ghost）时，6 维 raw 与特征对比
+      LOH_DEBUG_PRINT_DETAILED(
+          "[LOH_get] miss(new) raw_vs_feat - obj_id=%llu, recency_raw=%lld, "
+          "recency_feat=%.6f, freq_raw=%lld, freq_feat=%.6f, size_bytes=%lld, "
+          "size_feat=%.6f, irt_raw=[%lld,%lld,%lld], "
+          "irt_feat=[%.6f,%.6f,%.6f]\n",
+          (unsigned long long)req->obj_id, (long long)recency_raw, features[0],
+          (long long)freq_raw, features[1], (long long)size_bytes, features[2],
+          (long long)irt_raw0, (long long)irt_raw1, (long long)irt_raw2,
+          features[3], features[4], features[5]);
     }
   }
 
@@ -3204,23 +3972,120 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
 #if FEATURE_DIM == 6
   const double w0 = w[0], w1 = w[1], w2 = w[2], w3 = w[3], w4 = w[4], w5 = w[5];
 #endif
+  double sign[6];
+  if (loh_feature_log1p) {
+    sign[0] = -1.0;
+    sign[1] = 1.0;
+    sign[2] = -1.0;
+    sign[3] = -1.0;
+    sign[4] = -1.0;
+    sign[5] = -1.0;
+  } else {
+    sign[0] = 1.0;
+    sign[1] = 1.0;
+    sign[2] = 1.0;
+    sign[3] = 1.0;
+    sign[4] = 1.0;
+    sign[5] = 1.0;
+  }
+
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  // 初始化临时存储：记录最低4个对象
+  params->current_lowest_count = 0;
+  for (int k = 0; k < SAMPLES_PER_EVICTION; k++) {
+    params->current_lowest_4[k] = NULL;
+    params->current_lowest_scores[k] = DBL_MAX;
+  }
+#endif
+
   for (int i = 0; i < cand_n; i++) {
     cache_obj_t *candidate = params->candidates[i];
     const double *f = feat_buf[i];
 #if FEATURE_DIM == 6
     // 手动内联 6 维点积，减少函数调用与索引开销
-    double score =
-        f[0] * w0 + f[1] * w1 + f[2] * w2 + f[3] * w3 + f[4] * w4 + f[5] * w5;
+    double score = f[0] * w0 * sign[0] + f[1] * w1 * sign[1] +
+                   f[2] * w2 * sign[2] + f[3] * w3 * sign[3] +
+                   f[4] * w4 * sign[4] + f[5] * w5 * sign[5];
 #else
     double score = 0.0;
-    for (int k = 0; k < FEATURE_DIM; ++k) score += f[k] * w[k];
+    for (int k = 0; k < FEATURE_DIM; ++k) score += f[k] * w[k] * sign[k];
 #endif
     if (score < min_score) {
       min_score = score;
       obj_to_evict = candidate;
     }
+
+#if LOH_INCLUDE_SAMPLE_FEATURES
+    // 维护最低4个对象：插入排序
+    if (params->current_lowest_count < SAMPLES_PER_EVICTION) {
+      // 还没满，直接插入
+      int insert_pos = params->current_lowest_count;
+      for (int k = params->current_lowest_count - 1; k >= 0; k--) {
+        if (score < params->current_lowest_scores[k]) {
+          params->current_lowest_4[k + 1] = params->current_lowest_4[k];
+          params->current_lowest_scores[k + 1] =
+              params->current_lowest_scores[k];
+          insert_pos = k;
+        } else {
+          break;
+        }
+      }
+      params->current_lowest_4[insert_pos] = candidate;
+      params->current_lowest_scores[insert_pos] = score;
+      params->current_lowest_count++;
+    } else if (score <
+               params->current_lowest_scores[SAMPLES_PER_EVICTION - 1]) {
+      // 已满，但当前分数比最大的小，需要插入
+      int insert_pos = SAMPLES_PER_EVICTION - 1;
+      for (int k = SAMPLES_PER_EVICTION - 2; k >= 0; k--) {
+        if (score < params->current_lowest_scores[k]) {
+          params->current_lowest_4[k + 1] = params->current_lowest_4[k];
+          params->current_lowest_scores[k + 1] =
+              params->current_lowest_scores[k];
+          insert_pos = k;
+        } else {
+          break;
+        }
+      }
+      params->current_lowest_4[insert_pos] = candidate;
+      params->current_lowest_scores[insert_pos] = score;
+    }
+#endif
   }
   PERF_ACCUM(params, calc_score, ts_score_loop);
+
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  // BASIC级别：输出最低4个对象的特征和分数
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
+  if (params->current_lowest_count > 0) {
+    printf("[BASIC] Lowest %d objects:\n", params->current_lowest_count);
+    for (int k = 0; k < params->current_lowest_count; k++) {
+      cache_obj_t *obj = params->current_lowest_4[k];
+      if (obj) {
+        // 从 feat_buf 中找到对应的特征
+        const double *f = NULL;
+        for (int i = 0; i < cand_n; i++) {
+          if (params->candidates[i] == obj) {
+            f = feat_buf[i];
+            break;
+          }
+        }
+
+        if (f) {
+          printf("  [%d] obj_id=%llu score=%.6f\n", k,
+                 (unsigned long long)obj->obj_id,
+                 params->current_lowest_scores[k]);
+          printf("      raw: recency=%lld access_count=%d size=%lld\n",
+                 (long long)obj->LOH.last_access_counter, obj->LOH.access_count,
+                 (long long)obj->obj_size);
+          printf("      features: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n", f[0],
+                 f[1], f[2], f[3], f[4], f[5]);
+        }
+      }
+    }
+  }
+#endif
+#endif
 
   LOH_DEBUG_PRINT_DETAILED(
       "[LOH DEBUG EVICT] Selected obj_id=%llu with score=%.6f\n",
@@ -3264,8 +4129,21 @@ static void LOH_evict(cache_t *cache, const request_t *req) {
     return;
   }
 
+  // 临时调试：打印被驱逐对象的大小
+  LOH_DEBUG_PRINT_BASIC("[LOH-mr-blocked EVICT DEBUG] obj_id=%llu size=%ld bytes (%.2f MB)\n",
+          (unsigned long long)obj_to_evict->obj_id,
+          (long)obj_to_evict->obj_size,
+          (double)obj_to_evict->obj_size / (1024.0 * 1024.0));
+
   // Update feature statistics for learning
   // (但不要标记为 miss，因为 evict 不是 miss)
+
+#if LOH_INCLUDE_SAMPLE_FEATURES
+  // 【蓄水池采样】使用 LOH_to_evict 中找到的最低4个对象
+  reservoir_sample_group(params);
+  // 清空临时存储，为下次驱逐做准备
+  params->current_lowest_count = 0;
+#endif
 
 #if LOH_INCLUDE_CACHE_FEATURES
   // 仅在38维模式下更新缓存统计
@@ -3298,6 +4176,19 @@ static void LOH_evict(cache_t *cache, const request_t *req) {
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
     // 被移除后，检查其不再出现在各结构中
     loh_debug_check_membership(params, obj_to_evict, "after_evict_remove");
+#endif
+
+#if LOH_ENABLE_PENALTY
+    // 【新增】更新驱逐统计（用于归一化惩罚）
+    params->epoch_evicted_bytes += (uint64_t)obj_to_evict->obj_size;
+    params->epoch_evicted_count += 1;
+
+    LOH_DEBUG_PRINT_BASIC(
+        "[LOH] Evicted obj_id=%llu, size=%ld, epoch_evicted_bytes=%llu, "
+        "epoch_evicted_count=%llu\n",
+        (unsigned long long)obj_to_evict->obj_id, (long)obj_to_evict->obj_size,
+        (unsigned long long)params->epoch_evicted_bytes,
+        (unsigned long long)params->epoch_evicted_count);
 #endif
 
     // Use the base eviction function to handle hash table updates and freeing
@@ -3367,36 +4258,8 @@ static void LOH_print_cache(const cache_t *cache) {
  * @param obj 要计算得分的缓存对象
  * @return double 得分值，分值越高表示越应保留在缓存中
  */
-static double calculate_score_with_features(
-    LOH_params_t *params, const double features[FEATURE_DIM]) {
-  // Linear scoring function: Score = W · F
-  // Hot path: unrolled plain multiply-adds (no FMA for consistent Debug perf).
-#if FEATURE_DIM == 6
-  const double *w = params->weights;
-  double s = 0.0;
-  s += w[0] * features[0];
-  s += w[1] * features[1];
-  s += w[2] * features[2];
-  s += w[3] * features[3];
-  s += w[4] * features[4];
-  s += w[5] * features[5];
-  return s;
-#else
-  double score = 0.0;
-  for (int i = 0; i < FEATURE_DIM; i++) {
-    score += params->weights[i] * features[i];
-  }
-  return score;
-#endif
-}
-
-static double calculate_score(LOH_params_t *params, cache_obj_t *obj) {
-  if (!obj) return DBL_MAX;  // 空指针返回最大值，不会被选in
-
-  double features[FEATURE_DIM];
-  calculate_object_features(params, obj, features);
-  return calculate_score_with_features(params, features);
-}
+// 旧版 calculate_score_with_features / calculate_score 已被移除，
+// 得分计算在 LOH_to_evict 中直接展开以减少调用开销。
 
 // ===============================
 // IRT值管理辅助函数实现
@@ -3434,38 +4297,7 @@ static int64_t get_irt_value(cache_obj_t *obj, int index) {
  * recency = (current_timestamp - last_access_time) / current_timestamp
  * 范围[0,1]，值越大表示越久未访问
  */
-static double calculate_recency(LOH_params_t *params, cache_obj_t *obj) {
-  if (params->current_timestamp == 0) return 0.0;
-  // 使用与calculate_object_features相同的公式
-  int64_t time_since_last =
-      params->current_timestamp - obj->LOH.last_access_counter;
-  double recency = 1.0 / (1.0 + (double)time_since_last);
-  return recency;
-}
-
-/**
- * @brief 计算frequency特征值
- */
-static double calculate_frequency(LOH_params_t *params, cache_obj_t *obj) {
-  int access_count = obj->LOH.access_count;
-  if (access_count <= 0) return 0.0;
-  // 去掉 log: 采用简单有界单调映射 f/(f+K)
-  const double K = 1.0;  // 平滑常数（按要求设为 1）
-  double f = (double)access_count;
-  return f / (f + K);
-}
-
-/**
- * @brief 计算size特征值
- */
-static double calculate_size(LOH_params_t *params, cache_obj_t *obj) {
-  // 使用与calculate_object_features相同的公式
-  double size_mb = (double)obj->obj_size / (1024.0 * 1024.0);  // 转换为MB
-  // 去掉 log: 采用简单有界单调映射 1 / (1 + A * MB)
-  const double A = 1.0;  // 尺度因子，可视需要调整
-  double normalized_size = 1.0 / (1.0 + A * size_mb);
-  return normalized_size;
-}
+// 频率/recency/size 的辅助函数已在前文实现，这里不再重复定义
 
 // ===============================
 // frequency表操作函数实现
@@ -4466,10 +5298,13 @@ static void irt_heap_update(LOH_params_t *params, cache_obj_t *obj,
 #if LOH_PERF_PROFILING
         params->perf.irt_hash_miss++;
 #endif
+        // 【说明】对象不在 hash 表中有两种可能：
+        // 1. 正常情况：对象 IRT 值太小，从未进入过堆（Top-K 堆只保存最大的 K 个）
+        // 2. 异常情况：hash 表与堆不一致，需要线性搜索修复
         LOH_DEBUG_PRINT_ERROR(
-            "[irt_heap_update] [warning] Object not found in hash table for "
-            "heap %d, searching linearly...\n",
-            heap_idx);
+            "[irt_heap_update] [warning] Object %llu not found in hash table for "
+            "heap %d (normal if IRT too small for Top-K heap), searching linearly...\n",
+            (unsigned long long)obj->obj_id, heap_idx);
         // 如果hash表中找不到，尝试在堆中线性搜索并修复hash表
 #if LOH_PERF_PROFILING
         params->perf.irt_linear_scans++;
@@ -4492,8 +5327,10 @@ static void irt_heap_update(LOH_params_t *params, cache_obj_t *obj,
           }
         }
         if (idx == -1) {
+          // 线性搜索也找不到，说明对象确实不在堆中（IRT 值太小）
+          // 尝试添加到堆，如果 IRT 值够大会被添加，否则什么都不做
           LOH_DEBUG_PRINT_DETAILED(
-              "[irt_heap_update] [warning] Object not found in heap %d, adding "
+              "[irt_heap_update] [warning] Object not found in heap %d (IRT too small), adding "
               "new entry\n",
               heap_idx);
 #if LOH_PERF_PROFILING
@@ -4956,6 +5793,7 @@ static void size_buckets_get_candidates(LOH_params_t *params,
                                         int max_candidates, int *n_candidates) {
   int added = 0;
   int start_idx = *n_candidates;
+
   // 从大尺寸到小尺寸遍历，同一尺寸level内从尾部（更老object）start选择
   for (int i = SIZE_BUCKET_COUNT - 1; i >= 0 && added < max_candidates; i--) {
     size_node_t *curr =

@@ -61,56 +61,71 @@ cd _build_dbg
 
 # Configure and build with warning flags
 echo "Configuring and building project with strict warnings..."
-## Propagate LOH state-dimension to compiler as a macro (default 26 -> no cache features)
-# Priority: explicit LOH_INCLUDE_CACHE_FEATURES > LOH_STATE_DIM mapping > default
-LOH_FEATURES_DEFINE=""
-if [[ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ]]; then
-	# Use caller-provided 0/1 directly
-	VAL="${LOH_INCLUDE_CACHE_FEATURES}"
-	if [[ "${VAL}" != "0" && "${VAL}" != "1" ]]; then
-		VAL=1
-	fi
-	LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=${VAL}"
-elif [[ -n "${LOH_STATE_DIM:-}" ]]; then
-	# Map 26 -> 0, 38 -> 1 (others default to 1 for safety)
-	if [[ "${LOH_STATE_DIM}" == "26" ]]; then
-		LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=0"
-	elif [[ "${LOH_STATE_DIM}" == "38" ]]; then
-		LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=1"
-	else
-		LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=1"
-	fi
-else
-	# Default: include cache features (38)
-	LOH_FEATURES_DEFINE="-DLOH_INCLUDE_CACHE_FEATURES=1"
+
+# 通过环境变量控制 LOH_* 相关宏：
+#   - LOH_INCLUDE_HIT_MISS_FEATURES    (0/1) - Hit/Miss统计 (24维)
+#   - LOH_INCLUDE_CACHE_FEATURES       (0/1) - 缓存特征统计 (12维)
+#   - LOH_INCLUDE_CANDIDATE_FEATURES   (0/1) - 候选集合统计 (72维)
+#   - LOH_INCLUDE_TOPK_CANDIDATE_FEATURES (0/1) - TopK候选采样 (32*6=192维)
+#   - LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES (0/1) - AvgTopK平均特征 (4*6=24维)
+#   - LOH_INCLUDE_REQUEST              (0/1) - 最近请求历史 (REQUEST_HISTORY_LEN×6 维)
+#   - LOH_DEBUG_LEVEL                  (0/1/2/3/4) - 调试级别
+# 注：前2维(hit_ratio, byte_hit_ratio)始终传递，不再通过宏控制
+# 如果未设置，则使用 C 源码中的默认值。
+
+LOH_DEFS=""
+if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ]; then
+	LOH_DEFS+=" -DLOH_INCLUDE_CACHE_FEATURES=${LOH_INCLUDE_CACHE_FEATURES}"
+fi
+if [ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ]; then
+	LOH_DEFS+=" -DLOH_INCLUDE_CANDIDATE_FEATURES=${LOH_INCLUDE_CANDIDATE_FEATURES}"
+fi
+if [ -n "${LOH_INCLUDE_HIT_MISS_FEATURES:-}" ]; then
+	LOH_DEFS+=" -DLOH_INCLUDE_HIT_MISS_FEATURES=${LOH_INCLUDE_HIT_MISS_FEATURES}"
+fi
+if [ -n "${LOH_INCLUDE_TOPK_CANDIDATE_FEATURES:-}" ]; then
+	LOH_DEFS+=" -DLOH_INCLUDE_TOPK_CANDIDATE_FEATURES=${LOH_INCLUDE_TOPK_CANDIDATE_FEATURES}"
+fi
+if [ -n "${LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES:-}" ]; then
+	LOH_DEFS+=" -DLOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES=${LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES}"
+fi
+if [ -n "${LOH_INCLUDE_REQUEST:-}" ]; then
+	LOH_DEFS+=" -DLOH_INCLUDE_REQUEST=${LOH_INCLUDE_REQUEST}"
+fi
+if [ -n "${LOH_DEBUG_LEVEL:-}" ]; then
+	LOH_DEFS+=" -DLOH_DEBUG_LEVEL=${LOH_DEBUG_LEVEL}"
+fi
+if [ -n "${LOH_ENABLE_PENALTY:-}" ]; then
+	LOH_DEFS+=" -DLOH_ENABLE_PENALTY=${LOH_ENABLE_PENALTY}"
+fi
+# 支持通过环境变量控制 C 端的 perf profiling 宏：
+# - 优先使用 LOH_PERF_PROFILING（直接匹配宏名），若未设置则使用 LOH_ENABLE_PROFILING
+# Example: LOH_ENABLE_PROFILING=0 bash scripts/debug.sh -c
+if [ -n "${LOH_PERF_PROFILING:-}" ]; then
+    LOH_DEFS+=" -DLOH_PERF_PROFILING=${LOH_PERF_PROFILING}"
+elif [ -n "${LOH_ENABLE_PROFILING:-}" ]; then
+    LOH_DEFS+=" -DLOH_PERF_PROFILING=${LOH_ENABLE_PROFILING}"
 fi
 
-# Compose flags including the macro define
-# Propagate optional candidate features switch (default OFF)
-LOH_CAND_DEFINE=""
-if [[ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ]]; then
-	VAL="${LOH_INCLUDE_CANDIDATE_FEATURES}"
-	if [[ "${VAL}" != "0" && "${VAL}" != "1" ]]; then
-		VAL=0
-	fi
-	LOH_CAND_DEFINE="-DLOH_INCLUDE_CANDIDATE_FEATURES=${VAL}"
+if [ -n "${LOH_DEFS}" ]; then
+	echo "[debug.sh] Using LOH compile defs:${LOH_DEFS}"
 else
-	LOH_CAND_DEFINE="-DLOH_INCLUDE_CANDIDATE_FEATURES=0"
+	echo "[debug.sh] No LOH_* environment overrides; using C defaults (AVGTOPK=1, others=0)."
 fi
 
-C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs ${LOH_FEATURES_DEFINE} ${LOH_CAND_DEFINE}"
-CXX_FLAGS="-Wall -Wextra -Werror -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs ${LOH_FEATURES_DEFINE} ${LOH_CAND_DEFINE}"
+C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs${LOH_DEFS}"
+CXX_FLAGS="-Wall -Wextra -Werror -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs${LOH_DEFS}"
 
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug \
 	-DCMAKE_C_FLAGS="${C_FLAGS}" \
 	-DCMAKE_CXX_FLAGS="${CXX_FLAGS}" \
+	-DCMAKE_BUILD_WITH_INSTALL_RPATH=TRUE \
 	-DENABLE_GLCACHE=ON -DENABLE_LRB=ON -DENABLE_3L_CACHE=ON \
 	..
 
 ninja
 
 # Return to script directory
-# cd ${DIR}
 cd "${CURR_DIR}"
 
 if [[ ${#PROGRAM_ARGS[@]} -ne 0 ]]; then

@@ -14,28 +14,25 @@
 
 // 训练时C端不阻塞，使用上次权重继续运行
 
-// 状态向量配置由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1 控制（未定义则按0处理）
+// 状态向量配置由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1 控制
+// 若未显式定义，则在此默认开启缓存特征（38 维）：
+#ifndef LOH_INCLUDE_CACHE_FEATURES
+#define LOH_INCLUDE_CACHE_FEATURES 1
+#endif
 
 // 候选特征汇总开关（编译期）：0 关闭，1 开启（附加72维）
 #ifndef LOH_INCLUDE_CANDIDATE_FEATURES
 #define LOH_INCLUDE_CANDIDATE_FEATURES 0
 #endif
 
-// LOH 调试模式控制
-// 根据编译模式自动确定调试级别
-#ifdef NDEBUG
-#define LOH_DEBUG_LEVEL 0  // 发布模式：不输出调试信息
-#else
-// 为调试构建开启详细验证与日志
-#define LOH_DEBUG_LEVEL 1
-#endif
-
-// 可以通过编译时定义 LOH_DEBUG_LEVEL 来覆盖默认设置
+// LOH 调试模式控制（保持与 LOH_mr_blocked.c 一致）
+// 如果未在编译命令中显式定义 LOH_DEBUG_LEVEL，则根据编译模式自动确定
 #ifndef LOH_DEBUG_LEVEL
 #ifdef NDEBUG
 #define LOH_DEBUG_LEVEL 0  // 发布模式：不输出调试信息
 #else
-#define LOH_DEBUG_LEVEL 2  // 调试模式：输出详细调试信息
+// 调试构建下默认开启基础/详细调试输出
+#define LOH_DEBUG_LEVEL 1
 #endif
 #endif
 
@@ -79,13 +76,33 @@
 #endif
 #endif
 
-// 模块测试调试宏
+// 模块测试调试宏（保持与 LOH_mr_blocked.c 一致）
 #define LOH_TEST_FEATURE_CALCULATION 1
 #define LOH_TEST_EVICTION_LOGIC 1
 #define LOH_TEST_DATA_CONSISTENCY 1
 #define LOH_TEST_PERFORMANCE_STATS 1
 
-// 轻量性能剖析（仅在调试下启用）：测量无RL路径的主要耗时
+// 特征归一化模式开关：运行期从环境读取一次后缓存
+static int loh_feature_log1p = 0;  // 对应环境 LOH_FEATURE_LOG1P
+static int loh_feature_log1p_reciprocal =
+    0;  // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
+
+static void loh_init_feature_mode_from_env(void) {
+  const char *raw = getenv("LOH_FEATURE_LOG1P");
+  const char *rec = getenv("LOH_FEATURE_LOG1P_RECIPROCAL");
+
+  loh_feature_log1p = (raw && raw[0] && strcmp(raw, "0") != 0);
+  loh_feature_log1p_reciprocal = 0;
+
+  if (!loh_feature_log1p) {
+    loh_feature_log1p_reciprocal = (rec && rec[0] && strcmp(rec, "0") != 0);
+  }
+
+  LOH_DEBUG_PRINT_BASIC(
+      "[LOH-mr-noblocked] feature mode: LOG1P=%d, RECIPROCAL=%d\n",
+      loh_feature_log1p, loh_feature_log1p_reciprocal);
+}
+
 #ifndef LOH_PERF_PROFILING
 #define LOH_PERF_PROFILING 1
 #endif
@@ -479,6 +496,27 @@ typedef struct {
   loh_perf_t perf;  // 轻量性能剖析计数器
 #endif
 } LOH_params_t;
+
+// === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
+
+/**
+ * @brief IRT 特征值计算函数 - 由调用方保证 irt_value 已初始化且为正
+ */
+static double calculate_irt_feature(int64_t irt_value) {
+  // 约定：IRT 必须是已初始化且为正的有限值
+  g_assert(irt_value > 0);
+
+  double v = (double)irt_value;
+  if (loh_feature_log1p) {
+    // LOG1P 模式：直接 log1p(raw)
+    return log1p(v);
+  }
+
+  if (loh_feature_log1p_reciprocal) {
+    v = log1p(v);
+  }
+  return 1.0 / (1.0 + v);
+}
 
 #if LOH_PERF_PROFILING
 static void loh_print_perf_summary(LOH_params_t *params) {
@@ -1094,109 +1132,6 @@ static void loh_sem_close(LOH_params_t *params, bool unlink_names) {
   params->sem_owner = false;
 }
 
-/**
- * @brief IRT 特征值计算函数 - 将原始 IRT 值转换为 [0,1] 范围的特征值
- * 使用归一化公式：1/(1+IRT)，IRT 越大，特征值越小（访问间隔长 =
- * 被驱逐可能性高）
- * @param irt_value 原始 IRT 值
- * @return 归一化的 IRT 特征值
- */
-static double calculate_irt_feature(int64_t irt_value) {
-  // 【修复】处理未初始化IRT值：INT64_MAX -> 接近0的特征值（最佳淘汰候选）
-  if (irt_value == INT64_MAX || irt_value <= 0) {
-    return 0.0;  // 无IRT历史或无效值，特征为0（最适合淘汰）
-  }
-  return 1.0 / (1.0 + (double)irt_value);
-}
-
-// 计算对象的六个特征值：recency, frequency, size, irt1, irt2, irt3
-static void calculate_object_features(LOH_params_t *params, cache_obj_t *obj,
-                                      double features[FEATURE_DIM]) {
-  PERF_TS _ts_feat;
-  PERF_NOW(_ts_feat);
-  // 初始化特征值
-  for (int i = 0; i < FEATURE_DIM; i++) {
-    features[i] = 0.0;
-  }
-
-  // 对象为空则直接返回零特征
-  if (obj == NULL) {
-    LOH_DEBUG_PRINT_BASIC(
-        "[calculate_object_features] ERROR: Object is NULL, returning zero "
-        "features\n");
-    return;
-  }
-
-  // ====================================================================
-  // 【新设计】：使用简化的 irt_values 数组计算特征
-  // ====================================================================
-
-  if (obj != NULL) {
-    // 特征 0: Recency - 从上次访问到现在的时间
-    double recency =
-        (double)(params->current_timestamp - obj->LOH.last_access_counter);
-    features[0] = 1.0 / (1.0 + recency);
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature0(recency) - time_diff=%.0f, "
-        "feature_value=%.6f\n",
-        recency, features[0]);
-
-    // 特征 1: Frequency - 去掉 log，采用 f/(f+K)
-    {
-      const double K = 1.0;  // 按要求设为 1
-      double f = (double)obj->LOH.access_count;
-      features[1] = (f <= 0.0) ? 0.0 : (f / (f + K));
-    }
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature1(frequency) - f=%d, K=1.0, "
-        "feature_value=%.6f\n",
-        obj->LOH.access_count, features[1]);
-
-    // 特征 3, 4, 5: IRT - 使用简化的irt_values数组
-    features[3] = calculate_irt_feature(obj->LOH.irt_values[0]);  // 最新IRT
-    features[4] = calculate_irt_feature(obj->LOH.irt_values[1]);  // 第2新IRT
-    features[5] = calculate_irt_feature(obj->LOH.irt_values[2]);  // 第3新IRT
-
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature3(latest_IRT) - irt=%ld, "
-        "feature_value=%.6f\n",
-        obj->LOH.irt_values[0], features[3]);
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature4(2nd_IRT) - irt=%ld, "
-        "feature_value=%.6f\n",
-        obj->LOH.irt_values[1], features[4]);
-    LOH_DEBUG_PRINT_VERBOSE(
-        "[calculate_object_features] Feature5(3rd_IRT) - irt=%ld, "
-        "feature_value=%.6f\n",
-        obj->LOH.irt_values[2], features[5]);
-  } else {
-    // 理论上不会到达，这里仅为健壮性保留
-  }
-
-  // 特征 2: Size - 去掉 log，采用 1/(1+A*MB)
-  // obj_size 单位是字节，需要归一化到合理的范围
-  // 优先使用 obj->obj_size，req 为空时也安全
-  double size_mb = (double)obj->obj_size / (1024.0 * 1024.0);  // 转换为 MB
-  {
-    const double A = 1.0;
-    features[2] = 1.0 / (1.0 + A * size_mb);
-  }
-  LOH_DEBUG_PRINT_VERBOSE(
-      "[calculate_object_features] Feature2(size) - raw_size=%llu bytes, "
-      "MB=%.6f, A=1.0, feature_value=%.6f\n",
-      (unsigned long long)obj->obj_size, size_mb, features[2]);
-
-  // [DEBUG] Final feature vector
-  LOH_DEBUG_PRINT_DETAILED(
-      "[calculate_object_features] Final feature vector - [%.6f, %.6f, %.6f, "
-      "%.6f, "
-      "%.6f, %.6f]\n",
-      features[0], features[1], features[2], features[3], features[4],
-      features[5]);
-
-  // 记录特征计算耗时在批量调用处统一计时，避免每次调用都触发系统调用
-}
-
 static void update_state_vector(LOH_params_t *params) {
   // RL 状态计算位置 1：每当 RL_update_interval 触发时调用
   // 计算 38 维状态向量，包含 global_perf、特征统计、缓存状态
@@ -1548,10 +1483,9 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   // 同时打印对象未命中率 (OMR)、字节未命中率 (BMR) 和计算出的奖励 (Reward)
   LOH_DEBUG_PRINT_DETAILED(
       "[%.6f] [C-STATE] [seq %llu] Sending RL request - OMR: %.4f, BMR: %.4f, "
-      "Reward: %.4f, ",
-      send_timestamp, seq_no, "Epoch Count: %.0f\n", seq_no,
-      shm_data.miss_ratio, shm_data.byte_miss_ratio, reward,
-      params->epoch_obj_count);
+      "Reward: %.4f, Epoch Count: %.0f\n",
+      send_timestamp, seq_no, shm_data.miss_ratio, shm_data.byte_miss_ratio,
+      reward, params->epoch_obj_count);
   LOH_DEBUG_PRINT_BASIC("[seq %llu] LOH DEBUG: reward=%.6f\n", seq_no, reward);
 
   // 将更新的数据写回共享内存
@@ -1882,9 +1816,6 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 }
 
 // 辅助函数的前向声明
-static double calculate_score(LOH_params_t *params, cache_obj_t *obj);
-static double calculate_score_with_features(LOH_params_t *params,
-                                            const double features[FEATURE_DIM]);
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
 // ===== Detailed validation helpers =====
@@ -2039,10 +1970,89 @@ static void cleanup_invalid_objects(LOH_params_t *params);
 static void adjust_history_capacity_if_needed(LOH_params_t *params,
                                               cache_t *cache);
 
-// 特征计算函数
-static double calculate_recency(LOH_params_t *params, cache_obj_t *obj);
-static double calculate_frequency(LOH_params_t *params, cache_obj_t *obj);
-static double calculate_size(LOH_params_t *params, cache_obj_t *obj);
+// 特征计算函数：使用 raw 值作为输入（统一使用 int64_t raw）
+static double calculate_recency(int64_t recency_raw) {
+  g_assert(recency_raw >= 0);
+
+  double v = (double)recency_raw;
+  if (loh_feature_log1p) {
+    return log1p(v);
+  }
+
+  return loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(v)))
+                                      : (1.0 / (1.0 + v));
+}
+
+static double calculate_frequency(int64_t freq_raw) {
+  g_assert(freq_raw >= 0);
+
+  double f = (double)freq_raw;
+  if (loh_feature_log1p) {
+    return log1p(f);
+  }
+
+  const double K = 1.0;
+  if (loh_feature_log1p_reciprocal) f = log1p(f);
+  return (f > 0.0) ? (f / (f + K)) : 0.0;
+}
+
+static double calculate_size(int64_t size_bytes) {
+  g_assert(size_bytes >= 0);
+
+  double size_bytes_d = (double)size_bytes;
+
+  if (loh_feature_log1p) {
+    return log1p(size_bytes_d);
+  }
+
+  double size_mb = size_bytes_d / (1024.0 * 1024.0);
+  const double A = 1.0;
+  return loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(A * size_mb)))
+                                      : (1.0 / (1.0 + A * size_mb));
+}
+
+// 计算对象的六个特征值：recency, frequency, size, irt1, irt2, irt3
+static void calculate_object_features(LOH_params_t *params, cache_obj_t *obj,
+                                      double *features) {
+  g_assert(params != NULL);
+  g_assert(obj != NULL);
+  g_assert(params->current_timestamp >= obj->LOH.last_access_counter);
+
+  int64_t delta = params->current_timestamp - obj->LOH.last_access_counter;
+  int64_t recency_raw = delta;
+  int64_t freq_raw = (int64_t)obj->LOH.access_count;
+  int64_t size_bytes = (int64_t)obj->obj_size;
+
+  features[0] = calculate_recency(recency_raw);
+  features[1] = calculate_frequency(freq_raw);
+  features[2] = calculate_size(size_bytes);
+  features[3] = calculate_irt_feature(obj->LOH.irt_values[0]);
+  features[4] = calculate_irt_feature(obj->LOH.irt_values[1]);
+  features[5] = calculate_irt_feature(obj->LOH.irt_values[2]);
+
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature0(recency) - value=%.6f\n",
+      features[0]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature1(frequency) - value=%.6f\n",
+      features[1]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature2(size) - value=%.6f\n", features[2]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature3(latest_IRT) - value=%.6f\n",
+      features[3]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature4(2nd_IRT) - value=%.6f\n",
+      features[4]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Feature5(3rd_IRT) - value=%.6f\n",
+      features[5]);
+  LOH_DEBUG_PRINT_VERBOSE(
+      "[calculate_object_features] Final feature vector - [%.6f, %.6f, %.6f, "
+      "%.6f, %.6f, %.6f]\n",
+      features[0], features[1], features[2], features[3], features[4],
+      features[5]);
+}
 
 // frequency 表操作函数
 static void freq_table_init(LOH_params_t *params);
@@ -2127,6 +2137,9 @@ cache_t *LOH_mr_noblocked_init(const common_cache_params_t ccache_params,
   LOH_DEBUG_PRINT_DETAILED("=== LOH Cache Initialize ===\n");
   LOH_DEBUG_PRINT_DETAILED("LOH Debug Level: %d\n", LOH_DEBUG_LEVEL);
   LOH_DEBUG_PRINT_DETAILED("Cache size: %lu\n", ccache_params.cache_size);
+
+  // 初始化特征模式：只在首次调用时读取环境变量
+  loh_init_feature_mode_from_env();
 
   cache_t *cache = cache_struct_init("LOH_mr_noblocked", ccache_params,
                                      cache_specific_params);
@@ -2541,11 +2554,15 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   double features[FEATURE_DIM] = {0};
   if (obj_before_access != NULL) {
     // 缓存命中：计算命中对象的访问前特征
-    features[0] =
-        calculate_recency(params, obj_before_access);  // recency 未更新
-    features[1] =
-        calculate_frequency(params, obj_before_access);  // frequency 未加 1
-    features[2] = calculate_size(params, obj_before_access);
+    int64_t delta =
+        params->current_timestamp - obj_before_access->LOH.last_access_counter;
+    int64_t recency_raw = delta;
+    int64_t freq_raw = (int64_t)obj_before_access->LOH.access_count;
+    int64_t size_bytes_raw = (int64_t)obj_before_access->obj_size;
+
+    features[0] = calculate_recency(recency_raw);  // recency 未更新
+    features[1] = calculate_frequency(freq_raw);   // frequency 未加 1
+    features[2] = calculate_size(size_bytes_raw);
 
     // 【修复】：访问前 IRT 直接使用对象的 IRT 值，无需后退一步
     features[3] =
@@ -2562,38 +2579,36 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
                   params->ghost_cache, GINT_TO_POINTER((int)req->obj_id))
             : NULL;
     if (ghost_entry) {
-      // 【统一】：内联计算 ghost cache 特征
-      // Recency: 从 ghost cache 的最后访问时间计算
+      // ghost cache 特征与对象特征保持同一归一化逻辑
       int64_t current_irt =
           params->current_timestamp - ghost_entry->last_access_counter;
-      features[0] = 1.0 / (1.0 + (double)current_irt);  // 直接使用 recency 公式
+      int64_t recency_raw = current_irt;
+      int64_t freq_raw = (int64_t)ghost_entry->access_count;
+      int64_t size_bytes = (int64_t)ghost_entry->obj_size;
 
-      // Frequency: 从 ghost cache 的访问次数计算（无 log）
-      if (ghost_entry->access_count > 0) {
-        const double K = 1.0;
-        double f = (double)ghost_entry->access_count;
-        features[1] = f / (f + K);
-      }
+      features[0] = calculate_recency(recency_raw);
+      features[1] = calculate_frequency(freq_raw);
+      features[2] = calculate_size(size_bytes);
 
-      // Size: 从请求大小计算（无 log）
-      double size_mb = (double)req->obj_size / (1024.0 * 1024.0);  // 转换为 MB
-      {
-        const double A = 1.0;
-        features[2] = 1.0 / (1.0 + A * size_mb);
-      }
-
-      // 【修复】：ghost cache 中直接使用 IRT 值（访问前特征）
       // IRT 特征直接从 ghost_entry 获取
       features[3] = calculate_irt_feature(ghost_entry->irt_values[0]);
       features[4] = calculate_irt_feature(ghost_entry->irt_values[1]);
       features[5] = calculate_irt_feature(ghost_entry->irt_values[2]);
     } else {
-      // 【修复】：完全新对象，至少应该计算 size 特征
-      // Recency 和 Frequency 无历史信息，保持为 0
-      // 但 Size 特征可以从请求中计算
-      double size_mb = (double)req->obj_size / (1024.0 * 1024.0);  // 转换为 MB
-      const double A_new = 1.0;
-      features[2] = 1.0 / (1.0 + A_new * size_mb);
+      // 完全新对象：raw 初始值按约定设置（与模式无关）
+      int64_t size_bytes = (int64_t)req->obj_size;
+      int64_t recency_raw = INT64_MAX;
+      int64_t freq_raw = 0;
+      int64_t irt_raw0 = INT64_MAX;
+      int64_t irt_raw1 = INT64_MAX;
+      int64_t irt_raw2 = INT64_MAX;
+
+      features[0] = calculate_recency(recency_raw);
+      features[1] = calculate_frequency(freq_raw);
+      features[2] = calculate_size(size_bytes);
+      features[3] = calculate_irt_feature(irt_raw0);
+      features[4] = calculate_irt_feature(irt_raw1);
+      features[5] = calculate_irt_feature(irt_raw2);
     }
   }
 
@@ -3398,44 +3413,6 @@ static void LOH_print_cache(const cache_t *cache) {
   LOH_DEBUG_PRINT_DETAILED("]\n");
 }
 
-/**
- * @brief 基于对象特征和当前权重计算该对象的得分
- *
- * @param params LOH 参数结构
- * @param obj 要计算得分的缓存对象
- * @return double 得分值，分值越高表示越应保留在缓存中
- */
-static double calculate_score_with_features(
-    LOH_params_t *params, const double features[FEATURE_DIM]) {
-  // Linear scoring function: Score = W · F
-  // Hot path: unrolled plain multiply-adds (no FMA for consistent Debug perf).
-#if FEATURE_DIM == 6
-  const double *w = params->weights;
-  double s = 0.0;
-  s += w[0] * features[0];
-  s += w[1] * features[1];
-  s += w[2] * features[2];
-  s += w[3] * features[3];
-  s += w[4] * features[4];
-  s += w[5] * features[5];
-  return s;
-#else
-  double score = 0.0;
-  for (int i = 0; i < FEATURE_DIM; i++) {
-    score += params->weights[i] * features[i];
-  }
-  return score;
-#endif
-}
-
-static double calculate_score(LOH_params_t *params, cache_obj_t *obj) {
-  if (!obj) return DBL_MAX;  // 空指针返回最大值，不会被选in
-
-  double features[FEATURE_DIM];
-  calculate_object_features(params, obj, features);
-  return calculate_score_with_features(params, features);
-}
-
 // ===============================
 // IRT值管理辅助函数实现
 // ===============================
@@ -3472,38 +3449,7 @@ static int64_t get_irt_value(cache_obj_t *obj, int index) {
  * recency = (current_timestamp - last_access_time) / current_timestamp
  * 范围[0,1]，值越大表示越久未访问
  */
-static double calculate_recency(LOH_params_t *params, cache_obj_t *obj) {
-  if (params->current_timestamp == 0) return 0.0;
-  // 使用与calculate_object_features相同的公式
-  int64_t time_since_last =
-      params->current_timestamp - obj->LOH.last_access_counter;
-  double recency = 1.0 / (1.0 + (double)time_since_last);
-  return recency;
-}
-
-/**
- * @brief 计算frequency特征值
- */
-static double calculate_frequency(LOH_params_t *params, cache_obj_t *obj) {
-  int access_count = obj->LOH.access_count;
-  if (access_count <= 0) return 0.0;
-  // 去掉 log: 采用简单有界单调映射 f/(f+K)
-  const double K = 1.0;  // 平滑常数（按要求设为 1）
-  double f = (double)access_count;
-  return f / (f + K);
-}
-
-/**
- * @brief 计算size特征值
- */
-static double calculate_size(LOH_params_t *params, cache_obj_t *obj) {
-  // 使用与calculate_object_features相同的公式
-  double size_mb = (double)obj->obj_size / (1024.0 * 1024.0);  // 转换为MB
-  // 去掉 log: 采用简单有界单调映射 1 / (1 + A * MB)
-  const double A = 1.0;  // 尺度因子，可视需要调整
-  double normalized_size = 1.0 / (1.0 + A * size_mb);
-  return normalized_size;
-}
+// 频率/recency/size 的辅助函数已在前文实现，这里不再重复定义
 
 // ===============================
 // frequency表操作函数实现

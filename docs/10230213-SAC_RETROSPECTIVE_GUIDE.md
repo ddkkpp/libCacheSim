@@ -114,10 +114,10 @@ SAC(
 
 ```bash
 # 使用默认配置
-bash test_loh_rl_sb3.sh <trace> 26 <cache_size> <miss_ratio_weight>
+bash ./scripts/test_loh_rl_sb3.sh <trace> 26 <cache_size> <miss_ratio_weight>
 
 # 示例
-bash test_loh_rl_sb3.sh \
+bash ./scripts/test_loh_rl_sb3.sh \
     data/MetaCDN/meta_reag.oracleGeneral.zst \
     26 \
     1073741824 \

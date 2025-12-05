@@ -376,7 +376,7 @@ python3 verify_shm_structure.py
 
 ### 3. 运行集成测试
 ```bash
-bash test_loh_rl_sb3.sh
+bash ./scripts/test_loh_rl_sb3.sh
 ```
 
 ### 4. 检查日志关键点

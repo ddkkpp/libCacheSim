@@ -187,7 +187,7 @@ but argument has type 'long long unsigned int' [-Werror=format=]
 
 1. **运行完整测试**:
    ```bash
-   CACHESIM_NUM_REQ=50000 bash test_loh_rl_sb3.sh
+   CACHESIM_NUM_REQ=50000 bash ./scripts/test_loh_rl_sb3.sh
    ```
 
 2. **验证关键点**:

@@ -20,12 +20,13 @@ def create_shared_memory_class(context_dim: int):
             ("is_training", ctypes.c_int),
             ("state", ctypes.c_double * context_dim),
             ("weights", ctypes.c_double * FEATURE_DIM),
-            ("miss_ratio", ctypes.c_double),
-            ("byte_miss_ratio", ctypes.c_double),
-            ("reward", ctypes.c_double),
+            # 与 loh_actor_critic_sb3.py 保持一致
+            ("total_evicted_bytes", ctypes.c_uint64),
+            ("total_evicted_count", ctypes.c_uint64),
             ("state_version", ctypes.c_uint64),
             ("ack_version", ctypes.c_uint64),
             ("timestamp", ctypes.c_int64),
+            ("pending_penalty_count", ctypes.c_int),
         ]
     return SharedMemoryData
 
@@ -36,13 +37,40 @@ def main():
     if not os.path.exists(shm_path):
         print(f"共享内存文件不存在: {shm_path}")
         sys.exit(1)
-    # 尝试从环境获取状态维度（默认26）
-    try:
-        context_dim = int(os.environ.get("LOH_STATE_DIM", "26"))
-    except Exception:
-        context_dim = 26
+
+    N_TOPK_SAMPLES = 32
+    SAMPLES_PER_EVICTION = 4
+
+    # 根据环境变量推导状态维度（与 loh_actor_critic_sb3.py 保持一致）
+    missratio_dim = 2
+
+    hit_miss_flag = os.environ.get("LOH_INCLUDE_HIT_MISS_FEATURES", "0").strip().lower()
+    hit_miss_dim = 24 if hit_miss_flag in {"1", "true", "yes", "on"} else 0
+
+    cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "0").strip().lower()
+    cache_dim = 12 if cache_flag in {"1", "true", "yes", "on"} else 0
+
+    cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
+    cand_dim = 72 if cand_flag in {"1", "true", "yes", "on"} else 0
+
+    topk_flag = os.environ.get("LOH_INCLUDE_TOPK_CANDIDATE_FEATURES", "0").strip().lower()
+    topk_dim = (N_TOPK_SAMPLES * 6) if topk_flag in {"1", "true", "yes", "on"} else 0
+
+    avgtopk_flag = os.environ.get("LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES", "1").strip().lower()
+    avgtopk_dim = (SAMPLES_PER_EVICTION * 6) if avgtopk_flag in {"1", "true", "yes", "on"} else 0
+
+    context_dim = missratio_dim + hit_miss_dim + cache_dim + cand_dim + topk_dim + avgtopk_dim
+    print(f"Calculated context_dim={context_dim} (missratio={missratio_dim}, hit_miss={hit_miss_dim}, cache={cache_dim}, cand={cand_dim}, topk={topk_dim}, avgtopk={avgtopk_dim})")
+
     SharedMemoryData = create_shared_memory_class(context_dim)
     size = ctypes.sizeof(SharedMemoryData)
+
+    # 检查文件大小
+    file_size = os.path.getsize(shm_path)
+    if file_size < size:
+        print(f"Warning: file size ({file_size}) < expected size ({size}), using file size")
+        size = file_size
+
     with open(shm_path, 'r+b') as f:
         mm = mmap.mmap(f.fileno(), size)
         # 读取

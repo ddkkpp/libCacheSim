@@ -22,3 +22,97 @@
 ./data/TencentCBS/1063.oracleGeneral.zst ThreeLCache-BMR cache size   482MiB,        360960512 req, miss ratio 0.6535, byte miss ratio 0.6776, throughput 0.28 MQPS
 data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     5GiB,        360960512 req, miss ratio 0.3204, byte miss ratio 0.3174, throughput 0.18 MQPS
 data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     5GiB,        360960512 req, miss ratio 0.3474, byte miss ratio 0.3272, throughput 0.04 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     5GiB,        360960512 req, miss ratio 0.2710, byte miss ratio 0.2327, throughput 0.13 MQPS		1118_173946 bandit(greedy)
+data/TencentCBS/1063.oracleGeneral.zst LRU cache size        2GiB, 3000000 req, miss ratio 0.4284, byte miss ratio 0.3986
+data/TencentCBS/1063.oracleGeneral.zst LHD cache size        2GiB, 3000000 req, miss ratio 0.3359, byte miss ratio 0.4202
+data/TencentCBS/1063.oracleGeneral.zst GDSF cache size        2GiB, 3000000 req, miss ratio 0.2772, byte miss ratio 0.3007
+data/TencentCBS/1063.oracleGeneral.zst ARC cache size        2GiB, 3000000 req, miss ratio 0.3893, byte miss ratio 0.3395
+data/TencentCBS/1063.oracleGeneral.zst Sieve cache size        2GiB, 3000000 req, miss ratio 0.5359, byte miss ratio 0.5328
+data/TencentCBS/1063.oracleGeneral.zst LeCaR cache size        2GiB, 3000000 req, miss ratio 0.4167, byte miss ratio 0.3833
+data/TencentCBS/1063.oracleGeneral.zst Cacheus cache size        2GiB, 3000000 req, miss ratio 0.4052, byte miss ratio 0.3677
+data/TencentCBS/1063.oracleGeneral.zst LRB-BMR cache size        2GiB, 3000000 req, miss ratio 0.4397, byte miss ratio 0.4078
+data/TencentCBS/1063.oracleGeneral.zst GLCache cache size        2GiB, 3000000 req, miss ratio 0.3244, byte miss ratio 0.3476
+data/TencentCBS/1063.oracleGeneral.zst ThreeLCache-BMR cache size        2GiB, 3000000 req, miss ratio 0.4311, byte miss ratio 0.3797
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4083, byte miss ratio 0.3651, throughput 0.01 MQPS	PPO obs=hit_miss LOG1P norm 6dim & no prior & sign softmax
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.3966, byte miss ratio 0.3624, throughput 0.15 MQPS	constant weight 1,0,3,0,0,0
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     5GiB,        360960512 req, miss ratio 0.2698, byte miss ratio 0.2370, throughput 0.17 MQPS	constant weight 1,0,3,0,0,0
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5355, byte miss ratio 0.5634, throughput 0.10 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5355, byte miss ratio 0.5634, throughput 0.10 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5442, byte miss ratio 0.5831, throughput 0.10 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5442, byte miss ratio 0.5831, throughput 0.10 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5467, byte miss ratio 0.5798, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5541, byte miss ratio 0.5911, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5531, byte miss ratio 0.5866, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5531, byte miss ratio 0.5866, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5562, byte miss ratio 0.5941, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5625, byte miss ratio 0.5988, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5698, byte miss ratio 0.6017, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5664, byte miss ratio 0.6026, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5731, byte miss ratio 0.6065, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5722, byte miss ratio 0.6036, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5742, byte miss ratio 0.6080, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5782, byte miss ratio 0.6115, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5560, byte miss ratio 0.5938, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5562, byte miss ratio 0.5941, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5619, byte miss ratio 0.5993, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5669, byte miss ratio 0.5982, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5664, byte miss ratio 0.6026, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5729, byte miss ratio 0.6081, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5782, byte miss ratio 0.6115, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5791, byte miss ratio 0.6124, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4369, byte miss ratio 0.5434, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4412, byte miss ratio 0.5439, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4417, byte miss ratio 0.5435, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4460, byte miss ratio 0.5464, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4455, byte miss ratio 0.5442, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4467, byte miss ratio 0.5460, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5731, byte miss ratio 0.6065, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.5805, byte miss ratio 0.6125, throughput 0.09 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4458, byte miss ratio 0.5451, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4463, byte miss ratio 0.5459, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4462, byte miss ratio 0.5464, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4592, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4590, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4597, byte miss ratio 0.5530, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4612, byte miss ratio 0.5529, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4608, byte miss ratio 0.5559, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4595, byte miss ratio 0.5534, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4587, byte miss ratio 0.5531, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4601, byte miss ratio 0.5525, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4594, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4604, byte miss ratio 0.5537, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4590, byte miss ratio 0.5524, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4585, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4597, byte miss ratio 0.5525, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4369, byte miss ratio 0.5434, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4407, byte miss ratio 0.5441, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4417, byte miss ratio 0.5435, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4591, byte miss ratio 0.5532, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4593, byte miss ratio 0.5536, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4602, byte miss ratio 0.5528, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4604, byte miss ratio 0.5536, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4578, byte miss ratio 0.5516, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4419, byte miss ratio 0.5453, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4425, byte miss ratio 0.5440, throughput 0.13 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4433, byte miss ratio 0.5442, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4460, byte miss ratio 0.5464, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4467, byte miss ratio 0.5460, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4464, byte miss ratio 0.5458, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4591, byte miss ratio 0.5532, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4591, byte miss ratio 0.5526, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4573, byte miss ratio 0.5514, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4572, byte miss ratio 0.5514, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4561, byte miss ratio 0.5501, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4583, byte miss ratio 0.5520, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4588, byte miss ratio 0.5528, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4589, byte miss ratio 0.5523, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4591, byte miss ratio 0.5520, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4608, byte miss ratio 0.5559, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4592, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4605, byte miss ratio 0.5534, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4603, byte miss ratio 0.5525, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4623, byte miss ratio 0.5546, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4590, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4596, byte miss ratio 0.5525, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4598, byte miss ratio 0.5527, throughput 0.12 MQPS
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.4612, byte miss ratio 0.5529, throughput 0.12 MQPS

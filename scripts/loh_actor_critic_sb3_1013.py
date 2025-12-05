@@ -104,6 +104,10 @@ def _env_float(name: str, default: Optional[float]) -> Optional[float]:
     except ValueError:
         return default
 
+
+# 是否启用 log1p(raw) 特征与“原始权重”模式
+LOH_FEATURE_LOG1P = _env_flag("LOH_FEATURE_LOG1P", False)
+
 # --- 常量和共享内存结构定义 ---
 SHM_KEY = 9876
 FEATURE_DIM = 6
@@ -619,9 +623,15 @@ class LohEnv(gym.Env):
         self.current_step += 1
 
         # 1. 将动作转换为权重
+        # 默认：对动作向量做 softmax，得到正且和为 1 的权重；
+        # 当 LOH_FEATURE_LOG1P 为真时：直接使用连续动作向量作为权重
+        # （可为负数且不要求和为 1），便于配合 C 端 log1p(raw) 特征模式。
         action_start = get_monotonic_time()
-        action_tensor = torch.from_numpy(action)
-        weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
+        if LOH_FEATURE_LOG1P:
+            weights = action.astype(np.float64)
+        else:
+            action_tensor = torch.from_numpy(action)
+            weights = torch.nn.functional.softmax(action_tensor, dim=-1).numpy()
         # 将最新权重保存给后台线程使用
         try:
             self._last_weights = weights.astype(np.float64, copy=True)

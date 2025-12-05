@@ -8,7 +8,7 @@
 
 ```bash
 # 运行测试
-CACHESIM_NUM_REQ=1000000 bash test_loh_rl_sb3.sh
+CACHESIM_NUM_REQ=1000000 bash ./scripts/test_loh_rl_sb3.sh
 # 然后按 Ctrl+Z
 ```
 
@@ -23,7 +23,7 @@ CACHESIM_NUM_REQ=1000000 bash test_loh_rl_sb3.sh
 
 ```bash
 # 运行测试
-CACHESIM_NUM_REQ=1000000 bash test_loh_rl_sb3.sh
+CACHESIM_NUM_REQ=1000000 bash ./scripts/test_loh_rl_sb3.sh
 # 然后按 Ctrl+C
 ```
 
@@ -37,7 +37,7 @@ CACHESIM_NUM_REQ=1000000 bash test_loh_rl_sb3.sh
 
 ```bash
 # 设置较小的请求数，让程序自然结束
-CACHESIM_NUM_REQ=10000 bash test_loh_rl_sb3.sh
+CACHESIM_NUM_REQ=10000 bash ./scripts/test_loh_rl_sb3.sh
 ```
 
 **效果**：
@@ -97,7 +97,7 @@ idle_threshold = 3.0  # 3秒无活动判断C端结束
 ```bash
 jobs
 # 输出示例：
-# [1]+  Stopped    bash test_loh_rl_sb3.sh
+# [1]+  Stopped    bash ./scripts/test_loh_rl_sb3.sh
 ```
 
 ### 方式1：终止暂停的进程
@@ -138,7 +138,7 @@ rm -f /dev/shm/loh_ac_9876
 
 1. **开发测试**：使用小数据集（1000-10000请求）
    ```bash
-   CACHESIM_NUM_REQ=1000 bash test_loh_rl_sb3.sh
+   CACHESIM_NUM_REQ=1000 bash ./scripts/test_loh_rl_sb3.sh
    ```
 
 2. **需要中断时**：使用 Ctrl+C，不要用 Ctrl+Z
@@ -146,10 +146,10 @@ rm -f /dev/shm/loh_ac_9876
 3. **并行运行**：每个实例使用不同的 SHM_KEY
    ```bash
    # 实例1
-   SHM_KEY=9876 CACHESIM_NUM_REQ=100000 bash test_loh_rl_sb3.sh
+   SHM_KEY=9876 CACHESIM_NUM_REQ=100000 bash ./scripts/test_loh_rl_sb3.sh
 
    # 实例2（修改脚本中的SHM_KEY）
-   SHM_KEY=9877 CACHESIM_NUM_REQ=100000 bash test_loh_rl_sb3.sh
+   SHM_KEY=9877 CACHESIM_NUM_REQ=100000 bash ./scripts/test_loh_rl_sb3.sh
    ```
 
 4. **监控训练进度**：在另一个终端查看TensorBoard
