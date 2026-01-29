@@ -22,4 +22,8 @@ LOH_PARALLEL_SAFE=1
 
 LOH_PARALLEL_SAFE=1 TD3_ACTION_NOISE=0.05 LOH_SHM_KEY=12003 LOH_OBS_KEEP=nohit CACHESIM_NUM_REQ=10000000 PYTHON_SCRIPT=loh_actor_critic_sb3_pen_d_TD3.py EVICTION_ALGO=LOH bash ./scripts/test_loh_rl_sb3.sh data/WikiCDN/wiki_2019t.oracleGeneral.zst
 
-还有文件的打印语句没有改._maybe_set_num("TD3_BATCH_SIZE", "batch_size", int)和            batch_size=int(os.environ.get("TD3_BATCH_SIZE", "256")),           # previous/SB3 default 256区别是什么，环境变量设置时通过哪个生效，能只保留一个吗
+LOH_ENABLE_RL=0 LOH_FEATURE_LOG1P=1 LOH_FEATURE_LOG1P_RECIPROCAL=0 LOH_ENABLE_FEATURE_NORMALIZATION=1 LOH_USE_HEURISTIC_SIGNS=1 loh_score_use_compound=0 LOH_SCORE_USE_IRT=1 OUT_DIR=runs/constant_weights_LOG1P TRACE_LIST="data/MetaCDN/meta_reag.oracleGeneral.zst,data/WikiCDN/wiki_2019t.oracleGeneral.zst" SKIP_REFINE=1 bash scripts/sweep_loh_constant_weights_norl.sh 
+
+./_build_dbg/bin/cachesim data/WikiCDN/wiki_2019t.oracleGeneral.zst oracleGeneral LRU,LFU,LHD,GDSF,ARC,SIEVE,lecar,cacheus,lrb,glcache,3lcache 0.1 --num-req=3000000
+
+export SWEEP_ID="meta_mlp_vs_linear_$(date +%Y%m%d_%H%M%S)" && export SWEEP_REPEATS=1 && export SEED_BASE=0 && export CACHESIM_NUM_REQ=3000000 && export LOH_DEBUG_LEVEL=0 && export LOH_SKIP_PIP_INSTALL=1 && bash scripts/sweep_loh_rl_sb3.sh scripts/sweep_configs_meta_mlp_vs_linear.txt data/MetaCDN/meta_reag.oracleGeneral.zst 0.1

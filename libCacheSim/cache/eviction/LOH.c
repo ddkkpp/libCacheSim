@@ -187,7 +187,7 @@ static int loh_feature_normalize =
 
 // Hit/Miss 特征统计开关（编译期）：0 关闭，1 开启（24维）
 #ifndef LOH_INCLUDE_HIT_MISS_FEATURES
-#define LOH_INCLUDE_HIT_MISS_FEATURES 1
+#define LOH_INCLUDE_HIT_MISS_FEATURES 0
 #endif
 
 // TopK 候选特征开关（编译期）：0 关闭，1 开启（N_TOPK_SAMPLES × 6 维）
@@ -229,11 +229,17 @@ static int loh_feature_normalize =
 #endif
 
 // 调试输出宏定义
-#define LOH_DEBUG_NONE 0      // 无调试输出
+#define LOH_DEBUG_CONFIG 0    // 仅配置信息
 #define LOH_DEBUG_BASIC 1     // 基础统计信息(RL交互)
 #define LOH_DEBUG_ERROR 2     // 非必要的错误信息
 #define LOH_DEBUG_DETAILED 3  // 详细操作日志
 #define LOH_DEBUG_VERBOSE 4   // 完整调试信息
+
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_CONFIG
+#define LOH_DEBUG_PRINT_CONFIG(...) printf(__VA_ARGS__)
+#else
+#define LOH_DEBUG_PRINT_CONFIG(...) ((void)0)
+#endif
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
 #define LOH_DEBUG_PRINT_BASIC(...) printf(__VA_ARGS__)
@@ -435,7 +441,32 @@ static void LOH_print_cache(const cache_t *cache);
 //   1) LOH_SEEN_CAP 必须为 2 的幂（便于按位取模与代际清理）。
 //   2) 建议 LOH_SEEN_CAP 至少为 MAX_CANDIDATES 的 2–4 倍以保持低负载因子。
 // 当前配置：MAX_CANDIDATES=96，LOH_SEEN_CAP=256，负载约 <= 96/256 ≈ 0.375。
+// 维度命名约定（与 Python RL 端保持一致）：
+//   FEATURE_DIM          → 共享内存 state[]
+//   的列上限，也是权重/动作的最大特征数（始终为6）。 layout.feature_dim   →
+//   运行时真正参与统计/候选的特征数量；当 LOH_SCORE_USE_IRT=0 时会降为3。
+//   CONTEXT_DIM          → 编译期确定的共享内存长度上限 (26/38/...)，用于
+//   shm_data_t.state 固定数组。 layout.total_dim     →
+//   当前配置下实际写入的状态长度 (<= CONTEXT_DIM)，发送给 Python 的有效部分。
+// Python 端的 `STATE_DIM`/`STATE_FEATURE_DIM` 采用同样的规则以便双方严格对齐。
 #define FEATURE_DIM 6  // 用于评分的特征数量
+
+// 评分模型选择（保持默认线性权重不变）
+#define LOH_SCORE_MODEL_LINEAR 0
+#define LOH_SCORE_MODEL_MLP 1
+
+// MLP 结构：固定输入维度=6（与 FEATURE_DIM 一致），单隐层 ReLU，输出 1
+// 参数布局（row-major）：
+//   W1[H][D], b1[H], W2[H], b2[1]
+// 参数总数：H*(D+2)+1
+#define LOH_MLP_MAX_HIDDEN 64
+#define LOH_MLP_MAX_PARAMS (LOH_MLP_MAX_HIDDEN * (FEATURE_DIM + 2) + 1)
+
+static inline int loh_mlp_param_len(int hidden) {
+  if (hidden <= 0) return 0;
+  if (hidden > LOH_MLP_MAX_HIDDEN) hidden = LOH_MLP_MAX_HIDDEN;
+  return hidden * (FEATURE_DIM + 2) + 1;
+}
 
 // 根据配置选择状态向量维度
 // 维度组成：MissRatio(2) + Hit/Miss特征(0/24) + Cache特征(0/12) +
@@ -489,6 +520,68 @@ static void LOH_print_cache(const cache_t *cache);
 #define CONTEXT_DIM                                       \
   (BASE_STATE_DIM + CAND_FEATURE_DIM + TOPK_FEATURE_DIM + \
    AVGTOPK_FEATURE_DIM + REQUEST_FEATURE_DIM)
+
+#define LOH_MAX_STATE_FEATURES FEATURE_DIM
+
+typedef struct {
+  int feature_dim;           // 有效特征数量（3 或 6）
+  int candidate_source_dim;  // 候选来源数量（rec/freq/size[/IRT*3]）
+  int hit_miss_dim;          // Hit/Miss 模块有效维度
+  int cache_dim;             // Cache 模块有效维度
+  int cand_dim;              // 候选统计有效维度
+  int topk_dim;              // TOPK 样本有效维度
+  int avgtopk_dim;           // AvgTopK 有效维度
+  int request_dim;           // 请求历史有效维度
+  int total_dim;             // 可用状态总维度（<= CONTEXT_DIM）
+} loh_state_layout_t;
+
+static inline loh_state_layout_t loh_get_state_layout(void) {
+  loh_state_layout_t layout = {0};
+  layout.feature_dim = loh_score_use_irt ? LOH_MAX_STATE_FEATURES : 3;
+  if (layout.feature_dim < 0) layout.feature_dim = 0;
+
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+  layout.candidate_source_dim = loh_score_use_irt ? 6 : 3;
+#else
+  layout.candidate_source_dim = 0;
+#endif
+
+#if LOH_INCLUDE_HIT_MISS_FEATURES
+  layout.hit_miss_dim = layout.feature_dim * 4;
+#endif
+
+#if LOH_INCLUDE_CACHE_FEATURES
+  layout.cache_dim = layout.feature_dim * 2;
+#endif
+
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+  layout.cand_dim = layout.candidate_source_dim * layout.feature_dim * 2;
+#endif
+
+#if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
+  layout.topk_dim = N_TOPK_SAMPLES * layout.feature_dim;
+#endif
+
+#if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES
+  layout.avgtopk_dim = SAMPLES_PER_EVICTION * layout.feature_dim;
+#endif
+
+#if LOH_INCLUDE_REQUEST
+  layout.request_dim = REQUEST_HISTORY_LEN * layout.feature_dim;
+#endif
+
+  layout.total_dim = MISSRATIO_DIM;
+  layout.total_dim += layout.hit_miss_dim;
+  layout.total_dim += layout.cache_dim;
+  layout.total_dim += layout.cand_dim;
+  layout.total_dim += layout.topk_dim;
+  layout.total_dim += layout.avgtopk_dim;
+  layout.total_dim += layout.request_dim;
+  if (layout.total_dim > CONTEXT_DIM) {
+    layout.total_dim = CONTEXT_DIM;
+  }
+  return layout;
+}
 
 #define SHM_KEY 9876  // 共享内存段键
 #define SEM_KEY 9877  // 信号量键
@@ -546,11 +639,15 @@ typedef struct {
   // 用于同步的时间戳
   int64_t timestamp;
 
-#if LOH_ENABLE_PENALTY
-  // 【优化】延迟惩罚数据（仅传递数量，详细数据在同步时批量传输）
-  int pending_penalty_count;  // 当前周期待处理的惩罚数量
-  // 惩罚详细数据将在同步时单独传输（避免共享内存膨胀）
-#endif
+  // 【优化】延迟惩罚数据：仅传递数量，详细数据在同步时批量传输。
+  // 注意：Python 端始终包含该字段；因此此字段在 struct 中保持常驻。
+  int pending_penalty_count;
+
+  // ===== 可选：MLP per-candidate scoring 参数（默认不用） =====
+  int score_model;    // 0=linear(weights), 1=mlp
+  int mlp_hidden;     // 隐层大小（<=LOH_MLP_MAX_HIDDEN）
+  int mlp_param_len;  // mlp_params 的有效长度
+  double mlp_params[LOH_MLP_MAX_PARAMS];
 } shm_data_t;
 
 #define FREQ_MAX 255         // 单独跟踪的最大频率
@@ -678,6 +775,11 @@ typedef struct {
 
   // 用于评分函数的特征权重
   double weights[FEATURE_DIM];
+  // 评分模型（默认线性 weights）；MLP 时使用 mlp_params
+  int score_model;
+  int mlp_hidden;
+  int mlp_param_len;
+  double mlp_params[LOH_MLP_MAX_PARAMS];
   cache_obj_t *candidates[MAX_CANDIDATES];
   int n_candidates;
 
@@ -801,6 +903,36 @@ typedef struct {
   int pending_penalty_count;       // 待处理的惩罚计数
 #endif
 } LOH_params_t;
+
+static inline double loh_mlp_eval(const LOH_params_t *params,
+                                  const double x[FEATURE_DIM]) {
+  const int H = params->mlp_hidden;
+  const int D = FEATURE_DIM;
+  const int expected = loh_mlp_param_len(H);
+  if (params->score_model != LOH_SCORE_MODEL_MLP) return 0.0;
+  if (H <= 0 || H > LOH_MLP_MAX_HIDDEN) return 0.0;
+  if (params->mlp_param_len < expected) return 0.0;
+
+  const double *p = params->mlp_params;
+  const double *W1 = p;
+  const double *b1 = p + (H * D);
+  const double *W2 = b1 + H;
+  const double b2 = *(W2 + H);
+
+  double y = b2;
+  for (int h = 0; h < H; ++h) {
+    double z = b1[h];
+    const double *wrow = &W1[h * D];
+    // D 固定为 6，允许编译器展开
+    for (int d = 0; d < D; ++d) {
+      z += wrow[d] * x[d];
+    }
+    // ReLU
+    if (z < 0.0) z = 0.0;
+    y += W2[h] * z;
+  }
+  return y;
+}
 
 // === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
 
@@ -1584,15 +1716,16 @@ static bool loh_sem_init(LOH_params_t *params) {
   bool created_ready = false;
   if (ready == SEM_FAILED) {
     if (errno != EEXIST) {
-      LOH_DEBUG_PRINT_BASIC("[LOH] sem_open ready failed: %s\n",
-                            strerror(errno));
+      LOH_DEBUG_PRINT_CONFIG("[LOH SEM INIT] sem_open ready failed: %s\n",
+                             strerror(errno));
       return false;
     }
     oflag = O_CREAT;
     ready = sem_open(params->sem_ready_name, oflag, mode, 0);
     if (ready == SEM_FAILED) {
-      LOH_DEBUG_PRINT_BASIC("[LOH] sem_open ready (retry) failed: %s\n",
-                            strerror(errno));
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH SEM INIT] sem_open ready (retry) failed: %s\n",
+          strerror(errno));
       return false;
     }
   } else {
@@ -1609,15 +1742,16 @@ static bool loh_sem_init(LOH_params_t *params) {
   bool created_ack = false;
   if (ack == SEM_FAILED) {
     if (errno != EEXIST) {
-      LOH_DEBUG_PRINT_BASIC("[LOH] sem_open ack failed: %s\n", strerror(errno));
+      LOH_DEBUG_PRINT_CONFIG("[LOH SEM INIT] sem_open ack failed: %s\n",
+                             strerror(errno));
       sem_close(ready);
       return false;
     }
     oflag = O_CREAT;
     ack = sem_open(params->sem_ack_name, oflag, mode, 0);
     if (ack == SEM_FAILED) {
-      LOH_DEBUG_PRINT_BASIC("[LOH] sem_open ack (retry) failed: %s\n",
-                            strerror(errno));
+      LOH_DEBUG_PRINT_CONFIG("[LOH SEM INIT] sem_open ack (retry) failed: %s\n",
+                             strerror(errno));
       sem_close(ready);
       return false;
     }
@@ -1635,9 +1769,11 @@ static bool loh_sem_init(LOH_params_t *params) {
   params->sem_owner = created_ready && created_ack;
 
   if (params->sem_owner) {
-    LOH_DEBUG_PRINT_BASIC("[LOH] POSIX semaphores created and reset\n");
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH SEM INIT] POSIX semaphores created and reset\n");
   } else {
-    LOH_DEBUG_PRINT_BASIC("[LOH] POSIX semaphores attached (existing)\n");
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH SEM INIT] POSIX semaphores attached (existing)\n");
   }
 
   return true;
@@ -1948,10 +2084,10 @@ static void update_state_vector(LOH_params_t *params) {
   // 计算 38 维状态向量，包含 global_perf、特征统计、缓存状态
 
   // 【调试打印】状态向量更新开始
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_DETAILED(
       "[update_state_vector] state vector update start - timestamp=%lu\n",
       (unsigned long)params->current_timestamp);
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_DETAILED(
       "[update_state_vector] obj_count=%.1f, obj_miss=%.1f, "
       "byte_count=%.1f, byte_miss=%.1f\n",
       params->epoch_obj_count, params->epoch_obj_miss_count,
@@ -1978,6 +2114,7 @@ static void update_state_vector(LOH_params_t *params) {
   // 初始化状态向量为 0
   memset(params->context_state, 0, sizeof(double) * CONTEXT_DIM);
 
+  loh_state_layout_t layout = loh_get_state_layout();
   int offset = 0;  // 动态偏移量，根据启用的模块累加
 
   // A. Miss Ratio 指标 (2 维) - 始终传递，因为奖励计算需要
@@ -1989,12 +2126,12 @@ static void update_state_vector(LOH_params_t *params) {
       MISSRATIO_DIM - 1, hit_ratio, byte_hit_ratio);
 
 #if LOH_INCLUDE_HIT_MISS_FEATURES
-  // B. 特征表现剖析 (24 维) - Hit/Miss 统计
+  // B. 特征表现剖析 - Hit/Miss 统计
   LOH_DEBUG_PRINT_DETAILED(
       "[update_state_vector] hit_count=%ld, miss_count=%ld\n",
       (long)params->hit_feature_count, (long)params->miss_feature_count);
 
-  for (int i = 0; i < FEATURE_DIM; i++) {
+  for (int i = 0; i < layout.feature_dim; i++) {
     LOH_DEBUG_PRINT_DETAILED(
         "[update_state_vector] feature %d - hit_sum=%.6f, hit_sum_sq=%.6f, "
         "miss_sum=%.6f, miss_sum_sq=%.6f\n",
@@ -2031,15 +2168,15 @@ static void update_state_vector(LOH_params_t *params) {
       }
     }
   }
-  offset += HIT_MISS_DIM;  // 跳过 24 维
+  offset += layout.hit_miss_dim;
 #endif
 
 #if LOH_INCLUDE_CACHE_FEATURES
-  // C. 缓存池状态摘要 (12 维)
+  // C. 缓存池状态摘要
   LOH_DEBUG_PRINT_DETAILED("[update_state_vector] cache_object_count=%ld\n",
                            (long)params->cache_object_count);
 
-  for (int i = 0; i < FEATURE_DIM; i++) {
+  for (int i = 0; i < layout.feature_dim; i++) {
     if (params->cache_object_count > 0) {
       double mean = params->cache_feature_sum[i] / params->cache_object_count;
       params->context_state[offset + i * 2] = mean;
@@ -2054,13 +2191,14 @@ static void update_state_vector(LOH_params_t *params) {
       }
     }
   }
-  offset += CACHE_DIM;  // 跳过 12 维
+  offset += layout.cache_dim;
 #endif
 
 #if LOH_INCLUDE_CANDIDATE_FEATURES
-  // D. 候选集合统计 (72 维)
-  for (int s = 0; s < 6; ++s) {
-    for (int f = 0; f < FEATURE_DIM; ++f) {
+  // D. 候选集合统计
+  int cand_offset = offset;
+  for (int s = 0; s < layout.candidate_source_dim; ++s) {
+    for (int f = 0; f < layout.feature_dim; ++f) {
       double mean = 0.0, var = 0.0;
       uint64_t n = params->cand_feat_count[s];
       if (n > 0) {
@@ -2069,12 +2207,11 @@ static void update_state_vector(LOH_params_t *params) {
         var = ex2 - mean * mean;
         if (var < 0.0) var = 0.0;
       }
-      int idx = offset + s * (FEATURE_DIM * 2) + f * 2;
-      params->context_state[idx] = mean;
-      params->context_state[idx + 1] = var;
+      params->context_state[cand_offset++] = mean;
+      params->context_state[cand_offset++] = var;
     }
   }
-  offset += CAND_FEATURE_DIM;
+  offset = cand_offset;
 
   // 重置累计器
   for (int s = 0; s < 6; ++s) {
@@ -2087,7 +2224,7 @@ static void update_state_vector(LOH_params_t *params) {
 #endif
 
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
-  // E. 蓄水池采样特征 (N_TOPK_SAMPLES * FEATURE_DIM 维)
+  // E. 蓄水池采样特征
 
   // 【新增】如果 TOPK 未满，主动调用 LOH_to_evict 来填充
   fill_topk_if_needed(params);
@@ -2099,7 +2236,7 @@ static void update_state_vector(LOH_params_t *params) {
       (unsigned long long)params->group_count);
 
   for (int s = 0; s < N_TOPK_SAMPLES; ++s) {
-    for (int f = 0; f < FEATURE_DIM; ++f) {
+    for (int f = 0; f < layout.feature_dim; ++f) {
       params->context_state[offset++] = params->lowest_score_samples[s][f];
     }
   }
@@ -2109,7 +2246,7 @@ static void update_state_vector(LOH_params_t *params) {
 #endif
 
 #if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES
-  // F. AvgTopK 特征 (SAMPLES_PER_EVICTION * FEATURE_DIM = 24 维)
+  // F. AvgTopK 特征
 
   // 【新增】如果 AvgTopK 为空，主动调用 LOH_to_evict 来填充
   fill_avgtopk_if_needed(params);
@@ -2121,14 +2258,14 @@ static void update_state_vector(LOH_params_t *params) {
   if (params->avgtopk_evict_count > 0) {
     double inv_count = 1.0 / (double)params->avgtopk_evict_count;
     for (int k = 0; k < SAMPLES_PER_EVICTION; k++) {
-      for (int f = 0; f < FEATURE_DIM; f++) {
+      for (int f = 0; f < layout.feature_dim; f++) {
         params->context_state[offset++] = params->avgtopk_sum[k][f] * inv_count;
       }
     }
   } else {
     // 没有驱逐发生，填充零
     for (int k = 0; k < SAMPLES_PER_EVICTION; k++) {
-      for (int f = 0; f < FEATURE_DIM; f++) {
+      for (int f = 0; f < layout.feature_dim; f++) {
         params->context_state[offset++] = 0.0;
       }
     }
@@ -2140,7 +2277,7 @@ static void update_state_vector(LOH_params_t *params) {
 #endif
 
 #if LOH_INCLUDE_REQUEST
-  // G. 最近请求特征历史 (REQUEST_HISTORY_LEN × FEATURE_DIM 维)
+  // G. 最近请求特征历史
   // 以时间顺序展开：最旧的在前，最近的在后；未填满的前缀补 0。
   int filled = (int)(params->request_history_count < REQUEST_HISTORY_LEN
                          ? params->request_history_count
@@ -2154,33 +2291,39 @@ static void update_state_vector(LOH_params_t *params) {
 
   for (int i = 0; i < REQUEST_HISTORY_LEN; i++) {
     int hist_idx = (start_index + i) % REQUEST_HISTORY_LEN;
-    for (int f = 0; f < FEATURE_DIM; f++) {
+    for (int f = 0; f < layout.feature_dim; f++) {
       double val = (i < filled) ? params->request_history[hist_idx][f] : 0.0;
       params->context_state[offset++] = val;
     }
   }
 #endif
 
+  int state_dim_runtime = offset;
+  if (state_dim_runtime > CONTEXT_DIM) state_dim_runtime = CONTEXT_DIM;
+
   // 【调试打印】完整状态向量
-  LOH_DEBUG_PRINT_BASIC("[LOH State] CONTEXT_DIM=%d: global=[%.4f,%.4f]",
-                        CONTEXT_DIM, params->context_state[0],
-                        params->context_state[1]);
+  LOH_DEBUG_PRINT_BASIC("[LOH State] active_dim=%d/%d: global=[%.4f,%.4f]",
+                        state_dim_runtime, CONTEXT_DIM,
+                        params->context_state[0], params->context_state[1]);
 #if LOH_INCLUDE_HIT_MISS_FEATURES
-  LOH_DEBUG_PRINT_BASIC(" +hit/miss(24)");
+  LOH_DEBUG_PRINT_BASIC(" +hit/miss(%d)", layout.hit_miss_dim);
 #endif
 #if LOH_INCLUDE_CACHE_FEATURES
-  LOH_DEBUG_PRINT_BASIC(" +cache(12)");
+  LOH_DEBUG_PRINT_BASIC(" +cache(%d)", layout.cache_dim);
 #endif
 #if LOH_INCLUDE_CANDIDATE_FEATURES
-  LOH_DEBUG_PRINT_BASIC(" +cand(72)");
+  LOH_DEBUG_PRINT_BASIC(" +cand(%d)", layout.cand_dim);
 #endif
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
-  LOH_DEBUG_PRINT_BASIC(
-      " +sample(%d: %llu/%d filled)", N_TOPK_SAMPLES * FEATURE_DIM * 2,
-      (unsigned long long)params->samples_filled, N_TOPK_SAMPLES);
+  LOH_DEBUG_PRINT_BASIC(" +sample(%d: %llu/%d filled)", layout.topk_dim,
+                        (unsigned long long)params->samples_filled,
+                        N_TOPK_SAMPLES);
 #endif
 #if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES
-  LOH_DEBUG_PRINT_BASIC(" +avgtopk(%d)", AVGTOPK_FEATURE_DIM);
+  LOH_DEBUG_PRINT_BASIC(" +avgtopk(%d)", layout.avgtopk_dim);
+#endif
+#if LOH_INCLUDE_REQUEST
+  LOH_DEBUG_PRINT_BASIC(" +request(%d)", layout.request_dim);
 #endif
   LOH_DEBUG_PRINT_BASIC("\n");
 
@@ -2200,26 +2343,26 @@ static void update_state_vector(LOH_params_t *params) {
       (unsigned long long)params->group_count,
       (unsigned long long)params->samples_filled);
   if (params->samples_filled > 0) {
-    LOH_DEBUG_PRINT_DETAILED(
-        "    Group 0 sample 0: [%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]\n",
-        params->lowest_score_samples[0][0], params->lowest_score_samples[0][1],
-        params->lowest_score_samples[0][2], params->lowest_score_samples[0][3],
-        params->lowest_score_samples[0][4], params->lowest_score_samples[0][5]);
+    printf("    Group 0 sample 0: [");
+    for (int f = 0; f < layout.feature_dim; ++f) {
+      printf("%.3f", params->lowest_score_samples[0][f]);
+      if (f + 1 < layout.feature_dim) printf(",");
+    }
+    printf("]\n");
     if (params->samples_filled >= SAMPLES_PER_EVICTION) {
-      LOH_DEBUG_PRINT_DETAILED(
-          "    Group 0 sample 3: [%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]\n",
-          params->lowest_score_samples[3][0],
-          params->lowest_score_samples[3][1],
-          params->lowest_score_samples[3][2],
-          params->lowest_score_samples[3][3],
-          params->lowest_score_samples[3][4],
-          params->lowest_score_samples[3][5]);
+      int last = SAMPLES_PER_EVICTION - 1;
+      printf("    Group 0 sample %d: [", last);
+      for (int f = 0; f < layout.feature_dim; ++f) {
+        printf("%.3f", params->lowest_score_samples[last][f]);
+        if (f + 1 < layout.feature_dim) printf(",");
+      }
+      printf("]\n");
     }
   }
 #endif
 
   // 【保留】逐个详细输出（VERBOSE模式）
-  for (int i = 0; i < CONTEXT_DIM; i++) {
+  for (int i = 0; i < state_dim_runtime; i++) {
     LOH_DEBUG_PRINT_VERBOSE("[update_state_vector] state[%d] = %.6f\n", i,
                             params->context_state[i]);
   }
@@ -2258,6 +2401,11 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
   memcpy(shm_data.state, params->context_state, sizeof(double) * CONTEXT_DIM);
 
+  // 默认置零，避免不同编译开关下字段未写入导致的脏值
+  shm_data.total_evicted_bytes = 0;
+  shm_data.total_evicted_count = 0;
+  shm_data.pending_penalty_count = 0;
+
 #if LOH_ENABLE_PENALTY
   // 【修改】传递驱逐统计而非即时性能指标
   shm_data.total_evicted_bytes = params->epoch_evicted_bytes;
@@ -2271,6 +2419,12 @@ static void sync_with_actor_critic(LOH_params_t *params) {
       (unsigned long long)shm_data.total_evicted_count,
       shm_data.pending_penalty_count);
 #endif
+
+  // 评分模型配置（同步到 shm，便于 Python 端诊断/对齐）
+  shm_data.score_model = params->score_model;
+  shm_data.mlp_hidden = params->mlp_hidden;
+  shm_data.mlp_param_len = params->mlp_param_len;
+  memcpy(shm_data.mlp_params, params->mlp_params, sizeof(params->mlp_params));
 
   bool python_training = shm_data.is_training != 0;
 
@@ -2337,12 +2491,14 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 #endif
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
+  loh_state_layout_t dbg_layout = loh_get_state_layout();
   // 打印 context_dim 配置（C/Python 统一格式，便于日志解析）
   printf(
       "[CONTEXT_DIM_CONFIG] HITRATIO=%d HIT_MISS=%d CACHE=%d CAND=%d TOPK=%d "
       "AVGTOPK=%d REQUEST=%d TOTAL=%d\n",
-      MISSRATIO_DIM, HIT_MISS_DIM, CACHE_DIM, CAND_FEATURE_DIM,
-      TOPK_FEATURE_DIM, AVGTOPK_FEATURE_DIM, REQUEST_FEATURE_DIM, CONTEXT_DIM);
+      MISSRATIO_DIM, dbg_layout.hit_miss_dim, dbg_layout.cache_dim,
+      dbg_layout.cand_dim, dbg_layout.topk_dim, dbg_layout.avgtopk_dim,
+      dbg_layout.request_dim, dbg_layout.total_dim);
 
   // 按类别分组打印状态向量（C/Python 统一格式，便于日志解析）
   int offset = 0;
@@ -2359,69 +2515,71 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 #if LOH_INCLUDE_HIT_MISS_FEATURES
   // 2. HIT_MISS (24维: 6特征 × 2(hit/miss) × 2(mean/var))
   printf("[STATE_HIT_MISS] [seq %llu] [", seq_no);
-  for (int i = 0; i < HIT_MISS_DIM; i++) {
+  for (int i = 0; i < dbg_layout.hit_miss_dim; i++) {
     printf("%.6f", shm_data.state[offset + i]);
-    if (i < HIT_MISS_DIM - 1) printf(", ");
+    if (i < dbg_layout.hit_miss_dim - 1) printf(", ");
   }
   printf("]\n");
-  offset += HIT_MISS_DIM;
+  offset += dbg_layout.hit_miss_dim;
 #endif
 
 #if LOH_INCLUDE_CACHE_FEATURES
   // 3. CACHE (12维: 6特征 × 2(mean/var))
   printf("[STATE_CACHE] [seq %llu] [", seq_no);
-  for (int i = 0; i < CACHE_DIM; i++) {
+  for (int i = 0; i < dbg_layout.cache_dim; i++) {
     printf("%.6f", shm_data.state[offset + i]);
-    if (i < CACHE_DIM - 1) printf(", ");
+    if (i < dbg_layout.cache_dim - 1) printf(", ");
   }
   printf("]\n");
-  offset += CACHE_DIM;
+  offset += dbg_layout.cache_dim;
 #endif
 
 #if LOH_INCLUDE_CANDIDATE_FEATURES
   // 4. CAND (72维: 6组 × 12维, 每组对应一个特征来源)
-  for (int g = 0; g < 6; g++) {
+  int cand_block = dbg_layout.feature_dim * 2;
+  for (int g = 0; g < dbg_layout.candidate_source_dim; g++) {
     printf("[STATE_CAND_%d] [seq %llu] [", g, seq_no);
-    for (int i = 0; i < 12; i++) {
-      printf("%.6f", shm_data.state[offset + g * 12 + i]);
-      if (i < 11) printf(", ");
+    for (int i = 0; i < cand_block; i++) {
+      printf("%.6f", shm_data.state[offset + g * cand_block + i]);
+      if (i < cand_block - 1) printf(", ");
     }
     printf("]\n");
   }
-  offset += CAND_FEATURE_DIM;
+  offset += dbg_layout.cand_dim;
 #endif
 
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
   // 5. TOPK (N_TOPK_SAMPLES×6维: 8组 × 4样本 × 6特征)
   // N_TOPK_SAMPLES=32, 分为8组，每组4个样本
-  for (int g = 0; g < 8; g++) {
+  int topk_groups = N_TOPK_SAMPLES / SAMPLES_PER_EVICTION;
+  int topk_block = SAMPLES_PER_EVICTION * dbg_layout.feature_dim;
+  for (int g = 0; g < topk_groups; g++) {
     printf("[STATE_TOPK_%d] [seq %llu] [", g, seq_no);
-    // 每组4个样本 × 6特征 = 24维
-    for (int i = 0; i < 24; i++) {
-      printf("%.6f", shm_data.state[offset + g * 24 + i]);
-      if (i < 23) printf(", ");
+    for (int i = 0; i < topk_block; i++) {
+      printf("%.6f", shm_data.state[offset + g * topk_block + i]);
+      if (i < topk_block - 1) printf(", ");
     }
     printf("]\n");
   }
-  offset += TOPK_FEATURE_DIM;
+  offset += dbg_layout.topk_dim;
 #endif
 
 #if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES
   // 6. AVGTOPK (4×6=24维: 4个TOP位置 × 6特征)
   printf("[STATE_AVGTOPK] [seq %llu] [", seq_no);
-  for (int i = 0; i < AVGTOPK_FEATURE_DIM; i++) {
+  for (int i = 0; i < dbg_layout.avgtopk_dim; i++) {
     printf("%.6f", shm_data.state[offset + i]);
-    if (i < AVGTOPK_FEATURE_DIM - 1) printf(", ");
+    if (i < dbg_layout.avgtopk_dim - 1) printf(", ");
   }
   printf("]\n");
-  offset += AVGTOPK_FEATURE_DIM;
+  offset += dbg_layout.avgtopk_dim;
 #endif
 
 #if LOH_INCLUDE_REQUEST
   // 7. REQUEST 历史 (REQUEST_HISTORY_LEN×6)
   if (REQUEST_FEATURE_DIM > 0) {
     int request_history_len = REQUEST_HISTORY_LEN;
-    int per_req_dim = FEATURE_DIM;
+    int per_req_dim = dbg_layout.feature_dim;
     int max_print_requests = 4;  // 与 Python 端保持一致
     int actual_reqs = (request_history_len < max_print_requests)
                           ? request_history_len
@@ -2431,14 +2589,14 @@ static void sync_with_actor_critic(LOH_params_t *params) {
       printf("[STATE_REQUEST_%d] [seq %llu] [", r, seq_no);
       for (int i = 0; i < per_req_dim; i++) {
         int idx = offset + r * per_req_dim + i;
-        if (idx >= offset + REQUEST_FEATURE_DIM) break;
+        if (idx >= offset + dbg_layout.request_dim) break;
         printf("%.6f", shm_data.state[idx]);
-        if (i < per_req_dim - 1 && idx + 1 < offset + REQUEST_FEATURE_DIM)
+        if (i < per_req_dim - 1 && idx + 1 < offset + dbg_layout.request_dim)
           printf(", ");
       }
       printf("]\n");
     }
-    offset += REQUEST_FEATURE_DIM;
+    offset += dbg_layout.request_dim;
   }
 #endif
 #endif
@@ -2686,6 +2844,20 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
         lock_shared_memory(params);
         memcpy(params->weights, shm_data.weights, sizeof(double) * FEATURE_DIM);
+        if (params->score_model == LOH_SCORE_MODEL_MLP &&
+            shm_data.score_model == LOH_SCORE_MODEL_MLP) {
+          int plen = shm_data.mlp_param_len;
+          if (plen < 0) plen = 0;
+          if (plen > LOH_MLP_MAX_PARAMS) plen = LOH_MLP_MAX_PARAMS;
+          params->mlp_hidden = shm_data.mlp_hidden;
+          if (params->mlp_hidden > LOH_MLP_MAX_HIDDEN)
+            params->mlp_hidden = LOH_MLP_MAX_HIDDEN;
+          params->mlp_param_len = plen;
+          if (plen > 0) {
+            memcpy(params->mlp_params, shm_data.mlp_params,
+                   sizeof(double) * (size_t)plen);
+          }
+        }
         shm_data.weights_updated = 0;
         shm_data.ready_for_inference = 0;
         rewind(params->shm_file);
@@ -2762,6 +2934,20 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
     lock_shared_memory(params);
     memcpy(params->weights, shm_data.weights, sizeof(double) * FEATURE_DIM);
+    if (params->score_model == LOH_SCORE_MODEL_MLP &&
+        shm_data.score_model == LOH_SCORE_MODEL_MLP) {
+      int plen = shm_data.mlp_param_len;
+      if (plen < 0) plen = 0;
+      if (plen > LOH_MLP_MAX_PARAMS) plen = LOH_MLP_MAX_PARAMS;
+      params->mlp_hidden = shm_data.mlp_hidden;
+      if (params->mlp_hidden > LOH_MLP_MAX_HIDDEN)
+        params->mlp_hidden = LOH_MLP_MAX_HIDDEN;
+      params->mlp_param_len = plen;
+      if (plen > 0) {
+        memcpy(params->mlp_params, shm_data.mlp_params,
+               sizeof(double) * (size_t)plen);
+      }
+    }
     shm_data.weights_updated = 0;
     shm_data.ready_for_inference = 0;
     rewind(params->shm_file);
@@ -2780,11 +2966,18 @@ static void sync_with_actor_critic(LOH_params_t *params) {
         apply_timestamp, seq_no, apply_duration);
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
-    // 打印接收到的权重（C/Python 统一格式，便于日志解析）
-    printf("[WEIGHTS_UPDATED] [seq %llu] [", seq_no);
-    for (int i = 0; i < FEATURE_DIM; i++) {
+    // 打印接收到的权重（C/Python 统一格式，突出有效维度 vs 共享内存上限）
+    int score_feature_dim = loh_score_use_compound
+                                ? FEATURE_DIM
+                                : (loh_score_use_irt ? FEATURE_DIM : 3);
+    if (score_feature_dim < 0) score_feature_dim = 0;
+    if (score_feature_dim > FEATURE_DIM) score_feature_dim = FEATURE_DIM;
+
+    printf("[WEIGHTS_UPDATED] [seq %llu] dim=%d/%d [", seq_no,
+           score_feature_dim, FEATURE_DIM);
+    for (int i = 0; i < score_feature_dim; i++) {
       printf("%.6f", params->weights[i]);
-      if (i < FEATURE_DIM - 1) printf(", ");
+      if (i < score_feature_dim - 1) printf(", ");
     }
     printf("]\n");
 #endif
@@ -3146,31 +3339,36 @@ static void loh_record_request_features(LOH_params_t *params,
 cache_t *LOH_init(const common_cache_params_t ccache_params,
                   const char *cache_specific_params) {
   /* Startup identification print to make runtime variant clear in logs */
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH INIT] Initializing LOH (unified version with penalty support)\n");
-  LOH_DEBUG_PRINT_DETAILED("=== LOH Cache Initialize ===\n");
-  LOH_DEBUG_PRINT_DETAILED("LOH Debug Level: %d\n", LOH_DEBUG_LEVEL);
-  LOH_DEBUG_PRINT_DETAILED("Cache size: %lu\n", ccache_params.cache_size);
+  LOH_DEBUG_PRINT_CONFIG("=== LOH Cache Initialize ===\n");
+  LOH_DEBUG_PRINT_CONFIG("LOH Debug Level: %d\n", LOH_DEBUG_LEVEL);
+  LOH_DEBUG_PRINT_CONFIG("Cache size: %lu\n", ccache_params.cache_size);
 
   // 打印关键环境变量
-  LOH_DEBUG_PRINT_BASIC("[LOH INIT] === Environment Variables ===\n");
-  LOH_DEBUG_PRINT_BASIC("  LOH_SHM_KEY=%s\n", getenv("LOH_SHM_KEY")
-                                                  ? getenv("LOH_SHM_KEY")
-                                                  : "(default 9876)");
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_CONFIG("[LOH INIT] === Environment Variables ===\n");
+  LOH_DEBUG_PRINT_CONFIG("  LOH_SHM_KEY=%s\n", getenv("LOH_SHM_KEY")
+                                                   ? getenv("LOH_SHM_KEY")
+                                                   : "(default 9876)");
+  LOH_DEBUG_PRINT_CONFIG(
       "  LOH_ENABLE_SEMAPHORE=%s, LOH_DISABLE_SEMAPHORE=%s\n",
       getenv("LOH_ENABLE_SEMAPHORE") ? getenv("LOH_ENABLE_SEMAPHORE")
                                      : "(unset)",
       getenv("LOH_DISABLE_SEMAPHORE") ? getenv("LOH_DISABLE_SEMAPHORE")
                                       : "(unused)");
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_CONFIG(
       "  LOH_FEATURE_LOG1P_RAW=%s, LOH_FEATURE_LOG1P_RECIPROCAL=%s\n",
       getenv("LOH_FEATURE_LOG1P_RAW") ? getenv("LOH_FEATURE_LOG1P_RAW")
                                       : "(unset)",
       getenv("LOH_FEATURE_LOG1P_RECIPROCAL")
           ? getenv("LOH_FEATURE_LOG1P_RECIPROCAL")
           : "(unset)");
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOH_SCORE_MODEL=%s, LOH_MLP_HIDDEN=%s\n",
+      getenv("LOH_SCORE_MODEL") ? getenv("LOH_SCORE_MODEL")
+                                : "(default linear)",
+      getenv("LOH_MLP_HIDDEN") ? getenv("LOH_MLP_HIDDEN") : "(default 16)");
+  LOH_DEBUG_PRINT_CONFIG(
       "  Build-time dims: MISSRATIO=%d, HIT_MISS=%d, CACHE=%d, CAND=%d, "
       "TOPK=%d, AVGTOPK=%d, REQUEST=%d -> CONTEXT_DIM=%d\n",
       MISSRATIO_DIM, HIT_MISS_DIM, CACHE_DIM, CAND_FEATURE_DIM,
@@ -3231,6 +3429,33 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->weights[3] = 0.0;  // irt1
   params->weights[4] = 0.0;  // irt2
   params->weights[5] = 0.0;  // irt3
+
+  // ===== 评分模型选择：默认 linear；可选 mlp（通过环境变量切换，不影响旧选项）
+  // =====
+  params->score_model = LOH_SCORE_MODEL_LINEAR;
+  params->mlp_hidden = 16;
+  params->mlp_param_len = loh_mlp_param_len(params->mlp_hidden);
+  memset(params->mlp_params, 0, sizeof(params->mlp_params));
+  {
+    const char *m = getenv("LOH_SCORE_MODEL");
+    if (m && *m) {
+      if (g_ascii_strcasecmp(m, "mlp") == 0 ||
+          g_ascii_strcasecmp(m, "nn") == 0) {
+        params->score_model = LOH_SCORE_MODEL_MLP;
+      } else {
+        params->score_model = LOH_SCORE_MODEL_LINEAR;
+      }
+    }
+    const char *h = getenv("LOH_MLP_HIDDEN");
+    if (h && *h) {
+      int hv = atoi(h);
+      if (hv > 0) params->mlp_hidden = hv;
+    }
+    if (params->mlp_hidden > LOH_MLP_MAX_HIDDEN) {
+      params->mlp_hidden = LOH_MLP_MAX_HIDDEN;
+    }
+    params->mlp_param_len = loh_mlp_param_len(params->mlp_hidden);
+  }
 
   // 初始化特征统计数据
   memset(&params->recent_stats, 0, sizeof(feature_stats_t));
@@ -3298,7 +3523,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   memset(params->current_lowest_4, 0, sizeof(params->current_lowest_4));
   memset(params->current_lowest_scores, 0,
          sizeof(params->current_lowest_scores));
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH INIT] Reservoir sampling enabled: N_TOPK_SAMPLES=%d "
       "(每组%d个×8组), "
       "sample_dim=%d\n",
@@ -3313,8 +3538,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   memset(params->avgtopk_lowest_4, 0, sizeof(params->avgtopk_lowest_4));
   memset(params->avgtopk_lowest_scores, 0,
          sizeof(params->avgtopk_lowest_scores));
-  LOH_DEBUG_PRINT_BASIC("[LOH INIT] AvgTopK enabled: TOP%d × %d特征 = %d维\n",
-                        SAMPLES_PER_EVICTION, FEATURE_DIM, AVGTOPK_FEATURE_DIM);
+  LOH_DEBUG_PRINT_CONFIG("[LOH INIT] AvgTopK enabled: TOP%d × %d特征 = %d维\n",
+                         SAMPLES_PER_EVICTION, FEATURE_DIM,
+                         AVGTOPK_FEATURE_DIM);
 #endif
 
   // 如果设置了固定权重环境变量，则覆盖默认权重
@@ -3338,13 +3564,13 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       for (int i = 0; i < FEATURE_DIM; i++) {
         params->weights[i] = tmp[i];
       }
-      LOH_DEBUG_PRINT_BASIC(
+      LOH_DEBUG_PRINT_CONFIG(
           "[LOH INIT] LOH_FIXED_WEIGHTS from env: [%.3f, %.3f, %.3f, %.3f, "
           "%.3f, %.3f]\n",
           params->weights[0], params->weights[1], params->weights[2],
           params->weights[3], params->weights[4], params->weights[5]);
     } else {
-      LOH_DEBUG_PRINT_BASIC(
+      LOH_DEBUG_PRINT_CONFIG(
           "[LOH INIT] LOH_FIXED_WEIGHTS='%s' parsed %d values (need %d), "
           "keeping default weights\n",
           fixed_w, idx, FEATURE_DIM);
@@ -3373,8 +3599,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     if (env_enable && env_enable[0] != '\0') {
       loh_enable_rl = loh_parse_bool_env(env_enable, loh_enable_rl);
     }
-    LOH_DEBUG_PRINT_BASIC("[LOH INIT] enable_rl=%d (after env)\n",
-                          loh_enable_rl);
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] enable_rl=%d (after env)\n",
+                           loh_enable_rl);
   }
 
   // 1.2) cache_specific_params：learning-interval / enable-rl /
@@ -3400,8 +3626,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         loh_miss_ratio_weight = atof(value);
         // 自动设置byte_miss_ratio_weight为互补权重
         loh_byte_miss_ratio_weight = 1.0 - loh_miss_ratio_weight;
-        LOH_DEBUG_PRINT_BASIC(
-            "Set miss_ratio_weight=%.3f, byte_miss_ratio_weight=%.3f\n",
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] Set miss_ratio_weight=%.3f, "
+            "byte_miss_ratio_weight=%.3f\n",
             loh_miss_ratio_weight, loh_byte_miss_ratio_weight);
       }
     }
@@ -3432,14 +3659,17 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     params->shm_file = fopen(params->shm_filename, "r+b");
 
     // 打印共享内存结构体大小信息，用于调试
-    LOH_DEBUG_PRINT_BASIC("[LOH INIT] shm_data_t size=%zu bytes\n",
-                          sizeof(shm_data_t));
-    LOH_DEBUG_PRINT_BASIC("  - CONTEXT_DIM=%d (state array=%zu bytes)\n",
-                          CONTEXT_DIM, sizeof(double) * CONTEXT_DIM);
-    LOH_DEBUG_PRINT_BASIC(
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] shm_data_t size=%zu bytes\n",
+                           sizeof(shm_data_t));
+    LOH_DEBUG_PRINT_CONFIG("  - CONTEXT_DIM=%d (state array=%zu bytes)\n",
+                           CONTEXT_DIM, sizeof(double) * CONTEXT_DIM);
+    loh_state_layout_t shm_layout = loh_get_state_layout();
+    LOH_DEBUG_PRINT_CONFIG("  - ACTIVE_STATE_DIM=%d (subset of CONTEXT_DIM)\n",
+                           shm_layout.total_dim);
+    LOH_DEBUG_PRINT_CONFIG(
         "  - MISSRATIO_DIM=%d, HIT_MISS_DIM=%d, CACHE_DIM=%d\n", MISSRATIO_DIM,
         HIT_MISS_DIM, CACHE_DIM);
-    LOH_DEBUG_PRINT_BASIC(
+    LOH_DEBUG_PRINT_CONFIG(
         "  - CAND_FEATURE_DIM=%d, TOPK_FEATURE_DIM=%d, "
         "AVGTOPK_FEATURE_DIM=%d\n",
         CAND_FEATURE_DIM, TOPK_FEATURE_DIM, AVGTOPK_FEATURE_DIM);
@@ -3455,7 +3685,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       fflush(params->shm_file);
 
       if (written == 1) {
-        LOH_DEBUG_PRINT_BASIC(
+        LOH_DEBUG_PRINT_CONFIG(
             "[LOH INIT] Shared memory structure initialized (sizeof=%zu)\n",
             sizeof(shm_data_t));
       } else {
@@ -3487,8 +3717,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     }
 
     if (!params->sem_requested) {
-      LOH_DEBUG_PRINT_BASIC(
-          "[LOH] semaphore mode disabled via environment; using polling "
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] semaphore mode disabled via environment; using polling "
           "only\n");
     }
   }
@@ -3499,28 +3729,29 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     if (wait_mode_str != NULL) {
       if (strcasecmp(wait_mode_str, "blocked") == 0) {
         loh_wait_mode_blocked = 1;
-        LOH_DEBUG_PRINT_BASIC("[LOH] Wait mode: BLOCKED (等待权重更新)\n");
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] Wait mode: BLOCKED (等待权重更新)\n");
       } else if (strcasecmp(wait_mode_str, "nonblocked") == 0 ||
                  strcasecmp(wait_mode_str, "non-blocked") == 0) {
         loh_wait_mode_blocked = 0;
-        LOH_DEBUG_PRINT_BASIC(
-            "[LOH] Wait mode: NON-BLOCKED (训练时使用缓存权重)\n");
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] Wait mode: NON-BLOCKED (训练时使用缓存权重)\n");
       } else {
-        LOH_DEBUG_PRINT_BASIC(
-            "[LOH] WARNING: Invalid LOH_WAIT_MODE='%s', using default "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] WARNING: Invalid LOH_WAIT_MODE='%s', using default "
             "(BLOCKED)\n",
             wait_mode_str);
       }
     } else {
-      LOH_DEBUG_PRINT_BASIC("[LOH] Wait mode: default (BLOCKED)\n");
+      LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Wait mode: default (BLOCKED)\n");
     }
   }
 
   // ===【打印 Size 数据结构模式（已在前面初始化时读取环境变量）】===
   {
-    LOH_DEBUG_PRINT_BASIC("[LOH] Size data structure: %s\n",
-                          loh_use_size_buckets ? "SIZE_BUCKETS (全量分桶)"
-                                               : "SIZE_HEAP (Top-K堆)");
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Size data structure: %s\n",
+                           loh_use_size_buckets ? "SIZE_BUCKETS (全量分桶)"
+                                                : "SIZE_HEAP (Top-K堆)");
   }
 
   // 3) 特征变换 / 归一化相关
@@ -3542,8 +3773,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
 
     loh_feature_normalize = loh_parse_bool_env(norm, loh_feature_normalize);
 
-    LOH_DEBUG_PRINT_BASIC(
-        "[LOH] feature mode: LOG1P=%d, RECIPROCAL=%d, NORMALIZE=%d\n",
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] feature mode: LOG1P=%d, RECIPROCAL=%d, NORMALIZE=%d\n",
         loh_feature_log1p, loh_feature_log1p_reciprocal, loh_feature_normalize);
   }
 
@@ -3571,7 +3802,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       loh_feature_norm_max[5] = val;
     }
 
-    LOH_DEBUG_PRINT_BASIC(
+    LOH_DEBUG_PRINT_CONFIG(
         "[LOH INIT] Feature Norm Max: Recency=%.1e, Freq=%.1e, Size=%.1e, "
         "IRT=%.1e\n",
         loh_feature_norm_max[0], loh_feature_norm_max[1],
@@ -3583,8 +3814,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     const char *use_signs = getenv("LOH_USE_HEURISTIC_SIGNS");
     int flag = loh_parse_bool_env(use_signs, loh_use_heuristic_signs);
     loh_use_heuristic_signs = flag ? 1 : 0;
-    LOH_DEBUG_PRINT_BASIC("[LOH INIT] Heuristic signs: %s\n",
-                          loh_use_heuristic_signs ? "ENABLED" : "DISABLED");
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Heuristic signs: %s\n",
+                           loh_use_heuristic_signs ? "ENABLED" : "DISABLED");
   }
 
   // 3.4) 评分特征模式（LOH_SCORE_USE_IRT / LOH_SCORE_USE_COMPOUND）
@@ -3606,9 +3837,19 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       loh_score_use_irt = 0;
     }
 
-    LOH_DEBUG_PRINT_BASIC(
+    LOH_DEBUG_PRINT_CONFIG(
         "[LOH INIT] Score feature mode: USE_IRT=%d, USE_COMPOUND=%d\n",
         loh_score_use_irt, loh_score_use_compound);
+  }
+
+  {
+    loh_state_layout_t init_layout = loh_get_state_layout();
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Runtime state dims: HIT_MISS=%d, CACHE=%d, CAND=%d, "
+        "TOPK=%d, AVGTOPK=%d, REQUEST=%d -> ACTIVE=%d/%d\n",
+        init_layout.hit_miss_dim, init_layout.cache_dim, init_layout.cand_dim,
+        init_layout.topk_dim, init_layout.avgtopk_dim, init_layout.request_dim,
+        init_layout.total_dim, CONTEXT_DIM);
   }
 
 #if LOH_ENABLE_PENALTY
@@ -3626,7 +3867,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     params->penalty_queue_capacity = PENALTY_QUEUE_INIT_CAPACITY;
     params->penalty_queue_size = 0;
     params->pending_penalty_count = 0;
-    LOH_DEBUG_PRINT_BASIC(
+    LOH_DEBUG_PRINT_CONFIG(
         "[LOH INIT] Penalty queue initialized (capacity=%d)\n",
         PENALTY_QUEUE_INIT_CAPACITY);
   }
@@ -3653,7 +3894,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       chmod(params->shm_filename, 0666);
     }
   } else if (loh_enable_rl) {
-    LOH_DEBUG_PRINT_BASIC("Successfully opened existing shared memory file\n");
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Successfully opened existing shared memory file\n");
   }
 
   // 如果关闭了RL，确保不持有未使用的SHM资源
@@ -3685,8 +3927,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       }
     }
     if (!loh_sem_init(params)) {
-      LOH_DEBUG_PRINT_BASIC(
-          "[LOH] failed to init POSIX semaphores, fall back to polling mode\n");
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] failed to init POSIX semaphores, fall back to polling "
+          "mode\n");
     }
   }
 
@@ -3694,7 +3937,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->cache_ptr = cache;
 
   // 打印初始化时的 RL 同步间隔，便于调试与确认运行时值
-  LOH_DEBUG_PRINT_BASIC(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH INIT] rl_update_interval=%ld, enable_rl=%d, sem_requested=%d\n",
       (long)params->rl_update_interval, loh_enable_rl, params->sem_requested);
 
@@ -4732,60 +4975,110 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
     cache_obj_t *candidate = params->candidates[i];
     const double *f = feat_buf[i];
     double score = 0.0;
-    int64_t recency_raw = params->current_timestamp - candidate->LOH.last_access_counter;;
+    int64_t recency_raw =
+        params->current_timestamp - candidate->LOH.last_access_counter;
+    ;
     int64_t freq_raw = (int64_t)candidate->LOH.access_count;
     int64_t size_bytes = (int64_t)candidate->obj_size;
     int64_t irt1_raw = candidate->LOH.irt_values[0];
     int64_t irt2_raw = candidate->LOH.irt_values[1];
     int64_t irt3_raw = candidate->LOH.irt_values[2];
-    LOH_DEBUG_PRINT_DETAILED("[SCORE CALC] Candidate obj_id=%llu, recency_raw=%ld, freq_raw=%ld, size_bytes=%ld, irt1_raw=%ld, irt2_raw=%ld, irt3_raw=%ld\n", (unsigned long long)candidate->obj_id, recency_raw, freq_raw, size_bytes, irt1_raw, irt2_raw, irt3_raw);
+    LOH_DEBUG_PRINT_DETAILED(
+        "[SCORE CALC] Candidate obj_id=%llu, recency_raw=%ld, freq_raw=%ld, "
+        "size_bytes=%ld, irt1_raw=%ld, irt2_raw=%ld, irt3_raw=%ld\n",
+        (unsigned long long)candidate->obj_id, recency_raw, freq_raw,
+        size_bytes, irt1_raw, irt2_raw, irt3_raw);
 
-    if (loh_score_use_compound) {
-      // compound 模式：使用 recency/freq/size 以及它们构造的三个复合特征
-      const double rec = f[0];
-      const double freq = f[1];
-      const double size = f[2];
+    if (params->score_model == LOH_SCORE_MODEL_MLP) {
+      // MLP 模式：per-candidate 非线性打分（默认输入维度为6）
+      double x[FEATURE_DIM] = {0};
+      if (loh_score_use_compound) {
+        const double rec = f[0];
+        const double freq = f[1];
+        const double size = f[2];
 
-      double freq_recency = 0.0;
-      double freq_size = 0.0;
-      double recency_size = 0.0;
+        double freq_recency = 0.0;
+        double freq_size = 0.0;
+        double recency_size = 0.0;
 
-      if (loh_feature_log1p) {
-        // LOG1P 模式：使用比率与乘积，注意防止除零
-        const double eps = 1e-12;
-        const double safe_rec =
-            (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
-        const double safe_size =
-            (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+        if (loh_feature_log1p) {
+          const double eps = 1e-12;
+          const double safe_rec =
+              (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+          const double safe_size =
+              (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+          freq_recency = freq / safe_rec;
+          freq_size = freq / safe_size;
+          recency_size = rec * size;
+        } else {
+          freq_recency = freq * rec;
+          freq_size = freq * size;
+          recency_size = rec * size;
+        }
 
-        freq_recency = freq / safe_rec;
-        freq_size = freq / safe_size;
-        recency_size = rec * size;
+        x[0] = rec;
+        x[1] = freq;
+        x[2] = size;
+        x[3] = freq_recency;
+        x[4] = freq_size;
+        x[5] = recency_size;
       } else {
-        // 非 LOG1P 模式：使用乘积形式
-        freq_recency = freq * rec;
-        freq_size = freq * size;
-        recency_size = rec * size;
+        // 非 compound：使用 raw features（IRT 关闭时后3维保持0）
+        int used_dim = loh_score_use_irt ? FEATURE_DIM : 3;
+        for (int k = 0; k < used_dim; ++k) {
+          x[k] = f[k];
+        }
       }
+      score = loh_mlp_eval(params, x);
+    } else {
+      // 线性模式：保持原逻辑（weights + sign）
+      if (loh_score_use_compound) {
+        // compound 模式：使用 recency/freq/size 以及它们构造的三个复合特征
+        const double rec = f[0];
+        const double freq = f[1];
+        const double size = f[2];
 
-      const double terms[6] = {rec,          freq,      size,
-                               freq_recency, freq_size, recency_size};
-      for (int k = 0; k < 6; ++k) {
-        score += terms[k] * w[k] * sign[k];
-        LOH_DEBUG_PRINT_DETAILED("compound:[%d] term=%.6f w=%.6f sign=%.1f "
-                              "contrib=%.6f\n",
-                              k, terms[k], w[k], sign[k],
-                              terms[k] * w[k] * sign[k]);
-      }
-    }
-    else {
-      // 非 compound 模式：根据 loh_score_use_irt 选择是否包含 3 个 IRT 分量
-      int used_dim = loh_score_use_irt ? FEATURE_DIM : 3;
+        double freq_recency = 0.0;
+        double freq_size = 0.0;
+        double recency_size = 0.0;
 
-      for (int k = 0; k < used_dim; ++k) {
-        score += f[k] * w[k] * sign[k];
-        LOH_DEBUG_PRINT_DETAILED("no compound:[%d] f=%.6f w=%.6f sign=%.1f contrib=%.6f\n", k,
-                              f[k], w[k], sign[k], f[k] * w[k] * sign[k]);
+        if (loh_feature_log1p) {
+          // LOG1P 模式：使用比率与乘积，注意防止除零
+          const double eps = 1e-12;
+          const double safe_rec =
+              (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+          const double safe_size =
+              (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+
+          freq_recency = freq / safe_rec;
+          freq_size = freq / safe_size;
+          recency_size = rec * size;
+        } else {
+          // 非 LOG1P 模式：使用乘积形式
+          freq_recency = freq * rec;
+          freq_size = freq * size;
+          recency_size = rec * size;
+        }
+
+        const double terms[6] = {rec,          freq,      size,
+                                 freq_recency, freq_size, recency_size};
+        for (int k = 0; k < 6; ++k) {
+          score += terms[k] * w[k] * sign[k];
+          LOH_DEBUG_PRINT_DETAILED(
+              "compound:[%d] term=%.6f w=%.6f sign=%.1f "
+              "contrib=%.6f\n",
+              k, terms[k], w[k], sign[k], terms[k] * w[k] * sign[k]);
+        }
+      } else {
+        // 非 compound 模式：根据 loh_score_use_irt 选择是否包含 3 个 IRT 分量
+        int used_dim = loh_score_use_irt ? FEATURE_DIM : 3;
+
+        for (int k = 0; k < used_dim; ++k) {
+          score += f[k] * w[k] * sign[k];
+          LOH_DEBUG_PRINT_DETAILED(
+              "no compound:[%d] f=%.6f w=%.6f sign=%.1f contrib=%.6f\n", k,
+              f[k], w[k], sign[k], f[k] * w[k] * sign[k]);
+        }
       }
     }
     if (score < min_score) {
@@ -7040,9 +7333,9 @@ static void size_buckets_get_candidates(LOH_params_t *params,
       "[SIZE_BEFORE_DEDUP] req=%ld count=%d: ", (long)params->current_timestamp,
       temp_count > 16 ? 16 : temp_count);
   for (int i = 0; i < temp_count && i < 16; i++) {
-    LOH_DEBUG_PRINT_DETAILED("%llu(%.2fMB) ",
-                          (unsigned long long)temp_objs[i]->obj_id,
-                          (double)temp_objs[i]->obj_size / (1024.0 * 1024.0));
+    LOH_DEBUG_PRINT_DETAILED(
+        "%llu(%.2fMB) ", (unsigned long long)temp_objs[i]->obj_id,
+        (double)temp_objs[i]->obj_size / (1024.0 * 1024.0));
   }
   LOH_DEBUG_PRINT_DETAILED("\n");
   // 从排序后的数组中选择最大的 max_candidates 个对象

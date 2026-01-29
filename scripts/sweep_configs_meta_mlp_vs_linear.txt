@@ -1,0 +1,9 @@
+# 3Mreq comparison: linear best vs MLP scorer
+# Trace: data/MetaCDN/meta_reag.oracleGeneral.zst, cache_ratio=0.1
+# Keep all else identical to isolate score model impact.
+
+# Linear: SAC + no-softmax + action_scale=1.0 + RL_UPDATE_INTERVAL=50
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=50 LOH_SCORE_MODEL=linear
+
+# MLP scorer (per-candidate): same cadence + MLP hidden=16
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=50 LOH_SCORE_MODEL=mlp LOH_MLP_HIDDEN=16

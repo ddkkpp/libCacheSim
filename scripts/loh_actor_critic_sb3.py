@@ -1,8 +1,40 @@
 #!/usr/bin/env python3
-# Print actual script filename at runtime (dynamic)
 import os, sys
+
+
+def _resolve_debug_level() -> int:
+    try:
+        return int(os.environ.get("LOH_DEBUG_LEVEL", "2").strip())
+    except Exception:
+        return 1
+
+
+LOH_DEBUG_LEVEL = _resolve_debug_level()
+LOH_DEBUG_CONFIG_LEVEL = 0
+LOH_DEBUG_BASIC_LEVEL = 1
+LOH_DEBUG_VERBOSE_LEVEL = 2
+
+
+def LOH_DEBUG_CONFIG_ENABLED() -> bool:
+    return LOH_DEBUG_LEVEL >= LOH_DEBUG_CONFIG_LEVEL
+
+
+def LOH_DEBUG_BASIC() -> bool:
+    return LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC_LEVEL
+
+
+def LOH_DEBUG_VERBOSE() -> bool:
+    return LOH_DEBUG_LEVEL >= LOH_DEBUG_VERBOSE_LEVEL
+
+
+def loh_print_config(message: str) -> None:
+    if LOH_DEBUG_CONFIG_ENABLED():
+        print(message)
+
+
+# Print actual script filename at runtime (dynamic)
 _loh_script_name = os.path.basename(__file__) if '__file__' in globals() and __file__ else (os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else '<unknown>')
-print(f"[LOH SCRIPT] { _loh_script_name }")
+loh_print_config(f"[LOH SCRIPT] { _loh_script_name }")
 
 #该版本根据callback函数管理训练/推理状态切换
 
@@ -19,7 +51,7 @@ import errno
 
 import time
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 import cProfile
 import pstats
 from collections import defaultdict
@@ -30,7 +62,7 @@ import math
 # ============================================================
 # 1) 调试 / Profiling
 #   - LOH_ENABLE_PROFILING        : 是否开启 Python 端耗时统计
-#   - LOH_DEBUG_LEVEL             : 调试等级（通过代码常量配置，脚本内使用）
+#   - LOH_DEBUG_LEVEL             : 调试等级（0=quiet,1=basic,2=verbose，可通过环境变量覆盖）
 #
 # 2) IPC 与同步 / 共享内存
 #   - LOH_SHM_KEY                 : 共享内存与信号量 key（与 C 端一致）
@@ -80,10 +112,10 @@ import math
 #
 # 6) RL 算法选择与超参
 #   - LOH_RL_ALGO                         : 选择 RL 算法 (SAC/PPO/PPO_LSTM/TD3)
-#   - SAC_EXCLUDE_RECENT_STEPS / LOH_EXCLUDE_RECENT_STEPS: SAC 训练时排除最近样本
+#   - LOH_EXCLUDE_RECENT_STEPS            : SAC 训练时排除最近样本
 #   - PPO_* / SAC_* / TD3_*               : 各算法超参覆盖（buffer_size 等）
-#   - LOH_PPO_SOFT_PRIOR                  : PPO 是否启用动作头软先验
-#   - LOH_PPO_SOFT_PRIOR_BIAS             : PPO 软先验强度
+#   - LOH_SOFT_PRIOR                      : 是否启用动作头软先验（所有算法通用）
+#   - LOH_SOFT_PRIOR_BIAS                 : 软先验强度
 #   - LOH_USE_HEURISTIC_SIGNS             : PPO soft prior 与 C 端启发式符号对齐
 #
 # 7) 日志与 run 目录
@@ -115,18 +147,23 @@ DEFAULT_LOH_INCLUDE_HIT_MISS_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_CACHE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_TOPK_CANDIDATE_FEATURES = "0"
-DEFAULT_LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES = "1"
+DEFAULT_LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_REQUEST = "0"
 DEFAULT_RL_STATE_USE_MISSRATIO = "1"
 
 # 4) 观测 / 动作空间 与评分模式
 DEFAULT_LOH_FEATURE_LOG1P = "0"
-DEFAULT_LOH_DUAL_CHANNEL = "0"
-DEFAULT_LOH_USE_SOFTMAX = "1"
+DEFAULT_LOH_DUAL_CHANNEL = "0" # 是否启用正负双通道动作空间
+DEFAULT_LOH_USE_SOFTMAX = "1" # 是否对动作 logits 做 softmax
 DEFAULT_LOH_SOFTMAX_TEMP = "1.0"
+DEFAULT_LOH_ACTION_BOUND = "1.0"        # 动作空间 bounds: [-bound, bound]
+DEFAULT_LOH_ACTION_SCALE = "1.0"        # 动作 logits 放大（配合 softmax/temp 使用）
+DEFAULT_LOH_WEIGHT_EMA = "0.0"          # 写回权重 EMA 平滑系数（0=关闭）
+DEFAULT_LOH_WEIGHT_CLIP = "0.0"         # 写回权重幅度裁剪（0=关闭）
 DEFAULT_LOH_FIXED_OBS = "0"
 DEFAULT_LOH_SCORE_USE_IRT = "1"
 DEFAULT_LOH_SCORE_USE_COMPOUND = "0"
+DEFAULT_LOH_USE_HEURISTIC_SIGNS = "1"
 
 # 5) 奖励 / 惩罚与趋势
 DEFAULT_LOH_ENABLE_PENALTY = "0"
@@ -149,24 +186,20 @@ DEFAULT_LOH_MISS_COMPONENT = "neg"
 DEFAULT_LOH_REWARD_EMA = "0"
 DEFAULT_LOH_REWARD_EMAWINDOW = "10"
 DEFAULT_LOH_MISS_RATIO_WEIGHT = "1.0"
+DEFAULT_LOH_REWARD_MODE = "absolute"    # absolute | delta
+DEFAULT_LOH_REWARD_SCALE = "1.0"        # reward 乘法缩放（1=不缩放）
 
 # 6) RL 算法选择与超参（仅列出本脚本直接使用的关键键）
 DEFAULT_LOH_RL_ALGO = "SAC"
-DEFAULT_SAC_EXCLUDE_RECENT_STEPS = "2000"
 DEFAULT_LOH_EXCLUDE_RECENT_STEPS = "2000"
+DEFAULT_LOH_SOFT_PRIOR = "0"
+DEFAULT_LOH_SOFT_PRIOR_BIAS = "0.5"
 
 # 7) 运行目录 / 日志
 DEFAULT_RUN_TIMESTAMP = ""  # 为空时使用当前时间
 
 # ====== 调试/统计输出全局控制 ======
 # 0: 无调试输出  1: 仅关键统计  2: 详细调试
-LOH_DEBUG_LEVEL = 2
-
-def LOH_DEBUG_BASIC():
-    return LOH_DEBUG_LEVEL >= 1
-
-def LOH_DEBUG_VERBOSE():
-    return LOH_DEBUG_LEVEL >= 2
 
 # ====== Profiling 开关 ======
 # LOH_ENABLE_PROFILING: 1=开启计时统计, 0=关闭（默认关闭以减少开销）
@@ -477,14 +510,24 @@ GLOBAL_TIMER = FunctionTimer()
 from stable_baselines3 import PPO
 from stable_baselines3 import SAC
 from stable_baselines3 import TD3
+from stable_baselines3 import DDPG
+from stable_baselines3 import A2C
 from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.utils import set_random_seed
 import numpy as np
+import random
 
 # 可选：Recurrent PPO（LSTM 策略），需要 sb3-contrib
 try:
     from sb3_contrib import RecurrentPPO
 except Exception:
     RecurrentPPO = None
+
+# 可选：TQC（Truncated Quantile Critics，适合连续动作），需要 sb3-contrib
+try:
+    from sb3_contrib import TQC
+except Exception:
+    TQC = None
 
 
 class ProfiledSAC(SAC):
@@ -505,6 +548,15 @@ class ProfiledPPO(PPO):
             return super().train()
 
 
+class ProfiledA2C(A2C):
+    """A2C 带全局计时的子类"""
+
+    def train(self):
+        """Measure total A2C.train time."""
+        with GLOBAL_TIMER.time_function("A2C.train_total"):
+            return super().train()
+
+
 class ProfiledTD3(TD3):
     """TD3 带全局计时的子类"""
 
@@ -512,6 +564,27 @@ class ProfiledTD3(TD3):
         """Measure total TD3.train time."""
         with GLOBAL_TIMER.time_function("TD3.train_total"):
             return super().train(gradient_steps, batch_size)
+
+
+class ProfiledDDPG(DDPG):
+    """DDPG 带全局计时的子类"""
+
+    def train(self, gradient_steps: int, batch_size: int = 64):
+        """Measure total DDPG.train time."""
+        with GLOBAL_TIMER.time_function("DDPG.train_total"):
+            return super().train(gradient_steps, batch_size)
+
+
+if TQC is not None:
+    class ProfiledTQC(TQC):
+        """TQC 带全局计时的子类（sb3-contrib）"""
+
+        def train(self, gradient_steps: int, batch_size: int = 64):
+            with GLOBAL_TIMER.time_function("TQC.train_total"):
+                return super().train(gradient_steps, batch_size)
+else:
+    class ProfiledTQC:  # type: ignore
+        pass
 
 
 from stable_baselines3 import PPO  # 保留作参考
@@ -595,7 +668,43 @@ except Exception:
 
 # --- 常量定义 ---
 # C 端共享内存中的 FEATURE_DIM 固定为 6（recency/freq/size/3×IRT）
+# 维度命名与 C 端对齐：
+#   FEATURE_DIM        → 共享内存 state[] 上限 + 策略权重长度（恒为6）。
+#   STATE_FEATURE_DIM  → 运行时真实写入/读取的特征列数（IRT 关闭时降为3）。
+#   CONTEXT_DIM        → 编译期固定的共享内存长度，由 LOH_INCLUDE_* 宏决定。
+#   STATE_DIM          → 运行时有效状态长度（<= CONTEXT_DIM）。
+# C/Python 在 loh_get_state_layout()/get_state_dim() 中用相同公式，保证共享内存布局一致。
 FEATURE_DIM = 6
+
+# 评分模型选择（与 C 端对齐）：linear(默认) / mlp
+LOH_SCORE_MODEL = os.environ.get("LOH_SCORE_MODEL", "linear").strip().lower()
+LOH_SCORE_MODEL_LINEAR = 0
+LOH_SCORE_MODEL_MLP = 1
+
+# MLP 配置：固定输入维度=6（与 FEATURE_DIM 一致），单隐层 ReLU，输出 1
+LOH_MLP_MAX_HIDDEN = 64
+LOH_MLP_MAX_PARAMS = LOH_MLP_MAX_HIDDEN * (FEATURE_DIM + 2) + 1
+
+def loh_mlp_param_len(hidden: int) -> int:
+    try:
+        h = int(hidden)
+    except Exception:
+        h = 16
+    if h <= 0:
+        return 0
+    if h > LOH_MLP_MAX_HIDDEN:
+        h = LOH_MLP_MAX_HIDDEN
+    return h * (FEATURE_DIM + 2) + 1
+
+try:
+    LOH_MLP_HIDDEN = int(os.environ.get("LOH_MLP_HIDDEN", "16").strip())
+except Exception:
+    LOH_MLP_HIDDEN = 16
+if LOH_MLP_HIDDEN <= 0:
+    LOH_MLP_HIDDEN = 16
+if LOH_MLP_HIDDEN > LOH_MLP_MAX_HIDDEN:
+    LOH_MLP_HIDDEN = LOH_MLP_MAX_HIDDEN
+LOH_MLP_PARAM_DIM = loh_mlp_param_len(LOH_MLP_HIDDEN)
 
 # 评分特征模式（需与 C 端 LOH_SCORE_USE_IRT / LOH_SCORE_USE_COMPOUND 保持一致）：
 #   - 默认：LOH_SCORE_USE_IRT=1, LOH_SCORE_USE_COMPOUND=0 → 使用 6 维基础特征
@@ -634,14 +743,34 @@ elif LOH_SCORE_USE_IRT == 0:
 else:
     SCORE_FEATURE_DIM = 6
 
+# Runtime state特征数量：当关闭 IRT 时仅保留 rec/freq/size 三维
+STATE_FEATURE_DIM = FEATURE_DIM if LOH_SCORE_USE_IRT else 3
+
 LOH_DUAL_CHANNEL = _env_flag("LOH_DUAL_CHANNEL", DEFAULT_LOH_DUAL_CHANNEL == "1")
 # Softmax default: True (always enabled by default unless explicitly disabled)
 LOH_USE_SOFTMAX = _env_flag("LOH_USE_SOFTMAX", DEFAULT_LOH_USE_SOFTMAX == "1")
 
-ACTION_DIM = 2 * SCORE_FEATURE_DIM if LOH_DUAL_CHANNEL else SCORE_FEATURE_DIM
-print(f"[LOH CONFIG] Dual-channel action space: {'ENABLED' if LOH_DUAL_CHANNEL else 'DISABLED'} (ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, FEATURE_DIM={FEATURE_DIM})")
-print(f"[LOH CONFIG] Softmax activation: {'ENABLED' if LOH_USE_SOFTMAX else 'DISABLED'}")
-print(f"[LOH CONFIG] Score feature mode: LOH_SCORE_USE_IRT={LOH_SCORE_USE_IRT}, LOH_SCORE_USE_COMPOUND={LOH_SCORE_USE_COMPOUND}")
+# 动作维度：
+# - linear: 兼容旧逻辑（可选 dual-channel / softmax 映射为 weights）
+# - mlp: 直接输出 MLP 参数（不使用 dual-channel/softmax，但不移除旧开关）
+if LOH_SCORE_MODEL in {"mlp", "nn"}:
+    ACTION_DIM = int(LOH_MLP_PARAM_DIM)
+    if LOH_DUAL_CHANNEL:
+        loh_print_config("[LOH CONFIG] LOH_SCORE_MODEL=mlp: ignoring LOH_DUAL_CHANNEL (forcing single channel)")
+        LOH_DUAL_CHANNEL = False
+    if LOH_USE_SOFTMAX:
+        loh_print_config("[LOH CONFIG] LOH_SCORE_MODEL=mlp: ignoring LOH_USE_SOFTMAX (raw params)")
+        LOH_USE_SOFTMAX = False
+else:
+    ACTION_DIM = 2 * SCORE_FEATURE_DIM if LOH_DUAL_CHANNEL else SCORE_FEATURE_DIM
+
+loh_print_config(
+    f"[LOH CONFIG] Score model: {LOH_SCORE_MODEL} (ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, FEATURE_DIM={FEATURE_DIM}, MLP_HIDDEN={LOH_MLP_HIDDEN})"
+)
+loh_print_config(f"[LOH CONFIG] Dual-channel action space: {'ENABLED' if LOH_DUAL_CHANNEL else 'DISABLED'}")
+loh_print_config(f"[LOH CONFIG] Softmax activation: {'ENABLED' if LOH_USE_SOFTMAX else 'DISABLED'}")
+loh_print_config(f"[LOH CONFIG] Score feature mode: LOH_SCORE_USE_IRT={LOH_SCORE_USE_IRT}, LOH_SCORE_USE_COMPOUND={LOH_SCORE_USE_COMPOUND}")
+loh_print_config(f"[LOH CONFIG] State feature dim: {STATE_FEATURE_DIM} (CONTEXT feature cap={FEATURE_DIM})")
 
 # --- 状态维度配置（与 C 端 LOH_INCLUDE_* 宏对齐）---
 def _env_truthy(name: str) -> bool:
@@ -650,51 +779,56 @@ def _env_truthy(name: str) -> bool:
         return False
     return v.strip().lower() in {"1", "true", "yes", "on"}
 
-def get_state_dim() -> int:
-    """获取完整 CONTEXT_DIM：由多个可选模块组成。
+def get_state_dim(feature_dim: int, scope: str = "STATE") -> int:
+    """根据特征数量计算状态向量长度。
+
+    Args:
+        feature_dim: 单个对象的特征数量。启用 IRT/compound 时为 6，关闭 IRT 时为 3。
 
     状态向量结构（从共享内存读取）：
     - MISSRATIO_DIM = 2 (始终传递，hit_ratio + byte_hit_ratio)
-    - HIT_MISS_DIM = 24 if LOH_INCLUDE_HIT_MISS_FEATURES else 0
-    - CACHE_DIM = 12 if LOH_INCLUDE_CACHE_FEATURES else 0
-    - CAND_FEATURE_DIM = 72 if LOH_INCLUDE_CANDIDATE_FEATURES else 0
-    - TOPK_FEATURE_DIM = N_TOPK_SAMPLES*6 if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES else 0
-    - AVGTOPK_FEATURE_DIM = 4*6=24 if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES else 0
+    - HIT_MISS_DIM = feature_dim * 4 if LOH_INCLUDE_HIT_MISS_FEATURES else 0
+    - CACHE_DIM = feature_dim * 2 if LOH_INCLUDE_CACHE_FEATURES else 0
+    - CAND_FEATURE_DIM = source_dim * feature_dim * 2 if LOH_INCLUDE_CANDIDATE_FEATURES else 0
+    - TOPK_FEATURE_DIM = N_TOPK_SAMPLES * feature_dim if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES else 0
+    - AVGTOPK_FEATURE_DIM = SAMPLES_PER_EVICTION * feature_dim if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES else 0
+    - REQUEST_FEATURE_DIM = REQUEST_HISTORY_LEN * feature_dim if LOH_INCLUDE_REQUEST else 0
 
     注：前2维(hit_ratio, byte_hit_ratio)始终从C端传递，因为奖励计算需要。
     Python端通过 RL_STATE_USE_MISSRATIO 环境变量控制是否在RL观测中使用这两维。
     """
     N_TOPK_SAMPLES = 32  # 必须与 C 端一致
     SAMPLES_PER_EVICTION = 4  # 必须与 C 端一致
+    candidate_source_dim = FEATURE_DIM if feature_dim >= FEATURE_DIM else feature_dim
 
     # Miss Ratio 特征 (2维) - 始终传递
     missratio_dim = 2
 
     # Hit/Miss 特征统计 (24维)
     hit_miss_flag = os.environ.get("LOH_INCLUDE_HIT_MISS_FEATURES", DEFAULT_LOH_INCLUDE_HIT_MISS_FEATURES).strip().lower()
-    hit_miss_dim = 24 if hit_miss_flag in {"1", "true", "yes", "on"} else 0
+    hit_miss_dim = (feature_dim * 4) if hit_miss_flag in {"1", "true", "yes", "on"} else 0
 
     # Cache 特征统计 (12维)
     cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", DEFAULT_LOH_INCLUDE_CACHE_FEATURES).strip().lower()
-    cache_dim = 12 if cache_flag in {"1", "true", "yes", "on"} else 0
+    cache_dim = (feature_dim * 2) if cache_flag in {"1", "true", "yes", "on"} else 0
 
     # 候选集合统计 (72维)
     cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", DEFAULT_LOH_INCLUDE_CANDIDATE_FEATURES).strip().lower()
-    cand_dim = 72 if cand_flag in {"1", "true", "yes", "on"} else 0
+    cand_dim = (candidate_source_dim * feature_dim * 2) if cand_flag in {"1", "true", "yes", "on"} else 0
 
     # TopK 候选对象特征 (N_TOPK_SAMPLES*6维) - 默认关闭
     topk_flag = os.environ.get("LOH_INCLUDE_TOPK_CANDIDATE_FEATURES", DEFAULT_LOH_INCLUDE_TOPK_CANDIDATE_FEATURES).strip().lower()
-    topk_dim = (N_TOPK_SAMPLES * 6) if topk_flag in {"1", "true", "yes", "on"} else 0
+    topk_dim = (N_TOPK_SAMPLES * feature_dim) if topk_flag in {"1", "true", "yes", "on"} else 0
 
     # AvgTopK 候选对象平均特征 (4*6=24维) - 默认开启
     avgtopk_flag = os.environ.get("LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES", DEFAULT_LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES).strip().lower()
-    avgtopk_dim = (SAMPLES_PER_EVICTION * 6) if avgtopk_flag in {"1", "true", "yes", "on"} else 0
+    avgtopk_dim = (SAMPLES_PER_EVICTION * feature_dim) if avgtopk_flag in {"1", "true", "yes", "on"} else 0
 
     # 最近请求特征历史 (REQUEST_HISTORY_LEN×6 维)，默认关闭
     # 注意：长度必须与 C 端 REQUEST_HISTORY_LEN 保持一致（当前为 200）。
     request_flag = os.environ.get("LOH_INCLUDE_REQUEST", DEFAULT_LOH_INCLUDE_REQUEST).strip().lower()
     request_history_len = 200
-    request_dim = (request_history_len * 6) if request_flag in {"1", "true", "yes", "on"} else 0
+    request_dim = (request_history_len * feature_dim) if request_flag in {"1", "true", "yes", "on"} else 0
 
     total = (
         missratio_dim
@@ -706,18 +840,19 @@ def get_state_dim() -> int:
         + request_dim
     )
 
-    if LOH_DEBUG_BASIC():
-        # 使用与 C 端相同的格式打印 context_dim 配置（便于日志解析）
-        print(
-            f"[CONTEXT_DIM_CONFIG] MISSRATIO={missratio_dim} HIT_MISS={hit_miss_dim} "
-            f"CACHE={cache_dim} CAND={cand_dim} TOPK={topk_dim} AVGTOPK={avgtopk_dim} "
-            f"REQUEST={request_dim} TOTAL={total}"
-        )
+
+    label = scope.upper()
+    loh_print_config(
+        f"[CONTEXT_DIM_CONFIG][{label}] MISSRATIO={missratio_dim} HIT_MISS={hit_miss_dim} "
+        f"CACHE={cache_dim} CAND={cand_dim} TOPK={topk_dim} AVGTOPK={avgtopk_dim} "
+        f"REQUEST={request_dim} TOTAL={total} (feature_dim={feature_dim})"
+    )
 
     return total
 
-CONTEXT_DIM = get_state_dim()
-STATE_DIM = CONTEXT_DIM  # 与C端共享内存 state[] 长度一致
+CONTEXT_DIM = get_state_dim(FEATURE_DIM, scope="context")
+STATE_DIM = get_state_dim(STATE_FEATURE_DIM, scope="active")
+loh_print_config(f"[LOH CONFIG] Shared state dims: CONTEXT_DIM={CONTEXT_DIM}, STATE_DIM={STATE_DIM}")
 
 # 【移除】惩罚队列常量 - 改为动态读取
 # MAX_PENALTY_QUEUE_SIZE = 128  # 不再需要固定大小
@@ -750,22 +885,37 @@ class SharedMemoryData(ctypes.Structure):
         ("timestamp", ctypes.c_int64),
         # 【优化】只传递 penalty 数量，数据从文件偏移读取
         ("pending_penalty_count", ctypes.c_int),  # 当前周期待处理的惩罚数量
+
+        # ===== 可选：MLP per-candidate scoring 参数（与 C 端对齐） =====
+        ("score_model", ctypes.c_int),
+        ("mlp_hidden", ctypes.c_int),
+        ("mlp_param_len", ctypes.c_int),
+        ("mlp_params", ctypes.c_double * LOH_MLP_MAX_PARAMS),
     ]
 
 # 运行时校验 sizeof 与字段偏移（可选，首次导入即打印）
 def _print_shm_layout_once():
-    if os.environ.get("LOH_PRINT_SHM_LAYOUT", DEFAULT_LOH_PRINT_SHM_LAYOUT) not in ("0", "false", "False"):
-        try:
-            smd_size = ctypes.sizeof(SharedMemoryData)
-            print(f"[SHM] Python SharedMemoryData sizeof={smd_size} bytes (STATE_DIM={STATE_DIM})")
-            for name, _ in SharedMemoryData._fields_:
-                try:
-                    off = getattr(SharedMemoryData, name).offset
-                    print(f"[SHM]   offset {off:4d} : {name}")
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f"[SHM] Layout print failed: {e}")
+    if not LOH_DEBUG_CONFIG_ENABLED():
+        return
+
+    layout_flag = os.environ.get("LOH_PRINT_SHM_LAYOUT", DEFAULT_LOH_PRINT_SHM_LAYOUT)
+    if layout_flag in ("0", "false", "False"):
+        return
+
+    try:
+        smd_size = ctypes.sizeof(SharedMemoryData)
+        loh_print_config(
+            f"[SHM] Python SharedMemoryData sizeof={smd_size} bytes "
+            f"(CONTEXT_DIM={CONTEXT_DIM}, STATE_DIM={STATE_DIM})"
+        )
+        for name, _ in SharedMemoryData._fields_:
+            try:
+                off = getattr(SharedMemoryData, name).offset
+                loh_print_config(f"[SHM]   offset {off:4d} : {name}")
+            except Exception:
+                pass
+    except Exception as e:
+        loh_print_config(f"[SHM] Layout print failed: {e}")
 
 _print_shm_layout_once()
 
@@ -1057,7 +1207,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             state_version = infos[0]['state_version']
             self.version_to_pos[state_version] = pos_before  # 使用add前的pos
 
-            if LOH_DEBUG_VERBOSE() and pos_before % 100 == 0:
+            if LOH_DEBUG_BASIC() and pos_before % 100 == 0:
                 print(f"[ReplayBuffer] Added transition at pos={pos_before}, version={state_version}")
 
         # 【修改】初始化该位置的惩罚数据和驱逐统计
@@ -1078,7 +1228,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         init_end = time.perf_counter()
 
         # 【优化】只在 VERBOSE 模式或每 100 步打印一次（减少日志开销）
-        if LOH_DEBUG_VERBOSE() or (LOH_DEBUG_BASIC() and pos_before % 100 == 0):
+        if LOH_DEBUG_BASIC() or (LOH_DEBUG_BASIC() and pos_before % 100 == 0):
             # 【优化】直接使用 .item()，因为 SB3 内部已将 reward 转为 numpy 数组
             reward_scalar = reward.item() if hasattr(reward, 'item') else float(reward)
             print(f"[ReplayBuffer] pos={pos_before}, reward={reward_scalar:.6f}, "
@@ -1137,7 +1287,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             obj_size: 对象大小
         """
         if state_version not in self.version_to_pos:
-            if LOH_DEBUG_VERBOSE():
+            if LOH_DEBUG_BASIC():
                 print(f"[ReplayBuffer] Version {state_version} not in buffer (已被覆盖或未存储)")
             return False
 
@@ -1145,7 +1295,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
         # 检查position是否仍然有效（循环buffer可能已覆盖）
         if not self.full and pos >= self.pos:
-            if LOH_DEBUG_VERBOSE():
+            if LOH_DEBUG_BASIC():
                 print(f"[ReplayBuffer] Position {pos} invalid (buffer not full yet)")
             return False
 
@@ -1622,34 +1772,32 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         }
 
 # --- 自定义Gymnasium环境 ---
-def get_obs_indices(context_dim: int) -> np.ndarray:
+def get_obs_indices(state_dim: int) -> np.ndarray:
     """根据 RL_STATE_USE_MISSRATIO 环境变量决定 RL 观测包含哪些维度。
 
     参数:
-        context_dim: 共享内存状态向量的总维度
+        state_dim: 运行时有效状态向量的维度（<= CONTEXT_DIM）
 
     返回:
         np.ndarray: 观测使用的维度索引数组
 
     说明:
-        - 共享内存始终传递前2维 (hit_ratio, byte_hit_ratio)，因为奖励计算需要
-        - RL 观测可选择是否包含这两维
-        - RL_STATE_USE_MISSRATIO=1 (默认): 观测包含所有维度 [0, context_dim)
-        - RL_STATE_USE_MISSRATIO=0: 观测不包含前2维，从索引2开始 [2, context_dim)
+        - 共享内存数组长度固定为 CONTEXT_DIM，但仅前 state_dim 维含有效数据
+        - RL 观测可选择是否包含前两维 miss ratio
+        - RL_STATE_USE_MISSRATIO=1 (默认): 观测包含所有有效维度 [0, state_dim)
+        - RL_STATE_USE_MISSRATIO=0: 观测不包含前2维，从索引2开始 [2, state_dim)
     """
     use_missratio = os.environ.get("RL_STATE_USE_MISSRATIO", DEFAULT_RL_STATE_USE_MISSRATIO).strip().lower()
     if use_missratio in {"0", "false", "no", "off"}:
         # 不使用前两维（hit_ratio, byte_hit_ratio）
         start_idx = 2
-        if LOH_DEBUG_BASIC():
-            print(f"[LOH] RL_STATE_USE_MISSRATIO=0: observation excludes first 2 dims (miss ratios)")
+        loh_print_config(f"[LOH] RL_STATE_USE_MISSRATIO=0: observation excludes first 2 dims (miss ratios)")
     else:
         # 使用所有维度（包括前两维）
         start_idx = 0
-        if LOH_DEBUG_BASIC():
-            print(f"[LOH] RL_STATE_USE_MISSRATIO=1: observation includes all {context_dim} dims")
+        loh_print_config(f"[LOH] RL_STATE_USE_MISSRATIO=1: observation includes all {state_dim} dims")
 
-    return np.arange(start_idx, context_dim, dtype=np.int64)
+    return np.arange(start_idx, state_dim, dtype=np.int64)
 
 
 class LohEnv(gym.Env):
@@ -1662,9 +1810,61 @@ class LohEnv(gym.Env):
 
         # 1. 定义动作空间和观测空间
         # 动作空间使用正/负双通道：每个特征 2 个 logit，经 softmax 后相减得到有符号权重
+        try:
+            self._action_bound = float(os.environ.get("LOH_ACTION_BOUND", DEFAULT_LOH_ACTION_BOUND))
+            if not (self._action_bound > 0):
+                self._action_bound = float(DEFAULT_LOH_ACTION_BOUND)
+        except Exception:
+            self._action_bound = float(DEFAULT_LOH_ACTION_BOUND)
         self.action_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(ACTION_DIM,), dtype=np.float32
+            low=-float(self._action_bound), high=float(self._action_bound), shape=(ACTION_DIM,), dtype=np.float32
         )
+        try:
+            self._action_scale = float(os.environ.get("LOH_ACTION_SCALE", DEFAULT_LOH_ACTION_SCALE))
+            if not (self._action_scale > 0):
+                self._action_scale = float(DEFAULT_LOH_ACTION_SCALE)
+        except Exception:
+            self._action_scale = float(DEFAULT_LOH_ACTION_SCALE)
+
+        try:
+            self._weight_ema = float(os.environ.get("LOH_WEIGHT_EMA", DEFAULT_LOH_WEIGHT_EMA))
+            if not (0.0 <= self._weight_ema < 1.0):
+                self._weight_ema = float(DEFAULT_LOH_WEIGHT_EMA)
+        except Exception:
+            self._weight_ema = float(DEFAULT_LOH_WEIGHT_EMA)
+
+        try:
+            self._weight_clip = float(os.environ.get("LOH_WEIGHT_CLIP", DEFAULT_LOH_WEIGHT_CLIP))
+            if not (self._weight_clip >= 0.0):
+                self._weight_clip = float(DEFAULT_LOH_WEIGHT_CLIP)
+        except Exception:
+            self._weight_clip = float(DEFAULT_LOH_WEIGHT_CLIP)
+
+        self._reward_mode = os.environ.get("LOH_REWARD_MODE", DEFAULT_LOH_REWARD_MODE).strip().lower()
+        try:
+            self._reward_scale = float(os.environ.get("LOH_REWARD_SCALE", DEFAULT_LOH_REWARD_SCALE))
+        except Exception:
+            self._reward_scale = float(DEFAULT_LOH_REWARD_SCALE)
+
+        # 可选：reward 标准化（默认关闭，避免影响既有实验结果）
+        # - LOH_REWARD_NORM=1: 开启对 reward 做 running mean/std 标准化
+        # - LOH_REWARD_NORM_EMA: EMA 系数（越大越平滑）
+        # - LOH_REWARD_NORM_CLIP: 标准化后的裁剪阈值
+        self._reward_norm_enabled = _env_flag("LOH_REWARD_NORM", False)
+        try:
+            self._reward_norm_ema = float(os.environ.get("LOH_REWARD_NORM_EMA", "0.99"))
+            if not (0.0 < self._reward_norm_ema < 1.0):
+                self._reward_norm_ema = 0.99
+        except Exception:
+            self._reward_norm_ema = 0.99
+        try:
+            self._reward_norm_clip = float(os.environ.get("LOH_REWARD_NORM_CLIP", "5.0"))
+            if not (self._reward_norm_clip > 0.0):
+                self._reward_norm_clip = 5.0
+        except Exception:
+            self._reward_norm_clip = 5.0
+        self._reward_norm_mean = 0.0
+        self._reward_norm_var = 1.0
         # softmax 温度（用于将 logits 映射为权重时的锐化/平滑），可用环境变量 LOH_SOFTMAX_TEMP 配置
         try:
             self._softmax_temp = float(os.environ.get("LOH_SOFTMAX_TEMP", DEFAULT_LOH_SOFTMAX_TEMP))
@@ -1674,13 +1874,16 @@ class LohEnv(gym.Env):
             self._softmax_temp = float(DEFAULT_LOH_SOFTMAX_TEMP)
 
         # 观测空间：根据 RL_STATE_USE_MISSRATIO 决定是否包含前两维
-        # 共享内存始终传递 CONTEXT_DIM 维，但 RL 观测可选择不使用前2维（hit_ratio, byte_hit_ratio）
+        # 共享内存数组固定为 CONTEXT_DIM，但仅前 STATE_DIM 维含有效值
         if obs_keep_indices is not None and len(obs_keep_indices) > 0:
             # 兼容旧接口：如果显式传入 obs_keep_indices，使用它
-            self._obs_idx = np.array(sorted(set(int(i) for i in obs_keep_indices if 0 <= int(i) < CONTEXT_DIM)), dtype=np.int64)
+            self._obs_idx = np.array(
+                sorted(set(int(i) for i in obs_keep_indices if 0 <= int(i) < STATE_DIM)),
+                dtype=np.int64,
+            )
         else:
             # 使用环境变量 RL_STATE_USE_MISSRATIO 控制
-            self._obs_idx = get_obs_indices(CONTEXT_DIM)
+            self._obs_idx = get_obs_indices(STATE_DIM)
 
         # --- miss ratio 趋势特征（追加到观测，仅 Python 端计算，不影响共享内存）---
         # RL_STATE_USE_MISSRATIOTREND: 是否在观测末尾追加 2 维趋势特征（obj_trend, byte_trend）
@@ -1796,26 +1999,37 @@ class LohEnv(gym.Env):
         self._last_byte_hit_ratio = None
         self._last_reward = None
         self._current_weights = None
+        self._prev_immediate_reward = None
 
         print("✅ LohEnv initialization completed (fast version)")
-        if LOH_DEBUG_BASIC():
+        print(
+            "   Reward weight config: miss_ratio_weight="
+            f"{self.reward_alpha:.3f}, byte_miss_ratio_weight={self.reward_beta:.3f}"
+        )
+        print(
+            "   IPC config: semaphore_requested="
+            f"{int(self._sem_requested)}, poll_sleep_us={self._poll_sleep_us}"
+        )
+        print(
+            "   Action/reward knobs: action_bound="
+            f"{self._action_bound}, action_scale={self._action_scale}, "
+            f"weight_ema={self._weight_ema}, weight_clip={self._weight_clip}, "
+            f"reward_mode={self._reward_mode}, reward_scale={self._reward_scale}"
+        )
+        if self._reward_norm_enabled:
             print(
-                "   Reward weight config: miss_ratio_weight="
-                f"{self.reward_alpha:.3f}, byte_miss_ratio_weight={self.reward_beta:.3f}"
+                "   Reward norm: enabled, ema="
+                f"{self._reward_norm_ema}, clip={self._reward_norm_clip}"
             )
-            print(
-                "   IPC config: semaphore_requested="
-                f"{int(self._sem_requested)}, poll_sleep_us={self._poll_sleep_us}"
-            )
-            print("   State feature config: observation via obs_keep_indices (no separate hit toggle)")
-            print(
-                "   Observation view: obs_dim=",
-                int(self._obs_idx.shape[0]),
-                "indices=",
-                self._obs_idx.tolist()
-            )
-            if self._state_use_missratiotrend:
-                print(f"   Extra trend features enabled: window={self._state_trend_window}, mode={self._state_trend_mode}")
+        print("   State feature config: observation via obs_keep_indices (no separate hit toggle)")
+        print(
+            "   Observation view: obs_dim=",
+            int(self._obs_idx.shape[0]),
+            "indices=",
+            self._obs_idx.tolist()
+        )
+        if self._state_use_missratiotrend:
+            print(f"   Extra trend features enabled: window={self._state_trend_window}, mode={self._state_trend_mode}")
 
         # 计算结构字段偏移，便于对单字段进行原子式写入，避免整块覆盖造成竞态
         try:
@@ -1895,11 +2109,10 @@ class LohEnv(gym.Env):
         self._sem_drain(self._sem_ready)
         self._sem_drain(self._sem_ack)
 
-        if LOH_DEBUG_BASIC():
-            print("[SEM] POSIX semaphore handshake enabled")
+        print("[SEM] POSIX semaphore handshake enabled")
 
     def _disable_semaphores(self, reason: Optional[str] = None):
-        if reason and LOH_DEBUG_BASIC():
+        if reason:
             print("[SEM] disable semaphore mode: %s" % reason)
 
         if self._sem_ready is not None:
@@ -1975,7 +2188,7 @@ class LohEnv(gym.Env):
             if res != 0:
                 err = ctypes.get_errno()
                 self._disable_semaphores(f"sem_post error: {os.strerror(err)}")
-            elif LOH_DEBUG_VERBOSE() and label:
+            elif LOH_DEBUG_BASIC() and label:
                 print(f"[SEM][Python] sem_post {label}")
 
     def _read_shm(self):
@@ -1989,7 +2202,7 @@ class LohEnv(gym.Env):
                 read_end = get_monotonic_time()
                 read_duration = read_end - read_start
                 current_timestamp = get_monotonic_time()
-                if LOH_DEBUG_VERBOSE() and read_duration > 0.001:
+                if LOH_DEBUG_BASIC() and read_duration > 0.001:
                     print(f"[{current_timestamp:.6f}] read memory span {read_duration:.6f} seconds")
                 return data
         except Exception as e:
@@ -2167,7 +2380,7 @@ class LohEnv(gym.Env):
             if self._sem_enabled:
                 waited_sem = self._sem_wait(self._sem_ready, self._sem_timeout, label="ready@reset")
                 if waited_sem:
-                    if LOH_DEBUG_VERBOSE():
+                    if LOH_DEBUG_BASIC():
                         print("[SEM][Python] reset() resumed via semaphore")
                     continue
             elif LOH_DEBUG_BASIC() and not self._sem_disabled_logged:
@@ -2175,7 +2388,7 @@ class LohEnv(gym.Env):
                 self._sem_disabled_logged = True
             if not waited_sem:
                 self._poll_fallback_count += 1
-                if LOH_DEBUG_VERBOSE():
+                if LOH_DEBUG_BASIC():
                     print(
                         f"[POLL][Python] reset() waiting via polling (fallback_count={self._poll_fallback_count})"
                     )
@@ -2184,15 +2397,16 @@ class LohEnv(gym.Env):
             if timeout_counter % heartbeat_every == 0:  # 每2秒报告一次
                 elapsed_time = timeout_counter * 0.0005
                 now = get_monotonic_time()
-                if LOH_DEBUG_VERBOSE():
+                if LOH_DEBUG_BASIC():
                     print(f"[{now:.6f}] reset() waiting for initial state... waited {elapsed_time:.1f}s")
 
         # 收到初始状态，由回调函数管理训练状态
 
-        # 原始观测（含 state[0:2]），不做 clip 以保留原始值
-        initial_observation_raw = np.array(initial_data.state, dtype=np.float32)
+        # 原始观测（仅前 STATE_DIM 维有效），不做 clip 以保留原始值
+        initial_state_full = np.array(initial_data.state, dtype=np.float32)
+        initial_observation_raw = initial_state_full[:STATE_DIM]
         # 生成reset返回的观测，遵循与step相同的选择逻辑
-        # 若提供了 obs_keep_indices，则始终按索引选择（即使与 CONTEXT_DIM 相同，也走统一分支）
+        # 若提供了 obs_keep_indices，则始终按索引选择（即使与 STATE_DIM 相同，也走统一分支）
         if self._obs_idx is not None:
             initial_observation = initial_observation_raw[self._obs_idx]
         else:
@@ -2209,6 +2423,10 @@ class LohEnv(gym.Env):
         if self._reward_ema_history is not None:
             self._reward_ema_history = []
 
+        # 重置 reward 标准化统计
+        self._reward_norm_mean = 0.0
+        self._reward_norm_var = 1.0
+
         if self._state_use_missratiotrend:
             # 初始时趋势为 0（历史数据不足）
             initial_observation = np.concatenate([initial_observation, np.zeros((2,), dtype=np.float32)])
@@ -2217,6 +2435,12 @@ class LohEnv(gym.Env):
         # 奖励基于原始命中率（不受观测选择影响）
         initial_miss_ratio = 1.0 - initial_observation_raw[0]  # state[0] 是 obj_hit_ratio
         initial_byte_miss_ratio = 1.0 - initial_observation_raw[1]  # state[1] 是 byte_hit_ratio
+
+        # reward 的 delta 模式需要一个基准（默认 absolute 不使用）
+        try:
+            self._prev_immediate_reward = float(self.reward_alpha * float(initial_observation_raw[0]) + self.reward_beta * float(initial_observation_raw[1]))
+        except Exception:
+            self._prev_immediate_reward = None
 
         # 清除历史性能指标
         if hasattr(self, '_previous_miss_ratio'):
@@ -2228,9 +2452,12 @@ class LohEnv(gym.Env):
         print(f"   [seq {int(initial_data.state_version)}] Initial state aligned (state_version)")
         print(f"   Initial miss_ratio: {initial_miss_ratio:.4f}")
         print(f"   Initial byte_miss_ratio: {initial_byte_miss_ratio:.4f}")
-        print(f"   Observation shape: {initial_observation.shape} (raw_state_dim={CONTEXT_DIM}, obs_indices={self._obs_idx.tolist()})")
+        print(
+            f"   Observation shape: {initial_observation.shape} "
+            f"(state_dim={STATE_DIM}, context_dim={CONTEXT_DIM}, obs_indices={self._obs_idx.tolist()})"
+        )
         # 【重构】统一输出状态向量详细信息（原始状态），覆盖 26/38/98/110 场景
-        if LOH_DEBUG_VERBOSE():
+        if LOH_DEBUG_BASIC():
             self._print_state_by_category(initial_observation_raw, int(initial_data.state_version))
 
         # 记录当前状态版本，供下一步动作对齐
@@ -2262,97 +2489,110 @@ class LohEnv(gym.Env):
         return initial_observation, {}
 
     def _print_state_by_category(self, raw_state: np.ndarray, seq: int):
-        """
-        按类别分组打印状态向量（与C端格式完全一致，便于日志解析）
-
-        类别结构：
-        - MISSRATIO: 2维 (hit_ratio, byte_hit_ratio)
-        - HIT_MISS: 24维 (6特征 × 2(hit/miss) × 2(mean/var)) - 可选
-        - CACHE: 12维 (6特征 × 2(mean/var)) - 可选
-        - CAND: 72维 (6组 × 12维) - 可选
-        - TOPK: N_TOPK_SAMPLES×6维 (8组 × 24维) - 可选
-        """
+        """按类别分组打印状态向量（自适应 3/6 维特征模式）。"""
         try:
             N_TOPK_SAMPLES = 32  # 与C端一致
             SAMPLES_PER_EVICTION = 4  # 与C端一致
+            feature_dim = max(1, STATE_FEATURE_DIM)
+            candidate_source_dim = FEATURE_DIM if feature_dim >= FEATURE_DIM else feature_dim
+
+            state = np.asarray(raw_state[:STATE_DIM])
+            total_len = len(state)
 
             # 从环境变量读取各模块是否启用
             hit_miss_flag = os.environ.get("LOH_INCLUDE_HIT_MISS_FEATURES", "0").strip().lower()
-            hit_miss_dim = 24 if hit_miss_flag in {"1", "true", "yes", "on"} else 0
+            hit_miss_dim = (feature_dim * 4) if hit_miss_flag in {"1", "true", "yes", "on"} else 0
 
             cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "0").strip().lower()
-            cache_dim = 12 if cache_flag in {"1", "true", "yes", "on"} else 0
+            cache_dim = (feature_dim * 2) if cache_flag in {"1", "true", "yes", "on"} else 0
 
             cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
-            cand_dim = 72 if cand_flag in {"1", "true", "yes", "on"} else 0
+            cand_dim = (
+                candidate_source_dim * feature_dim * 2
+                if cand_flag in {"1", "true", "yes", "on"}
+                else 0
+            )
 
             # TOPK 默认关闭
             topk_flag = os.environ.get("LOH_INCLUDE_TOPK_CANDIDATE_FEATURES", "0").strip().lower()
-            topk_dim = (N_TOPK_SAMPLES * 6) if topk_flag in {"1", "true", "yes", "on"} else 0
+            topk_dim = (N_TOPK_SAMPLES * feature_dim) if topk_flag in {"1", "true", "yes", "on"} else 0
 
             # AVGTOPK 默认开启
             avgtopk_flag = os.environ.get("LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES", "1").strip().lower()
-            avgtopk_dim = (SAMPLES_PER_EVICTION * 6) if avgtopk_flag in {"1", "true", "yes", "on"} else 0
+            avgtopk_dim = (
+                SAMPLES_PER_EVICTION * feature_dim
+                if avgtopk_flag in {"1", "true", "yes", "on"}
+                else 0
+            )
 
             # REQUEST 历史（REQUEST_HISTORY_LEN×6），默认关闭；长度需与 C 端一致
             request_flag = os.environ.get("LOH_INCLUDE_REQUEST", "0").strip().lower()
             request_history_len = 200
-            request_dim = (request_history_len * 6) if request_flag in {"1", "true", "yes", "on"} else 0
+            request_dim = (
+                request_history_len * feature_dim
+                if request_flag in {"1", "true", "yes", "on"}
+                else 0
+            )
 
             offset = 0
 
             # 1. HITRATIO (2维: obj_hit_ratio, byte_hit_ratio)
-            hitratio_vals = ", ".join([f"{float(raw_state[i]):.6f}" for i in range(offset, offset + 2)])
+            if total_len < offset + 2:
+                return
+            hitratio_vals = ", ".join([f"{float(state[i]):.6f}" for i in range(offset, offset + 2)])
             print(f"[STATE_HITRATIO] [seq {seq}] [{hitratio_vals}]")
             offset += 2
 
             # 2. HIT_MISS (24维)
-            if hit_miss_dim > 0 and len(raw_state) >= offset + hit_miss_dim:
-                hit_miss_vals = ", ".join([f"{float(raw_state[i]):.6f}" for i in range(offset, offset + hit_miss_dim)])
+            if hit_miss_dim > 0 and total_len >= offset + hit_miss_dim:
+                hit_miss_vals = ", ".join([f"{float(state[i]):.6f}" for i in range(offset, offset + hit_miss_dim)])
                 print(f"[STATE_HIT_MISS] [seq {seq}] [{hit_miss_vals}]")
                 offset += hit_miss_dim
 
             # 3. CACHE (12维)
-            if cache_dim > 0 and len(raw_state) >= offset + cache_dim:
-                cache_vals = ", ".join([f"{float(raw_state[i]):.6f}" for i in range(offset, offset + cache_dim)])
+            if cache_dim > 0 and total_len >= offset + cache_dim:
+                cache_vals = ", ".join([f"{float(state[i]):.6f}" for i in range(offset, offset + cache_dim)])
                 print(f"[STATE_CACHE] [seq {seq}] [{cache_vals}]")
                 offset += cache_dim
 
-            # 4. CAND (72维: 6组 × 12维)
-            if cand_dim > 0 and len(raw_state) >= offset + cand_dim:
-                for g in range(6):
-                    start = offset + g * 12
-                    end = start + 12
-                    cand_vals = ", ".join([f"{float(raw_state[i]):.6f}" for i in range(start, end)])
+            # 4. CAND (candidate_source_dim 组 × feature_dim×2)
+            if cand_dim > 0 and total_len >= offset + cand_dim and candidate_source_dim > 0:
+                per_source = feature_dim * 2
+                for g in range(candidate_source_dim):
+                    start = offset + g * per_source
+                    end = min(start + per_source, offset + cand_dim)
+                    cand_vals = ", ".join([f"{float(state[i]):.6f}" for i in range(start, end)])
                     print(f"[STATE_CAND_{g}] [seq {seq}] [{cand_vals}]")
                 offset += cand_dim
 
-            # 5. TOPK (N_TOPK_SAMPLES×6维: 8组 × 24维)
-            if topk_dim > 0 and len(raw_state) >= offset + topk_dim:
-                for g in range(8):
-                    start = offset + g * 24
-                    end = start + 24
-                    topk_vals = ", ".join([f"{float(raw_state[i]):.6f}" for i in range(start, end)])
+            # 5. TOPK (N_TOPK_SAMPLES × feature_dim)
+            if topk_dim > 0 and total_len >= offset + topk_dim and feature_dim > 0:
+                per_group = feature_dim * SAMPLES_PER_EVICTION
+                group_count = max(1, N_TOPK_SAMPLES // SAMPLES_PER_EVICTION)
+                for g in range(group_count):
+                    start = offset + g * per_group
+                    end = min(start + per_group, offset + topk_dim)
+                    topk_vals = ", ".join([f"{float(state[i]):.6f}" for i in range(start, end)])
                     print(f"[STATE_TOPK_{g}] [seq {seq}] [{topk_vals}]")
                 offset += topk_dim
 
             # 6. AVGTOPK (4×6=24维)
-            if avgtopk_dim > 0 and len(raw_state) >= offset + avgtopk_dim:
-                avgtopk_vals = ", ".join([f"{float(raw_state[i]):.6f}" for i in range(offset, offset + avgtopk_dim)])
+            if avgtopk_dim > 0 and total_len >= offset + avgtopk_dim:
+                avgtopk_vals = ", ".join([f"{float(state[i]):.6f}" for i in range(offset, offset + avgtopk_dim)])
                 print(f"[STATE_AVGTOPK] [seq {seq}] [{avgtopk_vals}]")
                 offset += avgtopk_dim
 
             # 7. REQUEST 历史 (REQUEST_HISTORY_LEN×6)
-            if request_dim > 0 and len(raw_state) >= offset + request_dim:
+            if request_dim > 0 and total_len >= offset + request_dim and feature_dim > 0:
                 # 打印前几条请求的特征，避免日志过长
                 max_print_requests = 4
-                per_req_dim = 6
+                per_req_dim = feature_dim
                 actual_reqs = min(max_print_requests, request_history_len)
                 for r in range(actual_reqs):
                     start = offset + r * per_req_dim
                     end = start + per_req_dim
                     req_vals = ", ".join(
-                        [f"{float(raw_state[i]):.6f}" for i in range(start, min(end, offset + request_dim))]
+                        [f"{float(state[i]):.6f}" for i in range(start, min(end, offset + request_dim))]
                     )
                     print(f"[STATE_REQUEST_{r}] [seq {seq}] [{req_vals}]")
 
@@ -2370,10 +2610,10 @@ class LohEnv(gym.Env):
         始终基于原始 raw_state 打印，避免 obs_keep 的省略影响诊断。
         """
         try:
-            # 与上方 CONTEXT_DIM 解析逻辑保持一致：默认 38，显式关闭缓存特征时为 26
+            # 与上方状态解析逻辑保持一致（根据 STATE_FEATURE_DIM 决定基础维度）
             cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "").strip().lower()
             base_dim = 26 if cache_flag in {"0", "false", "no", "off"} else 38
-            cand_dim = CONTEXT_DIM - base_dim
+            cand_dim = max(STATE_DIM - base_dim, 0)
 
             # global
             print(f"[global_features]: [{raw_state[0]:.6f}, {raw_state[1]:.6f}]")
@@ -2405,8 +2645,7 @@ class LohEnv(gym.Env):
             model: SAC 模型实例
         """
         self.model = model
-        if LOH_DEBUG_BASIC():
-            print(f"[LohEnv] Model reference set, replay buffer available: {hasattr(model, 'replay_buffer')}")
+        print(f"[LohEnv] Model reference set, replay buffer available: {hasattr(model, 'replay_buffer')}")
         # 如果回放缓冲区已创建，设置其步数提供者用于记录 first_finalize_step
         try:
             if hasattr(model, 'replay_buffer') and model.replay_buffer is not None:
@@ -2439,7 +2678,7 @@ class LohEnv(gym.Env):
         step_wall_t0 = get_monotonic_time()
         with GLOBAL_TIMER.time_function("env.step_phaseA"):
             step_start = get_monotonic_time()
-            if LOH_DEBUG_VERBOSE():
+            if LOH_DEBUG_BASIC():
                 print(f"[Step {self.current_step + 1}] [{step_start:.6f}] step started")
 
             self.current_step += 1
@@ -2459,78 +2698,119 @@ class LohEnv(gym.Env):
             # 每个特征 i 对应 (p[2*i] - p[2*i+1]) 形成有符号权重 w_i。
             with GLOBAL_TIMER.time_function("env.step_softmax"):
                 action_start = get_monotonic_time()
-                if LOH_DEBUG_VERBOSE():
+                action_np = np.asarray(action, dtype=np.float32)
+                action_np_scaled = action_np * float(self._action_scale)
+                if LOH_DEBUG_BASIC():
                     action_logits_fmt = ", ".join([
-                        f"{float(action[i]):.3f}" for i in range(min(len(action), ACTION_DIM))
+                        f"{float(action_np_scaled[i]):.3f}" for i in range(min(len(action_np_scaled), ACTION_DIM))
                     ])
-                    print(f"[Step {self.current_step}] Action logits (dim={len(action)}): [{action_logits_fmt}]")
+                    print(f"[Step {self.current_step}] Action logits (dim={len(action_np_scaled)}): [{action_logits_fmt}]")
 
-                # 先将策略输出转换为“有效评分特征维度”的权重向量 weights_eff，
-                # 长度为 SCORE_FEATURE_DIM，再根据评分模式映射到完整的 6 维
-                # shared-memory 权重向量 weights（FEATURE_DIM=6）。
+                mlp_params = None
 
-                if LOH_DUAL_CHANNEL:
-                    # 双通道模式：12维 -> (softmax) -> 差分
-                    action_tensor = torch.from_numpy(action)
-                    # 引入 softmax 温度，temp>1 更平滑，temp<1 更尖锐
+                # 评分模型：
+                # - linear: action -> weights (兼容旧逻辑)
+                # - mlp:    action -> mlp_params（直接写入共享内存，C 端用 MLP 计算 per-candidate 分数）
+                if LOH_SCORE_MODEL in {"mlp", "nn"}:
+                    # 直接把 action 视为参数向量（长度应为 LOH_MLP_PARAM_DIM）
+                    mlp_params = np.array(action_np_scaled, dtype=np.float32)
+                    if len(mlp_params) > LOH_MLP_PARAM_DIM:
+                        mlp_params = mlp_params[:LOH_MLP_PARAM_DIM]
+                    elif len(mlp_params) < LOH_MLP_PARAM_DIM:
+                        tmp = np.zeros(LOH_MLP_PARAM_DIM, dtype=np.float32)
+                        tmp[:len(mlp_params)] = mlp_params
+                        mlp_params = tmp
+
+                    # 可选：裁剪（复用 weight_clip），默认关闭
                     try:
-                        logits = action_tensor / float(self._softmax_temp)
+                        if self._weight_clip > 0.0:
+                            mlp_params = np.clip(mlp_params, -float(self._weight_clip), float(self._weight_clip)).astype(np.float32)
                     except Exception:
-                        logits = action_tensor
+                        pass
 
-                    if LOH_USE_SOFTMAX:
-                        probs = torch.nn.functional.softmax(logits, dim=-1).numpy()
-                    else:
-                        probs = logits.numpy()
-
-                    # 将 2*SCORE_FEATURE_DIM 维概率映射为 SCORE_FEATURE_DIM 个有符号权重
-                    weights_eff = np.zeros(SCORE_FEATURE_DIM, dtype=np.float32)
-                    pairs = min(SCORE_FEATURE_DIM, len(probs) // 2)
-                    for i in range(pairs):
-                        pos = float(probs[2 * i])
-                        neg = float(probs[2 * i + 1])
-                        weights_eff[i] = pos - neg
+                    # 兼容旧日志/接口：weights 仍然写入 6 维，但在 mlp 模式下 C 端会忽略
+                    probs = None
+                    weights = np.zeros(FEATURE_DIM, dtype=np.float32)
                 else:
-                    # 单通道模式：6维 -> (softmax) -> 直接映射
-                    if LOH_USE_SOFTMAX:
-                        action_tensor = torch.from_numpy(action)
+                    # 先将策略输出转换为“有效评分特征维度”的权重向量 weights_eff，
+                    # 长度为 SCORE_FEATURE_DIM，再根据评分模式映射到完整的 6 维
+                    # shared-memory 权重向量 weights（FEATURE_DIM=6）。
+
+                    if LOH_DUAL_CHANNEL:
+                        # 双通道模式：12维 -> (softmax) -> 差分
+                        action_tensor = torch.from_numpy(action_np_scaled)
+                        # 引入 softmax 温度，temp>1 更平滑，temp<1 更尖锐
                         try:
                             logits = action_tensor / float(self._softmax_temp)
                         except Exception:
                             logits = action_tensor
-                        probs = torch.nn.functional.softmax(logits, dim=-1).numpy()
-                        weights_eff = np.array(probs, dtype=np.float32)
+
+                        if LOH_USE_SOFTMAX:
+                            probs = torch.nn.functional.softmax(logits, dim=-1).numpy()
+                        else:
+                            probs = logits.numpy()
+
+                        # 将 2*SCORE_FEATURE_DIM 维概率映射为 SCORE_FEATURE_DIM 个有符号权重
+                        weights_eff = np.zeros(SCORE_FEATURE_DIM, dtype=np.float32)
+                        pairs = min(SCORE_FEATURE_DIM, len(probs) // 2)
+                        for i in range(pairs):
+                            pos = float(probs[2 * i])
+                            neg = float(probs[2 * i + 1])
+                            weights_eff[i] = pos - neg
                     else:
-                        # 动作空间已在 [-1, 1]，直接作为权重
-                        weights_eff = np.array(action, dtype=np.float32)
-                        probs = weights_eff  # 用于后续日志记录（注意：非概率分布可能导致熵计算无意义）
+                        # 单通道模式：6维 -> (softmax) -> 直接映射
+                        if LOH_USE_SOFTMAX:
+                            action_tensor = torch.from_numpy(action_np_scaled)
+                            try:
+                                logits = action_tensor / float(self._softmax_temp)
+                            except Exception:
+                                logits = action_tensor
+                            probs = torch.nn.functional.softmax(logits, dim=-1).numpy()
+                            weights_eff = np.array(probs, dtype=np.float32)
+                        else:
+                            # 动作空间已在 [-1, 1]，直接作为权重
+                            weights_eff = np.array(action_np_scaled, dtype=np.float32)
+                            probs = weights_eff  # 用于后续日志记录（注意：非概率分布可能导致熵计算无意义）
 
-                    # 确保 weights_eff 维度与 SCORE_FEATURE_DIM 匹配
-                    if len(weights_eff) > SCORE_FEATURE_DIM:
-                        weights_eff = weights_eff[:SCORE_FEATURE_DIM]
-                    elif len(weights_eff) < SCORE_FEATURE_DIM:
-                        w_tmp = np.zeros(SCORE_FEATURE_DIM, dtype=np.float32)
-                        w_tmp[:len(weights_eff)] = weights_eff
-                        weights_eff = w_tmp
+                        # 确保 weights_eff 维度与 SCORE_FEATURE_DIM 匹配
+                        if len(weights_eff) > SCORE_FEATURE_DIM:
+                            weights_eff = weights_eff[:SCORE_FEATURE_DIM]
+                        elif len(weights_eff) < SCORE_FEATURE_DIM:
+                            w_tmp = np.zeros(SCORE_FEATURE_DIM, dtype=np.float32)
+                            w_tmp[:len(weights_eff)] = weights_eff
+                            weights_eff = w_tmp
 
-                # 将有效评分维度的权重映射到完整的 6 维权重向量
-                # C 端解释：
-                #   - 默认/IRT 模式：w[0..5] → recency, freq, size, irt1, irt2, irt3
-                #   - IRT 关闭：      仅使用 w[0..2] 参与评分
-                #   - compound 模式：w[0..5] → rec, freq, size, freq_recency, freq_size, recency_size
-                weights = np.zeros(FEATURE_DIM, dtype=np.float32)
-                if LOH_SCORE_USE_COMPOUND:
-                    # compound 模式下，SCORE_FEATURE_DIM 一定为 6
-                    n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
-                    weights[:n] = weights_eff[:n]
-                elif LOH_SCORE_USE_IRT == 0:
-                    # 仅使用 recency/freq/size 三个基础特征，其余维度留给 IRT（在 C 端被忽略）
-                    n = min(SCORE_FEATURE_DIM, 3)
-                    weights[:n] = weights_eff[:n]
-                else:
-                    # 默认 6 维基础特征模式
-                    n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
-                    weights[:n] = weights_eff[:n]
+                    # 将有效评分维度的权重映射到完整的 6 维权重向量
+                    # C 端解释：
+                    #   - 默认/IRT 模式：w[0..5] → recency, freq, size, irt1, irt2, irt3
+                    #   - IRT 关闭：      仅使用 w[0..2] 参与评分
+                    #   - compound 模式：w[0..5] → rec, freq, size, freq_recency, freq_size, recency_size
+                    weights = np.zeros(FEATURE_DIM, dtype=np.float32)
+                    if LOH_SCORE_USE_COMPOUND:
+                        # compound 模式下，SCORE_FEATURE_DIM 一定为 6
+                        n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
+                        weights[:n] = weights_eff[:n]
+                    elif LOH_SCORE_USE_IRT == 0:
+                        # 仅使用 recency/freq/size 三个基础特征，其余维度留给 IRT（在 C 端被忽略）
+                        n = min(SCORE_FEATURE_DIM, 3)
+                        weights[:n] = weights_eff[:n]
+                    else:
+                        # 默认 6 维基础特征模式
+                        n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
+                        weights[:n] = weights_eff[:n]
+
+                    # 可选：写回权重平滑/裁剪（默认关闭，保持旧行为）
+                    try:
+                        if self._weight_ema > 0.0 and hasattr(self, '_last_weights') and self._last_weights is not None:
+                            weights = (float(self._weight_ema) * self._last_weights.astype(np.float32) + (1.0 - float(self._weight_ema)) * weights).astype(np.float32)
+                            if LOH_USE_SOFTMAX and (not LOH_DUAL_CHANNEL):
+                                s = float(np.sum(weights))
+                                if s > 0:
+                                    weights = (weights / s).astype(np.float32)
+                        if self._weight_clip > 0.0:
+                            weights = np.clip(weights, -float(self._weight_clip), float(self._weight_clip)).astype(np.float32)
+                    except Exception:
+                        pass
 
                 action_end = get_monotonic_time()
             _dur_softmax = float(action_end - action_start)
@@ -2540,21 +2820,32 @@ class LohEnv(gym.Env):
             if LOH_DEBUG_BASIC():
                 print(f"[TIMING][Python] Model inference (softmax): {inference_duration:.6f} seconds")
 
-            if LOH_DEBUG_VERBOSE() and action_end - action_start > 0.001:
+            if LOH_DEBUG_BASIC() and action_end - action_start > 0.001:
                 print(f"[{action_end:.6f}] action conversion took {action_end - action_start:.6f} seconds")
 
             # 记录动作分布的一些统计到 TensorBoard（低频，避免开销）
             try:
                 if hasattr(self, 'model') and self.model is not None and hasattr(self.model, 'logger'):
                     if (self.current_step % 100) == 1:  # 每100步记录一次
-                        # 使用 softmax 概率 probs 记录熵等统计信息
-                        p = np.asarray(probs, dtype=np.float64)
-                        p = np.clip(p, 1e-12, 1.0)
-                        ent = float(-np.sum(p * np.log(p)))
-                        p_max = float(np.max(p))
-                        self.model.logger.record("action/entropy", ent)
-                        self.model.logger.record("action/max_prob", p_max)
+                        if LOH_USE_SOFTMAX:
+                            # 使用 softmax 概率 probs 记录熵等统计信息
+                            p = np.asarray(probs, dtype=np.float64)
+                            p = np.clip(p, 1e-12, 1.0)
+                            ent = float(-np.sum(p * np.log(p)))
+                            p_max = float(np.max(p))
+                            self.model.logger.record("action/entropy", ent)
+                            self.model.logger.record("action/max_prob", p_max)
                         self.model.logger.record("action/softmax_temp", float(self._softmax_temp))
+                        self.model.logger.record("action/scale", float(self._action_scale))
+                        self.model.logger.record("action/bound", float(self._action_bound))
+                        self.model.logger.record("weights/min", float(np.min(weights)))
+                        self.model.logger.record("weights/max", float(np.max(weights)))
+                        self.model.logger.record("weights/std", float(np.std(weights)))
+                        try:
+                            if hasattr(self, '_last_weights') and self._last_weights is not None:
+                                self.model.logger.record("weights/l1_delta", float(np.mean(np.abs(weights - self._last_weights))))
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -2603,6 +2894,24 @@ class LohEnv(gym.Env):
                             for i in range(FEATURE_DIM):
                                 current.weights[i] = float(weights[i])
 
+                            # 可选：写入 MLP 参数（仅在 LOH_SCORE_MODEL=mlp 时启用）
+                            if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
+                                current.score_model = int(LOH_SCORE_MODEL_MLP)
+                                current.mlp_hidden = int(LOH_MLP_HIDDEN)
+                                current.mlp_param_len = int(LOH_MLP_PARAM_DIM)
+                                # 清零其余参数，避免残留
+                                try:
+                                    for i in range(LOH_MLP_MAX_PARAMS):
+                                        current.mlp_params[i] = 0.0
+                                    for i in range(min(LOH_MLP_PARAM_DIM, LOH_MLP_MAX_PARAMS)):
+                                        current.mlp_params[i] = float(mlp_params[i])
+                                except Exception:
+                                    pass
+                            else:
+                                current.score_model = int(LOH_SCORE_MODEL_LINEAR)
+                                current.mlp_hidden = 0
+                                current.mlp_param_len = 0
+
                             # 保存权重供下次reset使用
                             self._last_weights = weights.copy()
 
@@ -2621,7 +2930,7 @@ class LohEnv(gym.Env):
 
                             # 通过信号量通知C端"权重已更新"
                             sem_post_start = get_monotonic_time()
-                            if self._sem_enabled and LOH_DEBUG_VERBOSE():
+                            if self._sem_enabled and LOH_DEBUG_BASIC():
                                 print(f"[SEM][Python] posting ack semaphore for seq {acked_version}")
                             self._sem_post(self._sem_ack, label=f"ack seq {acked_version}")
                             sem_post_end = get_monotonic_time()
@@ -2636,9 +2945,24 @@ class LohEnv(gym.Env):
                             _dur_write_weights = float(total_write_duration)
 
                             # 打印实际写入的权重（C/Python 统一格式，便于日志解析）
-                            ack_weights_fmt = ", ".join([f"{float(weights[i]):.6f}" for i in range(FEATURE_DIM)])
+                            active_dim = max(0, min(SCORE_FEATURE_DIM, FEATURE_DIM))
+                            ack_active_fmt = (
+                                ", ".join([f"{float(weights[i]):.6f}" for i in range(active_dim)])
+                                if active_dim > 0
+                                else ""
+                            )
                             if LOH_DEBUG_BASIC():
-                                print(f"[WEIGHTS_UPDATED] [seq {acked_version}] [{ack_weights_fmt}]")
+                                if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
+                                    head = ", ".join([f"{float(mlp_params[i]):.6f}" for i in range(min(6, len(mlp_params)))])
+                                    print(
+                                        f"[WEIGHTS_UPDATED] [seq {acked_version}] "
+                                        f"model=mlp param_len={int(LOH_MLP_PARAM_DIM)} head=[{head}]"
+                                    )
+                                else:
+                                    print(
+                                        f"[WEIGHTS_UPDATED] [seq {acked_version}] "
+                                        f"dim={active_dim}/{FEATURE_DIM} [{ack_active_fmt}]"
+                                    )
                             self._last_step_ack_time = get_monotonic_time()
                             data = current
                         break  # ACK完成，退出循环
@@ -2648,7 +2972,7 @@ class LohEnv(gym.Env):
                     if self._sem_enabled:
                         waited_via_sem = self._sem_wait(self._sem_ready, self._sem_timeout, label="ready@step")
                         if waited_via_sem:
-                            if LOH_DEBUG_VERBOSE():
+                            if LOH_DEBUG_BASIC():
                                 print("[SEM][Python] step() resumed via semaphore for ready state")
                             continue
                     elif LOH_DEBUG_BASIC() and not self._sem_disabled_logged:
@@ -2659,7 +2983,7 @@ class LohEnv(gym.Env):
                         self._poll_fallback_count += 1
                         now_poll = get_monotonic_time()
                         used_polling_this_step = True
-                        if LOH_DEBUG_VERBOSE() and not polling_logged:
+                        if LOH_DEBUG_BASIC() and not polling_logged:
                             print(
                                 f"[POLL][Python] step() waiting via polling (state_version={self.last_state_version})"
                             )
@@ -2671,10 +2995,10 @@ class LohEnv(gym.Env):
 
             write_end = get_monotonic_time()
 
-        if used_polling_this_step and LOH_DEBUG_VERBOSE():
+        if used_polling_this_step and LOH_DEBUG_BASIC():
             print(f"[POLL][Python] step() handled ready via polling before seq {acked_version}")
 
-        if LOH_DEBUG_VERBOSE():
+        if LOH_DEBUG_BASIC():
             print(f"[Step {self.current_step}] Weights: {weights}")
             print(f"[{write_end:.6f}] weights write completed, total time {write_end - step_start:.6f} seconds")
 
@@ -2682,7 +3006,7 @@ class LohEnv(gym.Env):
         # C端收到ACK后，会应用新权重，然后继续处理请求
         # 处理完下一个请求后，会发送新的状态（新的state_version）
         wait_start = get_monotonic_time()
-        if LOH_DEBUG_VERBOSE():
+        if LOH_DEBUG_BASIC():
             print(f"[{wait_start:.6f}] waiting for C-side response (expecting new version != {acked_version})")
 
         timeout_counter = 0
@@ -2721,7 +3045,7 @@ class LohEnv(gym.Env):
                         data = new_data
                         wait_end = get_monotonic_time()
                         wait_duration = wait_end - wait_start
-                        if LOH_DEBUG_VERBOSE():
+                        if LOH_DEBUG_BASIC():
                             print(f"[{wait_end:.6f}] [SEM][Python] C-side response (via sem) received, waited {wait_duration:.6f} seconds — [seq {int(new_data.state_version)}]")
                         break
                     # sem 唤醒但未得到新版本时，继续循环（可能为噪声或另一种事件）
@@ -2761,7 +3085,7 @@ class LohEnv(gym.Env):
                 data = new_data
                 wait_end = get_monotonic_time()
                 wait_duration = wait_end - wait_start
-                if LOH_DEBUG_VERBOSE():
+                if LOH_DEBUG_BASIC():
                     print(f"[{wait_end:.6f}] [POLL][Python] C-side response received, waited {wait_duration:.6f} seconds (checked {timeout_counter} times) — [seq {int(new_data.state_version)}]")
                 break
 
@@ -2794,7 +3118,7 @@ class LohEnv(gym.Env):
             if timeout_counter % heartbeat_interval_checks == 0:
                 now = get_monotonic_time()
                 elapsed = now - wait_start
-                if LOH_DEBUG_VERBOSE():
+                if LOH_DEBUG_BASIC():
                     print(
                         f"[POLL][Python] waiting for new state — waited {elapsed:.3f}s (expect version != {acked_version})"
                     )
@@ -2810,7 +3134,8 @@ class LohEnv(gym.Env):
 
         # 6. 使用状态作为新观测
         # 先读取“原始”观测（含 state[0:2] 的命中率），用于奖励与日志
-        new_observation_raw = np.array(data.state, dtype=np.float32)
+        new_state_full = np.array(data.state, dtype=np.float32)
+        new_observation_raw = new_state_full[:STATE_DIM]
 
         # 打印原始状态，与 C 端保持一致便于调试
         state_version = int(data.state_version)
@@ -2876,7 +3201,7 @@ class LohEnv(gym.Env):
             print(f"  total_evicted_count: {total_evicted_count}")
 
         # 【已废弃】旧的 _print_state_segments 调用已被前面的 _print_state_by_category 替代
-        # if LOH_DEBUG_VERBOSE():
+        # if LOH_DEBUG_BASIC():
         #     self._print_state_segments(new_observation_raw)
 
         # 7. 计算即时奖励（基于global_features的加权命中率）
@@ -2884,6 +3209,45 @@ class LohEnv(gym.Env):
         # 最终奖励将在 ReplayBuffer 中通过惩罚延迟修正
         immediate_reward = self.reward_alpha * obj_hit_ratio + self.reward_beta * byte_hit_ratio
         reward = immediate_reward  # 默认使用即时奖励
+
+        # 可选：delta reward（抵消 warmup/非平稳基线，默认关闭）
+        if self._reward_mode == "delta":
+            try:
+                if self._prev_immediate_reward is None:
+                    reward = 0.0
+                else:
+                    reward = float(immediate_reward - float(self._prev_immediate_reward))
+            except Exception:
+                reward = float(immediate_reward)
+
+        # 可选：reward 缩放（默认 1.0）
+        try:
+            reward = float(reward) * float(self._reward_scale)
+        except Exception:
+            pass
+
+        # 可选：reward 标准化（running mean/std，EMA 更新；默认关闭）
+        if getattr(self, "_reward_norm_enabled", False):
+            try:
+                r = float(reward)
+                a = float(self._reward_norm_ema)
+                # EMA mean
+                self._reward_norm_mean = a * float(self._reward_norm_mean) + (1.0 - a) * r
+                # EMA second moment for variance
+                diff = r - float(self._reward_norm_mean)
+                self._reward_norm_var = a * float(self._reward_norm_var) + (1.0 - a) * float(diff * diff)
+                denom = math.sqrt(float(self._reward_norm_var) + 1e-8)
+                r_norm = (r - float(self._reward_norm_mean)) / denom
+                c = float(self._reward_norm_clip)
+                reward = float(max(-c, min(c, r_norm)))
+            except Exception:
+                pass
+
+        # 更新 delta 基准（无论 reward_mode 是否使用，便于切换）
+        try:
+            self._prev_immediate_reward = float(immediate_reward)
+        except Exception:
+            pass
 
         if LOH_DEBUG_BASIC():
             print(f"[Step {self.current_step}] Immediate reward: "
@@ -3062,9 +3426,8 @@ class LohEnv(gym.Env):
             self._last_step_wall_end_ts = float(step_end)
         except Exception:
             pass
-        if LOH_DEBUG_VERBOSE():
+        if LOH_DEBUG_BASIC():
             print(f"[{step_end:.6f}] Step {self.current_step} completed, total duration {total_duration:.6f} seconds")
-            print("=" * 50)
 
         # 记录完整 step 总时长（非重叠，大账用）
         try:
@@ -3090,7 +3453,11 @@ class LohEnv(gym.Env):
 
         #打印obs
         if LOH_DEBUG_BASIC():
-            print(f"[Step {self.current_step}] Observation returned to RL agent: {obs_out}")
+            obs_fmt = np.array2string(
+                obs_out, precision=6, separator=", ", suppress_small=False, max_line_width=1000000
+            )
+            print(f"[Step {self.current_step}] Observation returned to RL agent: {obs_fmt}")
+            print("=" * 50)
         return obs_out, reward, terminated, truncated, info
 
     def close(self):
@@ -3205,7 +3572,7 @@ class LOHTrainingCallback(BaseCallback):
 
     def _on_training_start(self) -> None:
         """整个训练开始"""
-        self._log_with_timestamp("=== SAC训练开始 ===", "START")
+        self._log_with_timestamp("=== 训练开始 ===", "START")
         self._log_with_timestamp("初始设置: is_training=1 (避免启动竞态条件)")
         # 初始设置为训练状态，避免启动时的竞态条件
         self.env_ref._update_is_training(1)
@@ -3244,7 +3611,7 @@ class LOHTrainingCallback(BaseCallback):
                     # 从 env 记录基础统计（适用于所有算法，包括 PPO）
                     self._record_env_stats_to_tb()
 
-                    # 针对 off-policy 算法（SAC/TD3）的 replay buffer 记录
+                    # 针对 off-policy 算法（SAC/TD3/DDPG）的 replay buffer 记录
                     buffer = getattr(self.model, 'replay_buffer', None)
                     if buffer is not None and hasattr(buffer, 'rewards'):
                         # 计算最近100个样本的reward统计
@@ -3505,15 +3872,137 @@ class LOHTrainingCallback(BaseCallback):
         # 训练结束，设置为空闲状态
         self.env_ref._set_training_mode(False)
 
+def _soft_prior_enabled() -> bool:
+    raw = os.environ.get("LOH_SOFT_PRIOR", DEFAULT_LOH_SOFT_PRIOR)
+    if raw is None:
+        return False
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_soft_prior_config() -> Optional[dict]:
+    if not _soft_prior_enabled():
+        return None
+
+    try:
+        prior_bias = float(os.environ.get("LOH_SOFT_PRIOR_BIAS", DEFAULT_LOH_SOFT_PRIOR_BIAS))
+    except Exception:
+        prior_bias = float(DEFAULT_LOH_SOFT_PRIOR_BIAS)
+
+    use_signs_raw = os.environ.get(
+        "LOH_USE_HEURISTIC_SIGNS", DEFAULT_LOH_USE_HEURISTIC_SIGNS
+    )
+    use_signs = False if use_signs_raw is None else use_signs_raw.strip().lower() not in {"0", "false", "off"}
+
+    # 以 LOG1P 模式的默认符号谱系作为软先验，后续按需裁剪到 SCORE_FEATURE_DIM
+    intended_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0]
+    c_side_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0] if use_signs else [1.0] * len(intended_signs)
+
+    target_signs: List[float] = []
+    for idx, sign in enumerate(intended_signs):
+        c_sign = c_side_signs[idx] if idx < len(c_side_signs) else 1.0
+        target_signs.append(sign * c_sign)
+
+    return {
+        "prior_bias": prior_bias,
+        "target_signs": target_signs,
+        "use_heuristic_signs": use_signs,
+    }
+
+
+def _apply_soft_prior_to_linear_layer(layer: Optional[torch.nn.Module], tag: str, cfg: Optional[dict] = None) -> bool:
+    cfg = cfg or _get_soft_prior_config()
+    if cfg is None:
+        return False
+
+    if layer is None:
+        if LOH_DEBUG_BASIC():
+            print(f"[LOH {tag} soft prior] skip: action layer not found")
+        return False
+
+    if not isinstance(layer, torch.nn.Linear):
+        if LOH_DEBUG_BASIC():
+            print(f"[LOH {tag} soft prior] skip: expected torch.nn.Linear, got {type(layer)}")
+        return False
+
+    if layer.out_features != ACTION_DIM:
+        if LOH_DEBUG_BASIC():
+            print(
+                f"[LOH {tag} soft prior] skip: action dim mismatch (expected {ACTION_DIM}, got {layer.out_features})"
+            )
+        return False
+
+    prior_bias = float(cfg["prior_bias"])
+    target_signs = list(cfg["target_signs"])
+
+    with torch.no_grad():
+        for i in range(SCORE_FEATURE_DIM):
+            if i >= len(target_signs):
+                break
+            sign = target_signs[i]
+            if LOH_DUAL_CHANNEL:
+                pos_idx = 2 * i
+                neg_idx = 2 * i + 1
+                if neg_idx >= ACTION_DIM:
+                    break
+                if sign > 0:
+                    layer.bias[pos_idx] += prior_bias
+                    layer.bias[neg_idx] -= prior_bias
+                elif sign < 0:
+                    layer.bias[pos_idx] -= prior_bias
+                    layer.bias[neg_idx] += prior_bias
+            else:
+                if i >= ACTION_DIM:
+                    break
+                if sign > 0:
+                    layer.bias[i] += prior_bias
+                elif sign < 0:
+                    layer.bias[i] -= prior_bias
+
+    if LOH_DEBUG_BASIC():
+        print(f"[LOH {tag} soft prior] Heuristic signs enabled in C? {cfg['use_heuristic_signs']}")
+        print(f"  Target signs: {target_signs[:SCORE_FEATURE_DIM]}")
+        print(f"  Applied FULL PROFILE bias={prior_bias} (DualChannel={LOH_DUAL_CHANNEL})")
+
+    return True
+
+
 def main():
-    """主函数 - 支持 PPO/SAC/TD3 + 事后奖励修正"""
+    """主函数 - 支持 PPO/PPO_LSTM/A2C/SAC/TD3/DDPG/TQC + 事后奖励修正"""
     # 统一使用单调时钟，避免 clock 源差异导致 program.total 与各分项存在微小偏差
     _prog_t0 = get_monotonic_time()
 
+    # 可复现性：统一 seed（同时影响 python/random、numpy、torch、SB3）
+    seed: Optional[int] = None
+    seed_env = os.environ.get("LOH_SEED", "").strip()
+    if seed_env != "":
+        try:
+            seed = int(seed_env)
+        except Exception:
+            seed = None
+    if seed is not None:
+        try:
+            random.seed(seed)
+        except Exception:
+            pass
+        try:
+            np.random.seed(seed)
+        except Exception:
+            pass
+        try:
+            set_random_seed(seed)
+        except Exception:
+            pass
+        try:
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+        except Exception:
+            pass
+
     # 读取算法选择（默认 SAC）
     algo_name = os.environ.get("LOH_RL_ALGO", DEFAULT_LOH_RL_ALGO).strip().upper()
-    # 支持: SAC, PPO (MLP), PPO_LSTM (RecurrentPPO), TD3
-    if algo_name not in {"PPO", "PPO_LSTM", "SAC", "TD3"}:
+    # 支持: SAC, PPO (MLP), PPO_LSTM (RecurrentPPO), A2C, TD3, DDPG, TQC
+    if algo_name not in {"PPO", "PPO_LSTM", "A2C", "SAC", "TD3", "DDPG", "TQC"}:
         print(f"Warning: Unknown LOH_RL_ALGO='{algo_name}', defaulting to SAC")
         algo_name = "SAC"
 
@@ -3532,25 +4021,25 @@ def main():
         miss_ratio_weight = float(DEFAULT_LOH_MISS_RATIO_WEIGHT)
 
     # exclude_recent_steps 从环境变量读取（原命令行 --exclude-recent-steps）
-    exclude_recent_steps = int(DEFAULT_SAC_EXCLUDE_RECENT_STEPS)
+    exclude_recent_steps = int(DEFAULT_LOH_EXCLUDE_RECENT_STEPS)
     try:
-        ers_raw = os.environ.get(
-            "SAC_EXCLUDE_RECENT_STEPS",
-            os.environ.get("LOH_EXCLUDE_RECENT_STEPS", DEFAULT_SAC_EXCLUDE_RECENT_STEPS),
-        )
+        ers_raw = os.environ.get("LOH_EXCLUDE_RECENT_STEPS", DEFAULT_LOH_EXCLUDE_RECENT_STEPS)
         exclude_recent_steps = int(ers_raw)
     except Exception:
-        exclude_recent_steps = int(DEFAULT_SAC_EXCLUDE_RECENT_STEPS)
+        exclude_recent_steps = int(DEFAULT_LOH_EXCLUDE_RECENT_STEPS)
 
     print("=== LOH RL Reward & Obs Config ===")
     print(f"  LOH_RL_ALGO: {algo_name}")
-    print(f"  State dimension (CONTEXT_DIM): {CONTEXT_DIM}")
-    print(f"  Action dimension (FEATURE_DIM): {FEATURE_DIM}")
+    print(f"  State dimension: active={STATE_DIM}, context={CONTEXT_DIM}")
+    print(
+        f"  Action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, shared cap={FEATURE_DIM})"
+    )
     print(f"  LOH_ENABLE_PROFILING: {'1 (enabled)' if LOH_ENABLE_PROFILING else '0 (disabled)'}")
 
     # IPC 相关环境变量
     print("=== IPC Config ===")
     print(f"  LOH_SHM_KEY: {_envb('LOH_SHM_KEY', '(default 9876)')}")
+    print(f"  LOH_SEED: {_envb('LOH_SEED', '(unset)')}")
     print(f"  LOH_ENABLE_SEMAPHORE: {_envb('LOH_ENABLE_SEMAPHORE', '(unset)')}")
     print(f"  LOH_DISABLE_SEMAPHORE: {_envb('LOH_DISABLE_SEMAPHORE', '(unset)')}")
     print(f"  LOH_SEM_TIMEOUT_S: {_envb('LOH_SEM_TIMEOUT_S', '1.0')}")
@@ -3560,6 +4049,20 @@ def main():
     print("=== Feature Mode ===")
     print(f"  LOH_FEATURE_LOG1P: {_envb('LOH_FEATURE_LOG1P', '0')}  (1=log1p(raw), 0=1/(1+log1p(raw)) or 1/(1+raw))")
     print(f"  LOH_FEATURE_LOG1P_RECIPROCAL: {_envb('LOH_FEATURE_LOG1P_RECIPROCAL', '(unset)')}")
+    print(
+        f"  Score toggles: LOH_SCORE_USE_IRT={LOH_SCORE_USE_IRT}  "
+        f"LOH_SCORE_USE_COMPOUND={LOH_SCORE_USE_COMPOUND}  "
+        f"SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}  STATE_FEATURE_DIM={STATE_FEATURE_DIM}  FEATURE_DIM={FEATURE_DIM}"
+    )
+    print(
+        f"  Action space: LOH_DUAL_CHANNEL={int(LOH_DUAL_CHANNEL)} (ACTION_DIM={ACTION_DIM}), "
+        f"LOH_USE_SOFTMAX={int(LOH_USE_SOFTMAX)}  LOH_SOFTMAX_TEMP={_envb('LOH_SOFTMAX_TEMP', DEFAULT_LOH_SOFTMAX_TEMP)}"
+    )
+    print(
+        f"  Soft prior: LOH_SOFT_PRIOR={_envb('LOH_SOFT_PRIOR', DEFAULT_LOH_SOFT_PRIOR)}  "
+        f"LOH_SOFT_PRIOR_BIAS={_envb('LOH_SOFT_PRIOR_BIAS', DEFAULT_LOH_SOFT_PRIOR_BIAS)}  "
+        f"LOH_USE_HEURISTIC_SIGNS={_envb('LOH_USE_HEURISTIC_SIGNS', DEFAULT_LOH_USE_HEURISTIC_SIGNS)}"
+    )
 
     # 观测空间配置
     print("=== Observation Config ===")
@@ -3604,17 +4107,16 @@ def main():
     obj_penalty_weight = miss_ratio_weight
     byte_penalty_weight = byte_miss_ratio_weight
 
-    if LOH_DEBUG_BASIC():
-        print(f"LOH RL Agent: Using {algo_name} with Retrospective Reward Correction")
-        print(f"{CONTEXT_DIM}-dimensional state vector")
-        print(f"Reward weights: miss_ratio={miss_ratio_weight:.3f}, byte_miss_ratio={byte_miss_ratio_weight:.3f}")
-        print(f"Penalty weights: obj_penalty={obj_penalty_weight:.3f}, byte_penalty={byte_penalty_weight:.3f}")
-        print(f"Penalty scale mode: {os.environ.get('LOH_PENALTY_SCALE', DEFAULT_LOH_PENALTY_SCALE)}")
-        reward_ema = _env_flag("LOH_REWARD_EMA", DEFAULT_LOH_REWARD_EMA == "1")
-        if reward_ema:
-            ema_window = os.environ.get('LOH_REWARD_EMAWINDOW', DEFAULT_LOH_REWARD_EMAWINDOW)
-            print(f"Reward EMA smoothing: enabled, window={ema_window}")
-        print(f"exclude_recent_steps={exclude_recent_steps}")
+    print(f"LOH RL Agent: Using {algo_name} with Retrospective Reward Correction")
+    print(f"{STATE_DIM}-dimensional active state vector (context={CONTEXT_DIM})")
+    print(f"Reward weights: miss_ratio={miss_ratio_weight:.3f}, byte_miss_ratio={byte_miss_ratio_weight:.3f}")
+    print(f"Penalty weights: obj_penalty={obj_penalty_weight:.3f}, byte_penalty={byte_penalty_weight:.3f}")
+    print(f"Penalty scale mode: {os.environ.get('LOH_PENALTY_SCALE', DEFAULT_LOH_PENALTY_SCALE)}")
+    reward_ema = _env_flag("LOH_REWARD_EMA", DEFAULT_LOH_REWARD_EMA == "1")
+    if reward_ema:
+        ema_window = os.environ.get('LOH_REWARD_EMAWINDOW', DEFAULT_LOH_REWARD_EMAWINDOW)
+        print(f"Reward EMA smoothing: enabled, window={ema_window}")
+    print(f"exclude_recent_steps={exclude_recent_steps}")
 
     # 设置输出目录（使用环境变量RUN_TIMESTAMP以便与test_loh_rl_sb3.sh对齐）
     timestamp = os.environ.get("RUN_TIMESTAMP", DEFAULT_RUN_TIMESTAMP) or datetime.now().strftime("%m%d_%H%M%S")
@@ -3676,9 +4178,22 @@ def main():
             obs_keep_indices=None,
         )
 
+        if seed is not None:
+            try:
+                env.reset(seed=seed)
+            except Exception:
+                pass
+            try:
+                env.action_space.seed(seed)
+            except Exception:
+                pass
+            try:
+                env.observation_space.seed(seed)
+            except Exception:
+                pass
+
         # 2. 跳过环境检查
-        if LOH_DEBUG_BASIC():
-            print("⚡ skip environment check, directly start training")
+        print("⚡ skip environment check, directly start training")
 
         # ==================== 3. 根据 algo_name 配置超参数并创建模型 ====================
         if algo_name == "SAC":
@@ -3733,8 +4248,21 @@ def main():
                 "MlpPolicy",
                 env,
                 verbose=1,
+                seed=seed,
                 **sac_config,
             )
+
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
+                try:
+                    actor_layer = getattr(getattr(model, "actor", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(actor_layer, "SAC", cfg=soft_prior_cfg)
+
+                    target_layer = getattr(getattr(model, "actor_target", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(target_layer, "SAC-target", cfg=soft_prior_cfg)
+                except Exception as e:
+                    if LOH_DEBUG_BASIC():
+                        print("[LOH SAC soft prior] failed to apply:", e)
 
         elif algo_name == "PPO":
             # ------------------ PPO 超参数 ------------------
@@ -3756,6 +4284,7 @@ def main():
                 "MlpPolicy",
                 env,
                 verbose=1,
+                seed=seed,
                 n_steps=ppo_n_steps,
                 batch_size=ppo_batch_size,
                 n_epochs=ppo_n_epochs,
@@ -3768,116 +4297,81 @@ def main():
                 gamma=gamma,
                 tensorboard_log=tensorboard_log,
                 policy_kwargs=dict(
-                    net_arch=[dict(pi=ppo_net_arch, vf=ppo_net_arch)],
+                    net_arch=dict(pi=ppo_net_arch, vf=ppo_net_arch),
                     activation_fn=ppo_activation_fn,
                 ),
             )
 
-            # ------------------ PPO 软先验初始化（可选） ------------------
-            # 若设置环境变量 LOH_PPO_SOFT_PRIOR=1，则在 PPO 模型创建后
-            # 对策略输出层做一次性轻微偏置，为 12 维双通道动作提供软先验。
-            #
-            # 改进版：支持全谱系先验 (Full Profile)，复刻 C 端硬先验的符号模式
-            # 默认模式 (LOH_FEATURE_LOG1P=1): [-1, 1, -1, -1, -1, -1]
-            # 即：Recency(-), Freq(+), Size(-), IRT1(-), IRT2(-), IRT3(-)
-            soft_prior_flag = os.environ.get("LOH_PPO_SOFT_PRIOR", "0").strip()
-            if soft_prior_flag in ("1", "true", "True"):
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
                 try:
-                    # 从环境变量读取偏置强度（logits 级别），默认 0.5
-                    prior_bias = _env_float_local("LOH_PPO_SOFT_PRIOR_BIAS", 0.5)
-
-                    # 确定符号谱系：默认为 LOG1P 模式下的 [-1, 1, -1, -1, -1, -1]
-                    # 1.0 = 正权重 (倾向 LFU), -1.0 = 负权重 (倾向 LRU/Small/LowIRT)
-                    intended_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0]
-
-                    # 检查 C 端是否启用了启发式符号 (LOH_USE_HEURISTIC_SIGNS)
-                    # 如果 C 端启用了符号 (默认 1)，则 C 端会乘以 [-1, 1, -1...]
-                    # 此时 Python 应该输出正权重 (Importance) 以避免双重负号 (Double Negative)
-                    # 逻辑：target_sign = intended_sign * c_side_sign
-                    use_heuristic_signs_env = os.environ.get("LOH_USE_HEURISTIC_SIGNS", "1").strip()
-                    use_heuristic_signs = use_heuristic_signs_env not in ("0", "false", "False")
-
-                    if use_heuristic_signs:
-                        # C 端符号: [-1, 1, -1, -1, -1, -1]
-                        c_side_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0]
-                    else:
-                        # C 端符号: [1, 1, 1, 1, 1, 1]
-                        c_side_signs = [1.0] * 6
-
-                    target_signs = []
-                    for i in range(len(intended_signs)):
-                        # 防止越界 (虽然通常 FEATURE_DIM=6)
-                        c_sign = c_side_signs[i] if i < len(c_side_signs) else 1.0
-                        target_signs.append(intended_signs[i] * c_sign)
-
-                    if LOH_DEBUG_BASIC():
-                        print(f"[LOH PPO soft prior] Heuristic Signs Enabled in C? {use_heuristic_signs}")
-                        print(f"  Intended signs: {intended_signs}")
-                        print(f"  C-side signs:   {c_side_signs[:len(intended_signs)]}")
-                        print(f"  Python Target:  {target_signs}")
-
-                    # 假设默认策略为 ActorCriticPolicy
-                    # 修正：PPO 的动作输出层是 model.policy.action_net
-                    # mlp_extractor.policy_net 只是特征提取器，输出 latent_dim (默认64)
                     last_layer = None
                     if hasattr(model.policy, "action_net"):
                         last_layer = model.policy.action_net
                     elif hasattr(model.policy, "mlp_extractor") and hasattr(model.policy.mlp_extractor, "policy_net"):
-                        # 备用：尝试旧逻辑（虽然通常不对）
                         policy_net = model.policy.mlp_extractor.policy_net
-                        if hasattr(policy_net, "_modules"):
-                            modules = [m for m in policy_net.children()]
+                        if hasattr(policy_net, "children"):
+                            modules = [module for module in policy_net.children()]
                             if modules:
                                 last_layer = modules[-1]
-                        if last_layer is None and len(policy_net) > 0:
-                            last_layer = policy_net[-1]
+                        if last_layer is None:
+                            try:
+                                # Sequential-like fallback
+                                last_layer = policy_net[-1]
+                            except Exception:
+                                last_layer = None
 
-                    # 仅当最后一层是线性层且输出维度等于 ACTION_DIM 时才应用
-                    if last_layer is not None and isinstance(last_layer, torch.nn.Linear) and last_layer.out_features == ACTION_DIM:
-                        with torch.no_grad():
-                            # 双通道布局：每个特征 i 对应 (2*i, 2*i+1)
-                            # w[i] = p[2*i] - p[2*i+1]
-                            # 目标：
-                            # 若 sign > 0: 提升 2*i (Pos), 抑制 2*i+1 (Neg) -> w[i] > 0
-                            # 若 sign < 0: 抑制 2*i (Pos), 提升 2*i+1 (Neg) -> w[i] < 0
-
-                            for i in range(SCORE_FEATURE_DIM):
-                                if i >= len(target_signs): break
-
-                                sign = target_signs[i]
-
-                                if LOH_DUAL_CHANNEL:
-                                    pos_idx = 2 * i
-                                    neg_idx = 2 * i + 1
-
-                                    if sign > 0:
-                                        last_layer.bias[pos_idx] += prior_bias
-                                        last_layer.bias[neg_idx] -= prior_bias
-                                    elif sign < 0:
-                                        last_layer.bias[pos_idx] -= prior_bias
-                                        last_layer.bias[neg_idx] += prior_bias
-                                else:
-                                    # 单通道模式：直接偏置输出
-                                    # 假设 action ~ tanh(logits)，bias > 0 -> action > 0
-                                    if sign > 0:
-                                        last_layer.bias[i] += prior_bias
-                                    elif sign < 0:
-                                        last_layer.bias[i] -= prior_bias
-
-                            if LOH_DEBUG_BASIC():
-                                print(f"[LOH PPO soft prior] Applied FULL PROFILE bias={prior_bias} (DualChannel={LOH_DUAL_CHANNEL})")
-                                print(f"  Target signs: {target_signs}")
-                                print(f"  (Recency:-, Freq:+, Size:-, IRT:-)")
-                    else:
-                        if LOH_DEBUG_BASIC():
-                            print(
-                                "[LOH PPO soft prior] skip: last layer is not Linear with out_features=",
-                                ACTION_DIM,
-                                " (found layer: ", last_layer, ")"
-                            )
+                    _apply_soft_prior_to_linear_layer(last_layer, "PPO", cfg=soft_prior_cfg)
                 except Exception as e:
                     if LOH_DEBUG_BASIC():
                         print("[LOH PPO soft prior] failed to apply:", e)
+
+        elif algo_name == "A2C":
+            # ------------------ A2C 超参数（连续动作支持） ------------------
+            a2c_n_steps = _env_int("A2C_N_STEPS", 128)
+            a2c_learning_rate = _env_float_local("A2C_LEARNING_RATE", 3e-4)
+            a2c_gamma = _env_float_local("A2C_GAMMA", 0.99)
+            a2c_gae_lambda = _env_float_local("A2C_GAE_LAMBDA", 1.0)
+            a2c_ent_coef = _env_float_local("A2C_ENT_COEF", 0.0)
+            a2c_vf_coef = _env_float_local("A2C_VF_COEF", 0.5)
+            a2c_max_grad_norm = _env_float_local("A2C_MAX_GRAD_NORM", 0.5)
+            a2c_rms_prop_eps = _env_float_local("A2C_RMS_PROP_EPS", 1e-5)
+            a2c_use_rms_prop = _env_flag("A2C_USE_RMS_PROP", True)
+
+            a2c_net_arch = _parse_net_arch("A2C_NET_ARCH", [256, 256])
+            a2c_activation_fn = _parse_activation_fn("A2C_ACTIVATION_FN", "ReLU")
+
+            model = ProfiledA2C(
+                "MlpPolicy",
+                env,
+                verbose=1,
+                seed=seed,
+                n_steps=a2c_n_steps,
+                learning_rate=a2c_learning_rate,
+                gamma=a2c_gamma,
+                gae_lambda=a2c_gae_lambda,
+                ent_coef=a2c_ent_coef,
+                vf_coef=a2c_vf_coef,
+                max_grad_norm=a2c_max_grad_norm,
+                rms_prop_eps=a2c_rms_prop_eps,
+                use_rms_prop=a2c_use_rms_prop,
+                tensorboard_log=tensorboard_log,
+                policy_kwargs=dict(
+                    net_arch=dict(pi=a2c_net_arch, vf=a2c_net_arch),
+                    activation_fn=a2c_activation_fn,
+                ),
+            )
+
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
+                try:
+                    last_layer = None
+                    if hasattr(model.policy, "action_net"):
+                        last_layer = model.policy.action_net
+                    _apply_soft_prior_to_linear_layer(last_layer, "A2C", cfg=soft_prior_cfg)
+                except Exception as e:
+                    if LOH_DEBUG_BASIC():
+                        print("[LOH A2C soft prior] failed to apply:", e)
 
         elif algo_name == "PPO_LSTM":
             # ------------------ PPO-LSTM (RecurrentPPO) 超参数 ------------------
@@ -3903,6 +4397,7 @@ def main():
                 "MlpLstmPolicy",
                 env,
                 verbose=1,
+                seed=seed,
                 n_steps=ppo_n_steps,
                 batch_size=ppo_batch_size,
                 n_epochs=ppo_n_epochs,
@@ -3915,72 +4410,16 @@ def main():
                 gamma=gamma,
                 tensorboard_log=tensorboard_log,
                 policy_kwargs=dict(
-                    net_arch=[dict(pi=ppo_net_arch, vf=ppo_net_arch)],
+                    net_arch=dict(pi=ppo_net_arch, vf=ppo_net_arch),
                     activation_fn=ppo_activation_fn,
                 ),
             )
 
-            # 可选：对 LSTM 策略同样应用 PPO 软先验（如果结构兼容）
-            soft_prior_flag = os.environ.get("LOH_PPO_SOFT_PRIOR", "0").strip()
-            if soft_prior_flag in ("1", "true", "True"):
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
                 try:
-                    prior_bias = _env_float_local("LOH_PPO_SOFT_PRIOR_BIAS", 0.5)
-                    intended_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0]
-                    use_heuristic_signs_env = os.environ.get("LOH_USE_HEURISTIC_SIGNS", "1").strip()
-                    use_heuristic_signs = use_heuristic_signs_env not in ("0", "false", "False")
-
-                    if use_heuristic_signs:
-                        c_side_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0]
-                    else:
-                        c_side_signs = [1.0] * 6
-
-                    target_signs = []
-                    for i in range(len(intended_signs)):
-                        c_sign = c_side_signs[i] if i < len(c_side_signs) else 1.0
-                        target_signs.append(intended_signs[i] * c_sign)
-
-                    if LOH_DEBUG_BASIC():
-                        print(f"[LOH PPO-LSTM soft prior] Heuristic Signs Enabled in C? {use_heuristic_signs}")
-                        print(f"  Intended signs: {intended_signs}")
-                        print(f"  C-side signs:   {c_side_signs[:len(intended_signs)]}")
-                        print(f"  Python Target:  {target_signs}")
-
-                    last_layer = None
-                    if hasattr(model.policy, "action_net"):
-                        last_layer = model.policy.action_net
-
-                    if last_layer is not None and isinstance(last_layer, torch.nn.Linear) and last_layer.out_features == ACTION_DIM:
-                        with torch.no_grad():
-                            for i in range(SCORE_FEATURE_DIM):
-                                if i >= len(target_signs):
-                                    break
-                                sign = target_signs[i]
-                                if LOH_DUAL_CHANNEL:
-                                    pos_idx = 2 * i
-                                    neg_idx = 2 * i + 1
-                                    if sign > 0:
-                                        last_layer.bias[pos_idx] += prior_bias
-                                        last_layer.bias[neg_idx] -= prior_bias
-                                    elif sign < 0:
-                                        last_layer.bias[pos_idx] -= prior_bias
-                                        last_layer.bias[neg_idx] += prior_bias
-                                else:
-                                    if sign > 0:
-                                        last_layer.bias[i] += prior_bias
-                                    elif sign < 0:
-                                        last_layer.bias[i] -= prior_bias
-
-                            if LOH_DEBUG_BASIC():
-                                print(f"[LOH PPO-LSTM soft prior] Applied FULL PROFILE bias={prior_bias} (DualChannel={LOH_DUAL_CHANNEL})")
-                                print(f"  Target signs: {target_signs}")
-                                print(f"  (Recency:-, Freq:+, Size:-, IRT:-)")
-                    else:
-                        if LOH_DEBUG_BASIC():
-                            print(
-                                "[LOH PPO-LSTM soft prior] skip: last layer is not Linear with out_features=",
-                                ACTION_DIM,
-                                " (found layer: ", last_layer, ")"
-                            )
+                    last_layer = model.policy.action_net if hasattr(model.policy, "action_net") else None
+                    _apply_soft_prior_to_linear_layer(last_layer, "PPO-LSTM", cfg=soft_prior_cfg)
                 except Exception as e:
                     if LOH_DEBUG_BASIC():
                         print("[LOH PPO-LSTM soft prior] failed to apply:", e)
@@ -4018,6 +4457,7 @@ def main():
                 "MlpPolicy",
                 env,
                 verbose=1,
+                seed=seed,
                 buffer_size=td3_buffer_size,
                 batch_size=td3_batch_size,
                 learning_rate=td3_learning_rate,
@@ -4040,156 +4480,382 @@ def main():
                     byte_penalty_weight=byte_penalty_weight,
                 ),
             )
+
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
+                try:
+                    actor_layer = getattr(getattr(model, "actor", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(actor_layer, "TD3", cfg=soft_prior_cfg)
+
+                    target_layer = getattr(getattr(model, "actor_target", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(target_layer, "TD3-target", cfg=soft_prior_cfg)
+                except Exception as e:
+                    if LOH_DEBUG_BASIC():
+                        print("[LOH TD3 soft prior] failed to apply:", e)
+
+        elif algo_name == "DDPG":
+            # ------------------ DDPG 超参数 ------------------
+            ddpg_buffer_size = _env_int("DDPG_BUFFER_SIZE", 10000)
+            ddpg_batch_size = _env_int("DDPG_BATCH_SIZE", 256)
+            ddpg_learning_rate = _env_float_local("DDPG_LEARNING_RATE", 3e-4)
+            ddpg_tau = _env_float_local("DDPG_TAU", 0.005)
+            ddpg_gamma = _env_float_local("DDPG_GAMMA", 0.99)
+            ddpg_train_freq = _env_int("DDPG_TRAIN_FREQ", 16)
+            ddpg_gradient_steps = _env_int("DDPG_GRADIENT_STEPS", 1)
+            ddpg_learning_starts = _env_int("DDPG_LEARNING_STARTS", 3000)
+
+            ddpg_net_arch = _parse_net_arch("DDPG_NET_ARCH", [256, 256])
+            ddpg_activation_fn = _parse_activation_fn("DDPG_ACTIVATION_FN", "ReLU")
+
+            # DDPG 噪声参数（可选，建议开启，否则探索不足）
+            ddpg_action_noise = None
+            ddpg_action_noise_env = os.environ.get("DDPG_ACTION_NOISE", "").strip()
+            if ddpg_action_noise_env:
+                try:
+                    from stable_baselines3.common.noise import NormalActionNoise
+                    noise_sigma = float(ddpg_action_noise_env)
+                    ddpg_action_noise = NormalActionNoise(
+                        mean=np.zeros(FEATURE_DIM),
+                        sigma=noise_sigma * np.ones(FEATURE_DIM)
+                    )
+                except Exception:
+                    pass
+
+            model = ProfiledDDPG(
+                "MlpPolicy",
+                env,
+                verbose=1,
+                seed=seed,
+                buffer_size=ddpg_buffer_size,
+                batch_size=ddpg_batch_size,
+                learning_rate=ddpg_learning_rate,
+                tau=ddpg_tau,
+                gamma=ddpg_gamma,
+                train_freq=(ddpg_train_freq, "step"),
+                gradient_steps=ddpg_gradient_steps,
+                learning_starts=ddpg_learning_starts,
+                action_noise=ddpg_action_noise,
+                tensorboard_log=tensorboard_log,
+                policy_kwargs=dict(
+                    net_arch=ddpg_net_arch,
+                    activation_fn=ddpg_activation_fn,
+                ),
+                replay_buffer_class=RetrospectiveReplayBuffer,
+                replay_buffer_kwargs=dict(
+                    exclude_recent_steps=exclude_recent_steps,
+                    obj_penalty_weight=obj_penalty_weight,
+                    byte_penalty_weight=byte_penalty_weight,
+                ),
+            )
+
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
+                try:
+                    actor_layer = getattr(getattr(model, "actor", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(actor_layer, "DDPG", cfg=soft_prior_cfg)
+
+                    target_layer = getattr(getattr(model, "actor_target", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(target_layer, "DDPG-target", cfg=soft_prior_cfg)
+                except Exception as e:
+                    if LOH_DEBUG_BASIC():
+                        print("[LOH DDPG soft prior] failed to apply:", e)
+
+        elif algo_name == "TQC":
+            # ------------------ TQC（sb3-contrib）超参数 ------------------
+            if TQC is None:
+                print("error: LOH_RL_ALGO=TQC 需要安装 sb3-contrib (pip install sb3-contrib)")
+                sys.exit(1)
+
+            tqc_buffer_size = _env_int("TQC_BUFFER_SIZE", 10000)
+            tqc_batch_size = _env_int("TQC_BATCH_SIZE", 256)
+            tqc_learning_rate = _env_float_local("TQC_LEARNING_RATE", 3e-4)
+            tqc_tau = _env_float_local("TQC_TAU", 0.005)
+            tqc_gamma = _env_float_local("TQC_GAMMA", 0.99)
+            tqc_train_freq = _env_int("TQC_TRAIN_FREQ", 16)
+            tqc_gradient_steps = _env_int("TQC_GRADIENT_STEPS", 1)
+            tqc_learning_starts = _env_int("TQC_LEARNING_STARTS", 3000)
+            tqc_top_quantiles = _env_int("TQC_TOP_QUANTILES_TO_DROP", 2)
+            tqc_n_quantiles = _env_int("TQC_N_QUANTILES", 25)
+            tqc_n_critics = _env_int("TQC_N_CRITICS", 2)
+
+            tqc_ent_coef_raw = os.environ.get("TQC_ENT_COEF", "").strip()
+            tqc_ent_coef = tqc_ent_coef_raw if tqc_ent_coef_raw != "" else "auto"
+
+            tqc_net_arch = _parse_net_arch("TQC_NET_ARCH", [256, 256])
+            tqc_activation_fn = _parse_activation_fn("TQC_ACTIVATION_FN", "ReLU")
+
+            tqc_kwargs = dict(
+                verbose=1,
+                seed=seed,
+                buffer_size=tqc_buffer_size,
+                batch_size=tqc_batch_size,
+                learning_rate=tqc_learning_rate,
+                tau=tqc_tau,
+                gamma=tqc_gamma,
+                train_freq=(tqc_train_freq, "step"),
+                gradient_steps=tqc_gradient_steps,
+                learning_starts=tqc_learning_starts,
+                ent_coef=tqc_ent_coef,
+                top_quantiles_to_drop_per_net=tqc_top_quantiles,
+                n_quantiles=tqc_n_quantiles,
+                n_critics=tqc_n_critics,
+                tensorboard_log=tensorboard_log,
+                policy_kwargs=dict(
+                    net_arch=tqc_net_arch,
+                    activation_fn=tqc_activation_fn,
+                ),
+                replay_buffer_class=RetrospectiveReplayBuffer,
+                replay_buffer_kwargs=dict(
+                    exclude_recent_steps=exclude_recent_steps,
+                    obj_penalty_weight=obj_penalty_weight,
+                    byte_penalty_weight=byte_penalty_weight,
+                ),
+            )
+
+            # sb3-contrib 的 TQC 构造签名在不同版本间有差异：
+            # 某些版本不支持 n_quantiles 等参数。这里做一次“按签名过滤”，避免直接崩溃。
+            try:
+                import inspect
+
+                sig = inspect.signature(ProfiledTQC.__init__)
+                has_var_kw = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD
+                    for p in sig.parameters.values()
+                )
+                if not has_var_kw:
+                    accepted = set(sig.parameters.keys())
+                    accepted.discard("self")
+                    tqc_kwargs = {k: v for k, v in tqc_kwargs.items() if k in accepted}
+            except Exception:
+                pass
+
+            try:
+                model = ProfiledTQC("MlpPolicy", env, **tqc_kwargs)
+            except TypeError as e:
+                msg = str(e)
+                if "unexpected keyword argument" in msg:
+                    # 最常见的不兼容点：n_quantiles
+                    tqc_kwargs.pop("n_quantiles", None)
+                    model = ProfiledTQC("MlpPolicy", env, **tqc_kwargs)
+                else:
+                    raise
+
+            soft_prior_cfg = _get_soft_prior_config()
+            if soft_prior_cfg:
+                try:
+                    actor_layer = getattr(getattr(model, "actor", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(actor_layer, "TQC", cfg=soft_prior_cfg)
+
+                    target_layer = getattr(getattr(model, "actor_target", None), "mu", None)
+                    _apply_soft_prior_to_linear_layer(target_layer, "TQC-target", cfg=soft_prior_cfg)
+                except Exception as e:
+                    if LOH_DEBUG_BASIC():
+                        print("[LOH TQC soft prior] failed to apply:", e)
         # ==================== 模型创建完成 ====================
 
         # 【新增】将model引用传递给env，使其能访问replay buffer
         env.set_model(model)
-        if LOH_DEBUG_BASIC():
-            print("✅ Model reference passed to environment for retrospective correction")
+        print("✅ Model reference passed to environment for retrospective correction")
 
         # 4. 开始训练
-        if LOH_DEBUG_BASIC():
-            # 从 model 实例读取真实的运行配置，避免 kwargs/默认值与实例不一致
-            def _fmt_train_freq(tf):
-                try:
-                    # SB3 TrainFreq dataclass
-                    unit = getattr(tf, 'unit', None)
-                    freq = getattr(tf, 'frequency', None)
-                    if unit is not None and freq is not None:
-                        return f"{freq} {str(unit).split('.')[-1]}"
-                except Exception:
-                    pass
-                try:
-                    # tuple like (16, 'step')
-                    if isinstance(tf, (tuple, list)) and len(tf) == 2:
-                        return f"{tf[0]} {tf[1]}"
-                except Exception:
-                    pass
-                return str(tf)
+        # 从 model 实例读取真实的运行配置，避免 kwargs/默认值与实例不一致
+        def _fmt_train_freq(tf):
+            try:
+                # SB3 TrainFreq dataclass
+                unit = getattr(tf, 'unit', None)
+                freq = getattr(tf, 'frequency', None)
+                if unit is not None and freq is not None:
+                    return f"{freq} {str(unit).split('.')[-1]}"
+            except Exception:
+                pass
+            try:
+                # tuple like (16, 'step')
+                if isinstance(tf, (tuple, list)) and len(tf) == 2:
+                    return f"{tf[0]} {tf[1]}"
+            except Exception:
+                pass
+            return str(tf)
 
-            def _resolved_lr(m):
+        def _resolved_lr(m):
+            try:
+                # lr_schedule(1) 给出初始学习率
+                return float(m.lr_schedule(1))
+            except Exception:
                 try:
-                    # lr_schedule(1) 给出初始学习率
-                    return float(m.lr_schedule(1))
+                    return float(getattr(m, 'learning_rate', learning_rate))
                 except Exception:
-                    try:
-                        return float(getattr(m, 'learning_rate', learning_rate))
-                    except Exception:
-                        return None
+                    return None
 
-            # 提取 actor 隐藏层结构与激活函数（尽力，从 model 实例反射）
-            def _infer_actor_hidden(policy):
-                try:
-                    hidden = []
-                    activ_name = None
-                    # 搜集线性层（排除输出 mu/log_std）
-                    for name, mod in policy.actor.named_modules():
-                        if isinstance(mod, torch.nn.Linear):
-                            if name.endswith('mu') or name.endswith('log_std'):
-                                continue
-                            hidden.append(int(mod.out_features))
-                        # 第一个激活层类名
-                        if activ_name is None and isinstance(mod, (
-                            torch.nn.ReLU, torch.nn.ELU, torch.nn.LeakyReLU, torch.nn.Tanh
-                        )):
-                            activ_name = mod.__class__.__name__
-                    return hidden if hidden else None, activ_name
-                except Exception:
-                    return None, None
+        # 提取 actor 隐藏层结构与激活函数（尽力，从 model 实例反射）
+        def _infer_actor_hidden(policy):
+            try:
+                hidden = []
+                activ_name = None
+                # 搜集线性层（排除输出 mu/log_std）
+                for name, mod in policy.actor.named_modules():
+                    if isinstance(mod, torch.nn.Linear):
+                        if name.endswith('mu') or name.endswith('log_std'):
+                            continue
+                        hidden.append(int(mod.out_features))
+                    # 第一个激活层类名
+                    if activ_name is None and isinstance(mod, (
+                        torch.nn.ReLU, torch.nn.ELU, torch.nn.LeakyReLU, torch.nn.Tanh
+                    )):
+                        activ_name = mod.__class__.__name__
+                return hidden if hidden else None, activ_name
+            except Exception:
+                return None, None
 
-            resolved_lr = _resolved_lr(model)
-            hidden_arch, activ = _infer_actor_hidden(model.policy)
+        resolved_lr = _resolved_lr(model)
+        hidden_arch, activ = _infer_actor_hidden(model.policy)
 
-            print(f"🧠 start {algo_name} training with retrospective reward correction")
-            print(f"📋 training configuration (resolved from model):")
-            print(f"   - algorithm: {algo_name}")
-            print(f"   - state dimension: {CONTEXT_DIM}")
-            print(f"   - action dimension: {FEATURE_DIM}")
-            print(f"   - shm_key: {shm_key}")
+        print(f"🧠 start {algo_name} training with retrospective reward correction")
+        print(f"📋 training configuration (resolved from model):")
+        print(f"   - algorithm: {algo_name}")
+        print(f"   - state dimension: active={STATE_DIM}, context={CONTEXT_DIM}")
+        print(
+            f"   - action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, shared cap={FEATURE_DIM})"
+        )
+        print(f"   - shm_key: {shm_key}")
 
-            # 算法特定参数
-            if algo_name == "PPO":
-                print(f"   - n_steps: {getattr(model, 'n_steps', 'N/A')}")
-                print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
-                print(f"   - n_epochs: {getattr(model, 'n_epochs', 'N/A')}")
-                print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
-                print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
-                print(f"   - gae_lambda: {getattr(model, 'gae_lambda', 'N/A')}")
-                print(f"   - clip_range: {getattr(model, 'clip_range', lambda x: 'N/A')(1.0) if callable(getattr(model, 'clip_range', None)) else getattr(model, 'clip_range', 'N/A')}")
-                print(f"   - ent_coef: {getattr(model, 'ent_coef', 'N/A')}")
-                print(f"   - vf_coef: {getattr(model, 'vf_coef', 'N/A')}")
-                print(f"   - max_grad_norm: {getattr(model, 'max_grad_norm', 'N/A')}")
-            elif algo_name == "TD3":
-                tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
+        # 算法特定参数
+        if algo_name == "PPO":
+            print(f"   - n_steps: {getattr(model, 'n_steps', 'N/A')}")
+            print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
+            print(f"   - n_epochs: {getattr(model, 'n_epochs', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - gae_lambda: {getattr(model, 'gae_lambda', 'N/A')}")
+            print(f"   - clip_range: {getattr(model, 'clip_range', lambda x: 'N/A')(1.0) if callable(getattr(model, 'clip_range', None)) else getattr(model, 'clip_range', 'N/A')}")
+            print(f"   - ent_coef: {getattr(model, 'ent_coef', 'N/A')}")
+            print(f"   - vf_coef: {getattr(model, 'vf_coef', 'N/A')}")
+            print(f"   - max_grad_norm: {getattr(model, 'max_grad_norm', 'N/A')}")
+        elif algo_name == "A2C":
+            print(f"   - n_steps: {getattr(model, 'n_steps', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - gae_lambda: {getattr(model, 'gae_lambda', 'N/A')}")
+            print(f"   - ent_coef: {getattr(model, 'ent_coef', 'N/A')}")
+            print(f"   - vf_coef: {getattr(model, 'vf_coef', 'N/A')}")
+            print(f"   - max_grad_norm: {getattr(model, 'max_grad_norm', 'N/A')}")
+        elif algo_name == "TD3":
+            tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
+            try:
+                print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
+            except Exception:
+                print(f"   - buffer_size: N/A")
+            print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - train_freq: {tfmt}")
+            print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
+            print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
+            print(f"   - policy_delay: {getattr(model, 'policy_delay', 'N/A')}")
+            print(f"   - target_policy_noise: {getattr(model, 'target_policy_noise', 'N/A')}")
+            print(f"   - target_noise_clip: {getattr(model, 'target_noise_clip', 'N/A')}")
+            # 自定义回放缓冲区参数
+            try:
+                rb = model.replay_buffer
+                print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
+                print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
+                print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
+            except Exception:
+                pass
+        elif algo_name == "DDPG":
+            tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
+            try:
+                print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
+            except Exception:
+                print(f"   - buffer_size: N/A")
+            print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - train_freq: {tfmt}")
+            print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
+            print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
+            # 自定义回放缓冲区参数
+            try:
+                rb = model.replay_buffer
+                print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
+                print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
+                print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
+            except Exception:
+                pass
+        elif algo_name == "TQC":
+            tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
+            try:
+                print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
+            except Exception:
+                print(f"   - buffer_size: N/A")
+            print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - train_freq: {tfmt}")
+            print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
+            print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
+            try:
+                print(f"   - top_quantiles_to_drop_per_net: {getattr(model, 'top_quantiles_to_drop_per_net', 'N/A')}")
+                print(f"   - n_quantiles: {getattr(model, 'n_quantiles', 'N/A')}")
+                print(f"   - n_critics: {getattr(model, 'n_critics', 'N/A')}")
+            except Exception:
+                pass
+            # 自定义回放缓冲区参数
+            try:
+                rb = model.replay_buffer
+                print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
+                print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
+                print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
+            except Exception:
+                pass
+        else:  # SAC
+            tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
+            try:
+                print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
+            except Exception:
+                print(f"   - buffer_size: N/A")
+            print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - train_freq: {tfmt}")
+            print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
+            print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
+            print(f"   - ent_coef: {getattr(model, 'ent_coef', 'N/A')}")
+            try:
+                _te = getattr(model, 'target_entropy', None)
+            except Exception:
+                _te = None
+            if _te is None:
                 try:
-                    print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
+                    _ad = int(np.prod(getattr(model, 'action_space', None).shape)) if getattr(model, 'action_space', None) is not None else int(FEATURE_DIM)
+                    _te = -float(_ad)
                 except Exception:
-                    print(f"   - buffer_size: N/A")
-                print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
-                print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
-                print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
-                print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
-                print(f"   - train_freq: {tfmt}")
-                print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
-                print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
-                print(f"   - policy_delay: {getattr(model, 'policy_delay', 'N/A')}")
-                print(f"   - target_policy_noise: {getattr(model, 'target_policy_noise', 'N/A')}")
-                print(f"   - target_noise_clip: {getattr(model, 'target_noise_clip', 'N/A')}")
-                # 自定义回放缓冲区参数
-                try:
-                    rb = model.replay_buffer
-                    print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
-                    print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
-                    print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
-                except Exception:
-                    pass
-            else:  # SAC
-                tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
-                try:
-                    print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
-                except Exception:
-                    print(f"   - buffer_size: N/A")
-                print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
-                print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
-                print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
-                print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
-                print(f"   - train_freq: {tfmt}")
-                print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
-                print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
-                print(f"   - ent_coef: {getattr(model, 'ent_coef', 'N/A')}")
-                try:
-                    _te = getattr(model, 'target_entropy', None)
-                except Exception:
-                    _te = None
-                if _te is None:
-                    try:
-                        _ad = int(np.prod(getattr(model, 'action_space', None).shape)) if getattr(model, 'action_space', None) is not None else int(FEATURE_DIM)
-                        _te = -float(_ad)
-                    except Exception:
-                        _te = 'N/A'
-                print(f"   - target_entropy: {_te}")
-                # 自定义回放缓冲区参数
-                try:
-                    rb = model.replay_buffer
-                    print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
-                    print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
-                    print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
-                except Exception:
-                    pass
+                    _te = 'N/A'
+            print(f"   - target_entropy: {_te}")
+            # 自定义回放缓冲区参数
+            try:
+                rb = model.replay_buffer
+                print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
+                print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
+                print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
+            except Exception:
+                pass
 
-            # 策略网络信息（通用）
-            if hidden_arch is not None:
-                print(f"   - policy.hidden_layers: {hidden_arch}")
-            if activ is not None:
-                print(f"   - policy.activation_fn: {activ}")
+        # 策略网络信息（通用）
+        if hidden_arch is not None:
+            print(f"   - policy.hidden_layers: {hidden_arch}")
+        if activ is not None:
+            print(f"   - policy.activation_fn: {activ}")
 
-            if algo_name in ["SAC", "TD3"]:
-                print(f"   - retrospective correction: ENABLED")
+        if algo_name in ["SAC", "TD3", "DDPG", "TQC"]:
+            print(f"   - retrospective correction: ENABLED")
 
         # 记录训练开始时间
         training_start_time = datetime.now()
-        if LOH_DEBUG_BASIC():
-            print(f"⏰ training start time: {training_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"⏰ training start time: {training_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         # 创建训练回调
         training_callback = LOHTrainingCallback(env_ref=env, verbose=1)

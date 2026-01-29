@@ -1,0 +1,19 @@
+# 3M req, focus on highest-risk switches: softmax on/off + SAC vs TD3
+# Each line is KEY=VALUE ... (whitespace separated)
+# Recommend running with: SWEEP_REPEATS=2 (or 3) to gauge randomness.
+
+# IMPORTANT: Keep feature-set consistent with the C build.
+# Current default binary in this repo often uses REQUEST features (1200 dims).
+# If you changed C-side LOH_INCLUDE_* macros, rebuild once and keep these aligned.
+
+# 1) TD3 baseline (softmax on)
+LOH_INCLUDE_REQUEST=1 LOH_RL_ALGO=TD3 LOH_USE_SOFTMAX=1 LOH_DUAL_CHANNEL=0 LOH_REWARD_MODE=absolute LOH_ACTION_BOUND=1.0 LOH_ACTION_SCALE=1.0 LOH_WEIGHT_EMA=0.0 LOH_WEIGHT_CLIP=0.0 TD3_ACTION_NOISE=0.0
+
+# 2) TD3 softmax off + clip + exploration noise
+LOH_INCLUDE_REQUEST=1 LOH_RL_ALGO=TD3 LOH_USE_SOFTMAX=0 LOH_DUAL_CHANNEL=0 LOH_REWARD_MODE=absolute LOH_ACTION_BOUND=1.0 LOH_ACTION_SCALE=1.0 LOH_WEIGHT_EMA=0.0 LOH_WEIGHT_CLIP=1.0 TD3_ACTION_NOISE=0.10
+
+# 3) SAC baseline (softmax on)
+LOH_INCLUDE_REQUEST=1 LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=1 LOH_DUAL_CHANNEL=0 LOH_REWARD_MODE=absolute LOH_ACTION_BOUND=1.0 LOH_ACTION_SCALE=1.0 LOH_WEIGHT_EMA=0.0 LOH_WEIGHT_CLIP=0.0
+
+# 4) SAC softmax off + clip
+LOH_INCLUDE_REQUEST=1 LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_DUAL_CHANNEL=0 LOH_REWARD_MODE=absolute LOH_ACTION_BOUND=1.0 LOH_ACTION_SCALE=1.0 LOH_WEIGHT_EMA=0.0 LOH_WEIGHT_CLIP=1.0

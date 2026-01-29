@@ -58,8 +58,10 @@ echo
 # 打印与评分模式相关的核心环境变量，便于区分本次运行属于哪种模式
 echo "[config] LOH_SCORE_USE_IRT=${LOH_SCORE_USE_IRT:-<unset>}"
 echo "[config] LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND:-<unset>}"
+echo "[config] LOH_SCORE_MODEL=${LOH_SCORE_MODEL:-<unset>}"
+echo "[config] LOH_MLP_HIDDEN=${LOH_MLP_HIDDEN:-<unset>}"
 echo "[config] LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
-echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-1}"
+echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-0}"
 echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
 
 # 预清理：避免上一轮残留影响本次运行
@@ -141,8 +143,10 @@ echo "Using weights: miss_ratio_weight=$MISS_RATIO_WEIGHT, byte_miss_ratio_weigh
 # 设置错误处理和调试
 set -e  # 遇到错误时停止执行
 
-# 生成唯一的时间戳
-RUN_TIMESTAMP=$(date +%m%d_%H%M%S) # 例如: 0730_173500
+# 生成唯一的时间戳（允许外部预先设置 RUN_TIMESTAMP，便于 sweep 批量实验做归档）
+if [ -z "${RUN_TIMESTAMP:-}" ]; then
+    RUN_TIMESTAMP=$(date +%m%d_%H%M%S) # 例如: 0730_173500
+fi
 export RUN_TIMESTAMP  # 导出供Python脚本使用
 
 # 为本次运行生成唯一的共享内存键（支持外部传入覆盖）
@@ -169,6 +173,136 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}开始测试LOH算法与stable-baselines3强化学习的集成...${NC}"
 
+# ---- Stop / cleanup helpers ----
+_CLEANUP_DONE=0
+
+write_terminate_flag() {
+    # best-effort: only needs the first few fields to line up
+    python3 - <<'PY'
+import ctypes
+import mmap
+import os
+
+FEATURE_DIM = 6
+MISSRATIO_DIM = 2
+N_TOPK_SAMPLES = 32
+SAMPLES_PER_EVICTION = 4
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _calc_context_dim() -> int:
+    dim = MISSRATIO_DIM
+    if _env_flag("LOH_INCLUDE_HIT_MISS_FEATURES", False):
+        dim += FEATURE_DIM * 4
+    if _env_flag("LOH_INCLUDE_CACHE_FEATURES", False):
+        dim += FEATURE_DIM * 2
+    if _env_flag("LOH_INCLUDE_CANDIDATE_FEATURES", False):
+        dim += 72
+    if _env_flag("LOH_INCLUDE_TOPK_CANDIDATE_FEATURES", False):
+        dim += N_TOPK_SAMPLES * FEATURE_DIM
+    if _env_flag("LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES", False):
+        dim += SAMPLES_PER_EVICTION * FEATURE_DIM
+    if _env_flag("LOH_INCLUDE_REQUEST", False):
+        dim += 200 * FEATURE_DIM
+    return dim
+
+
+def _create_shared_memory_class(context_dim: int):
+    class SharedMemoryData(ctypes.Structure):
+        _fields_ = [
+            ("ready_for_inference", ctypes.c_int),
+            ("weights_updated", ctypes.c_int),
+            ("terminate", ctypes.c_int),
+            ("is_training", ctypes.c_int),
+            ("state", ctypes.c_double * context_dim),
+            ("weights", ctypes.c_double * FEATURE_DIM),
+            ("total_evicted_bytes", ctypes.c_uint64),
+            ("total_evicted_count", ctypes.c_uint64),
+            ("state_version", ctypes.c_uint64),
+            ("ack_version", ctypes.c_uint64),
+            ("timestamp", ctypes.c_int64),
+            ("pending_penalty_count", ctypes.c_int),
+
+            # 与 scripts/loh_actor_critic_sb3.py / C 端 LOH.c 对齐（可选字段）
+            ("score_model", ctypes.c_int),
+            ("mlp_hidden", ctypes.c_int),
+            ("mlp_param_len", ctypes.c_int),
+            ("mlp_params", ctypes.c_double * (64 * (FEATURE_DIM + 2) + 1)),
+        ]
+
+    return SharedMemoryData
+
+
+def main():
+    shm_key = os.environ.get("LOH_SHM_KEY", "9876")
+    shm_path = f"/dev/shm/loh_ac_{shm_key}"
+    if not os.path.exists(shm_path):
+        return
+
+    context_dim = _calc_context_dim()
+    SharedMemoryData = _create_shared_memory_class(context_dim)
+    size = ctypes.sizeof(SharedMemoryData)
+
+    try:
+        with open(shm_path, "r+b", buffering=0) as f:
+            mm = mmap.mmap(f.fileno(), size)
+            raw = mm.read(size)
+            data = SharedMemoryData.from_buffer_copy(raw)
+            data.terminate = 1
+            mm.seek(0)
+            mm.write(ctypes.string_at(ctypes.byref(data), size))
+            mm.flush()
+            mm.close()
+    except Exception:
+        pass
+
+
+if __name__ == "__main__":
+    main()
+PY
+}
+
+cleanup_on_exit() {
+    if [ "${_CLEANUP_DONE}" = "1" ]; then
+        return
+    fi
+    _CLEANUP_DONE=1
+
+    # signal Python to stop if shm exists
+    write_terminate_flag || true
+
+    # stop cachesim if still running
+    if [ -n "${CACHESIM_PID:-}" ] && ps -p "${CACHESIM_PID}" > /dev/null 2>&1; then
+        echo "[cleanup] stopping cachesim pid=${CACHESIM_PID}"
+        kill -INT "${CACHESIM_PID}" 2>/dev/null || true
+        sleep 1
+        kill -TERM "${CACHESIM_PID}" 2>/dev/null || true
+        sleep 1
+        kill -KILL "${CACHESIM_PID}" 2>/dev/null || true
+    fi
+
+    # stop Python if still running
+    if [ -n "${PYTHON_PID:-}" ] && ps -p "${PYTHON_PID}" > /dev/null 2>&1; then
+        echo "[cleanup] stopping python pid=${PYTHON_PID}"
+        kill -TERM "${PYTHON_PID}" 2>/dev/null || true
+        sleep 1
+        kill -KILL "${PYTHON_PID}" 2>/dev/null || true
+    fi
+
+    # remove shm
+    if [ -n "${LOH_SHM_KEY:-}" ] && [ -f "/dev/shm/loh_ac_${LOH_SHM_KEY}" ]; then
+        rm -f "/dev/shm/loh_ac_${LOH_SHM_KEY}" || true
+    fi
+}
+
+trap cleanup_on_exit INT TERM EXIT
+
 # ==== 构建策略说明（现在只在读到特定环境变量时才构建）====
 # 1) 默认行为
 #    - 不触发任何构建，直接复用已有的 _build_dbg/bin/cachesim。
@@ -191,17 +325,23 @@ echo -e "${BLUE}开始测试LOH算法与stable-baselines3强化学习的集成..
 (
     flock 9
 
-    # 是否存在编译相关环境变量（LOH_INCLUDE_* / LOH_DEBUG_LEVEL / LOH_ENABLE_PENALTY），决定是否需要构建
-    NEED_REBUILD=0
-     if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ] || \
-         [ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ] || \
-         [ -n "${LOH_INCLUDE_HIT_MISS_FEATURES:-}" ] || \
-         [ -n "${LOH_INCLUDE_TOPK_CANDIDATE_FEATURES:-}" ] || \
-         [ -n "${LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES:-}" ] || \
-         [ -n "${LOH_INCLUDE_REQUEST:-}" ] || \
-         [ -n "${LOH_DEBUG_LEVEL:-}" ] || \
-         [ -n "${LOH_ENABLE_PENALTY:-}" ]; then
-        NEED_REBUILD=1
+    if [ "${LOH_SKIP_BUILD:-0}" = "1" ]; then
+        echo "[build] LOH_SKIP_BUILD=1, skip build step"
+        NEED_REBUILD=0
+    else
+
+        # 是否存在编译相关环境变量（LOH_INCLUDE_* / LOH_DEBUG_LEVEL / LOH_ENABLE_PENALTY），决定是否需要构建
+        NEED_REBUILD=0
+         if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ] || \
+             [ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ] || \
+             [ -n "${LOH_INCLUDE_HIT_MISS_FEATURES:-}" ] || \
+             [ -n "${LOH_INCLUDE_TOPK_CANDIDATE_FEATURES:-}" ] || \
+             [ -n "${LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES:-}" ] || \
+             [ -n "${LOH_INCLUDE_REQUEST:-}" ] || \
+             [ -n "${LOH_DEBUG_LEVEL:-}" ] || \
+             [ -n "${LOH_ENABLE_PENALTY:-}" ]; then
+            NEED_REBUILD=1
+        fi
     fi
 
     if [ "${NEED_REBUILD}" = "1" ]; then
@@ -234,9 +374,13 @@ echo -e "${BLUE}开始测试LOH算法与stable-baselines3强化学习的集成..
     fi
 ) 9>/tmp/libcachesim_build.lock
 
-# 设置Python环境 (新增stable-baselines3和gymnasium)
-echo "Setting up Python environment..."
-pip install -q stable-baselines3 gymnasium torch
+# 设置Python环境 (stable-baselines3 / gymnasium / torch)
+if [ "${LOH_SKIP_PIP_INSTALL:-0}" = "1" ]; then
+    echo "[python] LOH_SKIP_PIP_INSTALL=1, skip pip install"
+else
+    echo "Setting up Python environment..."
+    pip install -q stable-baselines3 sb3-contrib gymnasium torch
+fi
 
 # 确保权限设置正确
 echo "Ensuring proper permissions..."
@@ -306,6 +450,20 @@ else
 fi
 
 echo "Using trace file: $TRACE_FILE (type: $TRACE_TYPE, cache size ratio: $CACHE_SIZE)"
+
+# 默认限制 MetaCDN/TencentCBS 运行请求数，避免误跑全量 trace
+if [ -z "${CACHESIM_NUM_REQ:-}" ]; then
+    case "${TRACE_FILE}" in
+        data/MetaCDN/*)
+            export CACHESIM_NUM_REQ=3000000
+            echo "[config] CACHESIM_NUM_REQ not set; defaulting to ${CACHESIM_NUM_REQ} for MetaCDN trace"
+            ;;
+        data/TencentCBS/*)
+            export CACHESIM_NUM_REQ=3000000
+            echo "[config] CACHESIM_NUM_REQ not set; defaulting to ${CACHESIM_NUM_REQ} for TencentCBS trace"
+            ;;
+    esac
+fi
 
 # 执行缓存模拟器 - 输出到文件以便调试
 echo -e "${YELLOW}Running cachesim with the following parameters:${NC}"
@@ -377,10 +535,37 @@ CACHESIM_CMD+=("-v" "1")
 # 打印并执行命令
 echo "Executing cachesim command:"
 printf ' %q' "${CACHESIM_CMD[@]}"; echo
-"${CACHESIM_CMD[@]}" > "${CACHESIM_LOG_FILE}" 2>&1
+
+"${CACHESIM_CMD[@]}" > "${CACHESIM_LOG_FILE}" 2>&1 &
+CACHESIM_PID=$!
+
+# 如果 Python 先退出，cachesim 可能卡在等待 ACK；这里做兜底收敛
+(
+    while ps -p "${CACHESIM_PID}" > /dev/null 2>&1; do
+        if [ -n "${PYTHON_PID:-}" ] && ! ps -p "${PYTHON_PID}" > /dev/null 2>&1; then
+            echo "[watch] Python exited early; signal cachesim to stop (pid=${CACHESIM_PID})"
+            write_terminate_flag || true
+            kill -INT "${CACHESIM_PID}" 2>/dev/null || true
+            sleep 2
+            kill -TERM "${CACHESIM_PID}" 2>/dev/null || true
+            sleep 2
+            kill -KILL "${CACHESIM_PID}" 2>/dev/null || true
+            break
+        fi
+        sleep 1
+    done
+) &
+WATCH_PID=$!
+
+wait "${CACHESIM_PID}"
+CACHESIM_EXIT=$?
+
+if ps -p "${WATCH_PID}" > /dev/null 2>&1; then
+    kill "${WATCH_PID}" 2>/dev/null || true
+fi
 
 # 检查执行结果
-if [ $? -ne 0 ]; then
+if [ "${CACHESIM_EXIT}" -ne 0 ]; then
     echo -e "${RED}Error: cachesim execution failed. Check ${CACHESIM_LOG_FILE} for details.${NC}"
     cat "${CACHESIM_LOG_FILE}"
     exit 1
@@ -412,19 +597,18 @@ fi
 
 # 优雅停止：通过共享内存写 terminate=1，再等待Python自行退出
 echo -e "\n${YELLOW}Stopping stable-baselines3 training script gracefully...${NC}"
-if ps -p $PYTHON_PID > /dev/null; then
-    LOH_SHM_KEY="${LOH_SHM_KEY}" python3 scripts/loh_stop.py || true
-    # 最多等待8秒
-    # 使用 seq 代替 brace expansion ("{1..16}") 以提高兼容性，避免在非-bash shell 中出现语法错误
+write_terminate_flag || true
+
+if ps -p $PYTHON_PID > /dev/null 2>&1; then
     for i in $(seq 1 16); do
-        if ! ps -p $PYTHON_PID > /dev/null; then
+        if ! ps -p $PYTHON_PID > /dev/null 2>&1; then
             break
         fi
         sleep 0.5
     done
-    if ps -p $PYTHON_PID > /dev/null; then
+    if ps -p $PYTHON_PID > /dev/null 2>&1; then
         echo "Graceful stop timed out, sending SIGTERM..."
-        kill $PYTHON_PID
+        kill $PYTHON_PID || true
     else
         echo "Python process exited gracefully."
     fi

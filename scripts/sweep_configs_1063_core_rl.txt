@@ -1,0 +1,31 @@
+# Core RL/Action-head sweep for TencentCBS 1063 (no penalty/ghost changes)
+# Focus: weight mapping + update cadence
+# Notes:
+# - Keep feature layout unchanged unless explicitly added.
+
+# A) Baseline-ish (softmax on)
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=1 LOH_SOFTMAX_TEMP=1.0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=200
+
+# B) Sharper softmax (more decisive weights)
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=1 LOH_SOFTMAX_TEMP=0.3 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=200
+
+# C) Smoother softmax (less extreme weights)
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=1 LOH_SOFTMAX_TEMP=2.0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=200
+
+# D) Larger logits scale (with same temp)
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=1 LOH_SOFTMAX_TEMP=1.0 LOH_ACTION_SCALE=3.0 RL_UPDATE_INTERVAL=200
+
+# E) Disable softmax (linear weights mapping)
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=200
+
+# F) Disable softmax + larger scale
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=3.0 RL_UPDATE_INTERVAL=200
+
+# G) Faster weight refresh
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=50
+
+# H) Slower weight refresh
+LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=1000
+
+# I) TD3 sanity check with linear mapping
+LOH_RL_ALGO=TD3 LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=200

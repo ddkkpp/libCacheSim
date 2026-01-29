@@ -148,11 +148,11 @@ for TRACE_PATH in "${TRACES[@]}"; do
     IFS='_' read -r w1 w2 w3 w4 w5 w6 <<< "${rest}"
 
     # 取最后一行 summary（包含 miss ratio / byte miss ratio）
-    line=$(grep -E " miss ratio " "${f}" | tail -n 1 || true)
+    line=$(grep -E "miss ratio" "${f}" | tail -n 1 || true)
     [ -n "${line}" ] || continue
-    # 修复 sed 正则：使用 "byte" 作为分界符，确保提取第一个 miss ratio
-    mr=$(echo "${line}" | sed -E 's/.*miss ratio ([0-9.]+), byte.*/\1/' || true)
-    bmr=$(echo "${line}" | sed -E 's/.*byte miss ratio ([0-9.]+),.*/\1/' || true)
+    line_without_byte=$(echo "${line}" | sed -E 's/byte miss ratio.*//' )
+    mr=$(echo "${line_without_byte}" | sed -E 's/.*miss ratio[[:space:]]*=?[[:space:]]*([0-9.]+).*/\1/' || true)
+    bmr=$(echo "${line}" | sed -E 's/.*byte miss ratio[[:space:]]*=?[[:space:]]*([0-9.]+).*/\1/' || true)
     [ -n "${mr}" ] || continue
     [ -n "${bmr}" ] || continue
 
@@ -172,12 +172,17 @@ for TRACE_PATH in "${TRACES[@]}"; do
     echo "  row: ${best_line}" >&2
     echo "  top 20 coarse rows (miss_ratio, byte_miss_ratio, weights):" >&2
       top20_path="${OUT_DIR}/${SHORT_TRACE}_top20.tsv"
+      top20_lines=$(grep -v '^#' "${RESULT_FILE}" | sort -k7,7g -k8,8g | head -n 20 || true)
       {
-        printf "#w1\tw2\tw3\tw4\tw5\tw6\tmiss_ratio\tbyte_miss_ratio\n"
-        grep -v '^#' "${RESULT_FILE}" | sort -k7,7g -k8,8g | head -n 20
+        printf "#w1\tw2\tw3\tw4\tw5\tw6\tmiss_ratio\tbyte_miss_ratio\tlog\n"
+        printf "%s\n" "${top20_lines}"
       } >"${top20_path}"
-      grep -v '^#' "${top20_path}" | awk '{printf "    W=[%s,%s,%s,%s,%s,%s] mr=%s bmr=%s\n", $1,$2,$3,$4,$5,$6,$7,$8}' >&2
-      echo "  top 20 coarse rows saved to ${top20_path}" >&2
+      if [ -n "${top20_lines}" ]; then
+        echo "  top 20 coarse rows saved to ${top20_path}" >&2
+        printf "%s" "${top20_lines}" | awk '{printf "    W=[%s,%s,%s,%s,%s,%s] mr=%s bmr=%s\n", $1,$2,$3,$4,$5,$6,$7,$8}' >&2
+      else
+        echo "  (no coarse rows to show)" >&2
+      fi
   else
     echo "  (no valid results found)" >&2
   fi
@@ -272,10 +277,11 @@ if [ "${SKIP_REFINE:-0}" != "1" ]; then
       rest=${rest%.log}
       IFS='_' read -r w1 w2 w3 w4 w5 w6 <<< "${rest}"
 
-      line=$(grep -E " miss ratio " "${f}" | tail -n 1 || true)
+      line=$(grep -E "miss ratio" "${f}" | tail -n 1 || true)
       [ -n "${line}" ] || continue
-      mr=$(echo "${line}" | sed -E 's/.*miss ratio ([0-9.]+), byte.*/\1/' || true)
-      bmr=$(echo "${line}" | sed -E 's/.*byte miss ratio ([0-9.]+),.*/\1/' || true)
+      line_without_byte=$(echo "${line}" | sed -E 's/byte miss ratio.*//' )
+      mr=$(echo "${line_without_byte}" | sed -E 's/.*miss ratio[[:space:]]*=?[[:space:]]*([0-9.]+).*/\1/' || true)
+      bmr=$(echo "${line}" | sed -E 's/.*byte miss ratio[[:space:]]*=?[[:space:]]*([0-9.]+).*/\1/' || true)
       [ -n "${mr}" ] || continue
       [ -n "${bmr}" ] || continue
 
