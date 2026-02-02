@@ -1,0 +1,3 @@
+1113_235904、1114_000426 、1114_005014 分别是mr_SAC 正常、故意设置reward固定0.5 、故意设置reward固定0.5+故意设置obs0.5，结果上最终命中率（cachesim日志末尾可以看）和tb上各参数曲线几乎没有区别（两个tb的py附件可以查看），你先看看是不是这么回事。结合我之前调节SAC模型的各个参数（ent_coef、learning start、学习率等）、修改obs（有无命中率项、缓存特征项、候选特征项）、修改reward（单纯命中率，单纯penalty映射成reward以及多种映射公式、多个项结合），最终命中率都是在0.607左右而且tb曲线差不多。这是为什么。
+阅读附件三个文件，以及home/dingkp/libCacheSim/scripts和/home/dingkp/libCacheSim/docs目录下的所有文件，以及result目录的meta_reag.oracleGeneral.zst.cachesim和wiki_2019t.oracleGeneral.zst.cachesim，1063.oracleGeneral.zst.cachesim。经过扫描得到最优固定权重，所以设置新的环境变量LOH_COMPLEX_SCORE，为1时分数计算各项为计算后的recency、freq、size、
+启用 compound 特征（rec/freq/size + 三个组合项），使用sweep_loh_constant_weights_norl.sh，只对meta和wiki做第一轮sweep汇总而不做refine
