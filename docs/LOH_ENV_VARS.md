@@ -307,17 +307,17 @@ CONTEXT_DIM = 2 + 24 + 12 + 72 + 0 + 0 + 200*6 = 1312
     - 若为 0：
       - `sign[k] = 1.0` 对所有特征，方向完全交给 RL 权重 `w[k]` 决定；
   - Python 端行为：
-    - PPO 软先验（`LOH_PPO_SOFT_PRIOR`，见下）会读该变量，组合出 `target_signs`，保证最终的 `w[k]*sign[k]` 与 recency/freq/IRT 之间的预期单调关系一致或由 RL 自由学习。
+    - 软先验（`LOH_SOFT_PRIOR`，见下）会读该变量，组合出 `target_signs`，保证最终的 `w[k]*sign[k]` 与 recency/freq/IRT 之间的预期单调关系一致或由 RL 自由学习。
 
-- LOH_PPO_SOFT_PRIOR / LOH_PPO_SOFT_PRIOR_BIAS
-  - 作用：仅当 `LOH_RL_ALGO=PPO` 时生效，用于在 PPO 策略的动作输出层上施加一次性的**软先验偏置**，引导初始权重的符号谱系；
-  - `LOH_PPO_SOFT_PRIOR`
+- LOH_SOFT_PRIOR / LOH_SOFT_PRIOR_BIAS
+  - 作用：统一控制 SAC / TD3 / PPO / PPO_LSTM 策略动作头的**软先验偏置**，引导初始权重的符号谱系；
+  - `LOH_SOFT_PRIOR`
     - 默认：0（关闭）；
-    - 设为 1/true：在创建 PPO 模型后，按照预设的“全谱系先验”调整最后一层 Linear 的 bias：
+    - 设为 1/true：在创建模型后（任意支持的算法），按照预设的“全谱系先验”调整最后一层 Linear 的 bias：
       - 预期符号（intended_signs）：`[-1, 1, -1, -1, -1, -1]`，对应 Recency(-)、Freq(+)、Size(-)、IRT(-)；
       - 若 `LOH_USE_HEURISTIC_SIGNS=1`（C 端也使用同一符号向量），Python 会将策略输出的目标符号调整为全正，使得 `w[k]` 表示强度，而最终方向由 C 侧 sign 固定；
       - 若 `LOH_USE_HEURISTIC_SIGNS=0`，则 Python 直接按 `[-1,1,-1,...]` 施加偏置，让 PPO 自身学到“freq 正相关、recency/IRT 负相关”的方向。
-  - `LOH_PPO_SOFT_PRIOR_BIAS`
+  - `LOH_SOFT_PRIOR_BIAS`
     - 作用：控制上述 bias 的强度（对 logits 级别的偏移量）。
     - 默认：0.5；数值越大，初始策略越“贴近”启发式符号，数值越小越接近无先验。
 
@@ -330,8 +330,8 @@ CONTEXT_DIM = 2 + 24 + 12 + 72 + 0 + 0 + 200*6 = 1312
   - 默认：`SAC`
   - 说明：统一脚本 `loh_actor_critic_sb3.py` 根据此变量创建对应模型：
     - `SAC`：`ProfiledSAC("MlpPolicy")` + 事后惩罚回放缓冲区（默认）。
-    - `PPO`：`ProfiledPPO("MlpPolicy")`，纯 MLP 策略网络，可选启用 `LOH_PPO_SOFT_PRIOR`。
-    - `PPO_LSTM`：使用 `sb3-contrib.RecurrentPPO("MlpLstmPolicy")`（需要额外安装 `sb3-contrib`），在策略前加入 LSTM 序列单元以编码访问历史；其余超参与 `PPO` 分支一致，并可同样使用 `LOH_PPO_SOFT_PRIOR` 对动作头做软先验偏置。
+    - `PPO`：`ProfiledPPO("MlpPolicy")`，纯 MLP 策略网络，可选启用 `LOH_SOFT_PRIOR`。
+    - `PPO_LSTM`：使用 `sb3-contrib.RecurrentPPO("MlpLstmPolicy")`（需要额外安装 `sb3-contrib`），在策略前加入 LSTM 序列单元以编码访问历史；其余超参与 `PPO` 分支一致，并可同样使用 `LOH_SOFT_PRIOR` 对动作头做软先验偏置。
 
 - LOH_RL_SEED
   - 作用：为 Python 端所有随机数源（`random` / `numpy` / `torch`）设定统一种子，以便实验可复现。

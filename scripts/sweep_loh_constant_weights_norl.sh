@@ -42,6 +42,15 @@ MAX_PARALLEL=${MAX_PARALLEL:-16}
 REFINE_TOP_K=${REFINE_TOP_K:-5}       # 每个 trace 细粒度 refine 的 top-K 组合数
 REFINE_DELTA=${REFINE_DELTA:-0.5}     # 细粒度步长（在原始权重基础上 ±DELTA）
 
+# 可选：传入 cachesim 的 cache-specific-params（用于设置 miss-ratio-weight 等）
+# 例：CACHE_SPECIFIC_PARAMS="miss-ratio-weight=1" bash scripts/sweep_loh_constant_weights_norl.sh
+CACHE_SPECIFIC_PARAMS=${CACHE_SPECIFIC_PARAMS:-}
+CACHESIM_EXTRA_ARGS=()
+if [ -n "${CACHE_SPECIFIC_PARAMS}" ]; then
+  # cachesim 将 eviction-params 传给具体 eviction 算法（LOH.c 里叫 cache_specific_params）
+  CACHESIM_EXTRA_ARGS+=(--eviction-params="${CACHE_SPECIFIC_PARAMS}")
+fi
+
 # 每个维度的粗粒度取值；如设置环境变量 OVERRIDE_VALUES="0,1" 则改为对应取值
 if [ -n "${OVERRIDE_VALUES:-}" ]; then
   IFS=',' read -r -a VALUES <<< "${OVERRIDE_VALUES}"
@@ -102,7 +111,7 @@ if [ "${SKIP_SWEEP:-0}" != "1" ]; then
                   LOH_ENABLE_RL=0 \
                   LOH_FIXED_WEIGHTS="${W}" \
                   _build_dbg/bin/cachesim "${TRACE_PATH}" oracleGeneral LOH "${CACHE_RATIO}" \
-                    --num-req="${CACHESIM_NUM_REQ}" -v 1
+                    --num-req="${CACHESIM_NUM_REQ}" "${CACHESIM_EXTRA_ARGS[@]}" -v 1
                 ) >"${LOG}" 2>&1 &
 
                 job_count=$((job_count + 1))
@@ -254,7 +263,7 @@ if [ "${SKIP_REFINE:-0}" != "1" ]; then
         LOH_ENABLE_RL=0 \
         LOH_FIXED_WEIGHTS="${W}" \
         _build_dbg/bin/cachesim "${TRACE_PATH}" oracleGeneral LOH "${CACHE_RATIO}" \
-          --num-req="${CACHESIM_NUM_REQ}" -v 1
+          --num-req="${CACHESIM_NUM_REQ}" "${CACHESIM_EXTRA_ARGS[@]}" -v 1
       ) >"${LOG}" 2>&1 &
 
       refine_jobs=$((refine_jobs + 1))

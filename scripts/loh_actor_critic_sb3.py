@@ -3010,15 +3010,33 @@ class LohEnv(gym.Env):
             print(f"[{wait_start:.6f}] waiting for C-side response (expecting new version != {acked_version})")
 
         timeout_counter = 0
-        # 连续超时检测：sem_timeout=1.0秒，10次连续超时=10秒
-        max_consecutive_timeouts = 10  # 连续超时10次（10 × 1.0秒 = 10秒）则判断C端已结束
+        # 连续超时检测：默认门限要足够大，避免 warmup/trace 预处理阶段误判 C 端结束。
+        # 可用环境变量覆盖：
+        #   - LOH_WAIT_NEWSTATE_MAX_CONSEC_TIMEOUTS: 连续 sem_timedwait 超时次数上限
+        #   - LOH_WAIT_NEWSTATE_IDLE_S: 无进展（state_version/timestamp 都不变）判定为挂死的秒数
+        #   - LOH_DISABLE_NEWSTATE_EARLY_EXIT=1: 禁用 early-exit（仅靠 terminate 标志退出）
+        disable_early_exit = _env_flag("LOH_DISABLE_NEWSTATE_EARLY_EXIT", False)
+        if disable_early_exit:
+            max_consecutive_timeouts = 10**9
+        else:
+            try:
+                max_consecutive_timeouts = int(os.environ.get("LOH_WAIT_NEWSTATE_MAX_CONSEC_TIMEOUTS", "300").strip())
+            except Exception:
+                max_consecutive_timeouts = 300
+            if max_consecutive_timeouts <= 0:
+                max_consecutive_timeouts = 300
         consecutive_timeouts = 0
 
         # 心跳日志：让用户知道Python还在运行（每20次检查=20秒打印一次）
         heartbeat_interval_checks = 20  # 每20次检查（约20秒）报告一次心跳
 
         # 空闲检测：state_version/timestamp均无变化超过此时间，则认为C端挂死
-        idle_threshold = 15.0  # 15秒无活动则退出
+        if disable_early_exit:
+            idle_threshold = 1e18
+        else:
+            idle_threshold = _env_float("LOH_WAIT_NEWSTATE_IDLE_S", 300.0) or 300.0
+            if idle_threshold <= 0:
+                idle_threshold = 300.0
         check_idle_every = 5  # 每5次循环检查一次idle（减少开销）
 
         last_seen_version = acked_version
@@ -3061,16 +3079,37 @@ class LohEnv(gym.Env):
                         if LOH_DEBUG_BASIC():
                             print(f"\n{'='*70}")
                             print(f"⚠️  检测到C端可能已结束（连续 {consecutive_timeouts} 次信号量超时，共 {elapsed:.1f}秒）")
-                            print(f"   每次超时: 1.0秒")
+                            print(f"   每次超时: {float(self._sem_timeout):.3f}秒")
                             print(f"   最后确认的序列号: {acked_version}")
                             print(f"   说明: C端程序已正常结束或被中断（Ctrl+C）")
                             print(f"         Python端将优雅退出以保存训练进度")
                             print(f"{'='*70}\n")
-                        raise KeyboardInterrupt(f"C-side program may have ended: {consecutive_timeouts} consecutive sem_wait timeouts ({elapsed:.1f}s), training stopped automatically")
+                        raise KeyboardInterrupt(
+                            f"C-side program may have ended: {consecutive_timeouts} consecutive sem_wait timeouts "
+                            f"(timeout={float(self._sem_timeout):.3f}s, elapsed={elapsed:.1f}s), training stopped automatically"
+                        )
 
                     if LOH_DEBUG_BASIC() and consecutive_timeouts <= 3:  # 只打印前3次，避免刷屏
                         print(f"[SEM][Python] wait@newstate timed out ({consecutive_timeouts}/{max_consecutive_timeouts}), falling back to polling (fallback_count={self._poll_fallback_count})")
                     new_data = self._read_shm()
+
+                    # 如果 C 端仍在推进（timestamp/state_version 变化），说明只是暂时没有 ready 信号，
+                    # 不应因 sem 超时次数累积而误判“C端已结束”。
+                    if new_data is not None:
+                        try:
+                            sv = int(new_data.state_version)
+                            ts = int(new_data.timestamp)
+                            if last_seen_timestamp is None:
+                                last_seen_timestamp = ts
+                                last_seen_version = sv
+                                last_progress_t = get_monotonic_time()
+                            elif sv != int(last_seen_version) or ts != int(last_seen_timestamp):
+                                last_seen_version = sv
+                                last_seen_timestamp = ts
+                                last_progress_t = get_monotonic_time()
+                                consecutive_timeouts = 0
+                        except Exception:
+                            pass
             else:
                 # 信号量不可用，使用轮询读取
                 new_data = self._read_shm()

@@ -46,6 +46,12 @@ if [[ -z "${CACHESIM_NUM_REQ:-}" && "${TRACE_FILE}" == data/TencentCBS/* ]]; the
   echo "[sweep] CACHESIM_NUM_REQ not set; defaulting to ${CACHESIM_NUM_REQ} for TencentCBS trace"
 fi
 
+# 默认限制 WikiCDN sweep 的请求数，避免误跑全量 trace
+if [[ -z "${CACHESIM_NUM_REQ:-}" && "${TRACE_FILE}" == data/WikiCDN/* ]]; then
+  export CACHESIM_NUM_REQ=3000000
+  echo "[sweep] CACHESIM_NUM_REQ not set; defaulting to ${CACHESIM_NUM_REQ} for WikiCDN trace"
+fi
+
 if [[ -z "${CONFIG_FILE}" || ! -f "${CONFIG_FILE}" ]]; then
   echo "Error: configs file not found: ${CONFIG_FILE}" >&2
   usage
@@ -56,6 +62,12 @@ SWEEP_ID=${SWEEP_ID:-"sweep_$(date +%Y%m%d_%H%M%S)"}
 OUT_DIR=${SWEEP_OUTDIR:-"sweeps/${SWEEP_ID}"}
 mkdir -p "${OUT_DIR}"
 
+# 断点续跑：
+# - SWEEP_RESUME=1：若 results.csv 里已经存在“成功完成”的 (idx,rep)，则跳过该 run；否则重跑。
+#   成功定义：exit_code==0 且 miss_ratio/byte_miss_ratio/throughput 都不是 NA。
+# - 续跑模式下不会清空 runs.txt（会在文件末尾追加）。
+SWEEP_RESUME=${SWEEP_RESUME:-0}
+
 RESULTS_CSV="${OUT_DIR}/results.csv"
 SUMMARY_CSV="${OUT_DIR}/summary.csv"
 RUNS_TXT="${OUT_DIR}/runs.txt"
@@ -65,7 +77,9 @@ if [[ ! -f "${RESULTS_CSV}" ]]; then
   echo "idx,rep,seed,run_timestamp,exit_code,miss_ratio,byte_miss_ratio,throughput_mqps,trace_file,cache_ratio,config" > "${RESULTS_CSV}"
 fi
 
-: > "${RUNS_TXT}"
+if [[ "${SWEEP_RESUME}" != "1" ]]; then
+  : > "${RUNS_TXT}"
+fi
 
 echo "[sweep] SWEEP_ID=${SWEEP_ID}"
 echo "[sweep] configs=${CONFIG_FILE}"
@@ -103,6 +117,45 @@ else:
     print(f"{m.group(1)},{m.group(2)},{m.group(3)}")
 PY
 }
+
+# 读取已完成（成功）的 run，用于续跑跳过
+declare -A _done_success
+if [[ "${SWEEP_RESUME}" == "1" && -f "${RESULTS_CSV}" ]]; then
+  while IFS=$'\t' read -r didx drep; do
+    if [[ -n "${didx}" && -n "${drep}" ]]; then
+      _done_success["${didx}|${drep}"]=1
+    fi
+  done < <(
+    python3 - <<'PY' "${RESULTS_CSV}"
+import csv
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, newline='') as f:
+        r = csv.DictReader(f)
+        for row in r:
+            idx = (row.get('idx') or '').strip()
+            rep = (row.get('rep') or '').strip()
+            exit_code = (row.get('exit_code') or '').strip()
+            mr = (row.get('miss_ratio') or '').strip()
+            bmr = (row.get('byte_miss_ratio') or '').strip()
+            thr = (row.get('throughput_mqps') or '').strip()
+            if not idx or not rep:
+                continue
+            ok = (
+                exit_code == '0'
+                and mr.upper() != 'NA' and mr != ''
+                and bmr.upper() != 'NA' and bmr != ''
+                and thr.upper() != 'NA' and thr != ''
+            )
+            if ok:
+                print(f"{idx}\t{rep}")
+except Exception:
+    pass
+PY
+  )
+fi
 
 idx=0
 # 进度条总数：只统计“非空且非注释”的配置行（与实际执行条数一致）
@@ -164,6 +217,11 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
     rep=$((rep + 1))
     run_ts="${SWEEP_ID}_$(printf '%03d' "${idx}")_r$(printf '%02d' "${rep}")"
     seed=$((SEED_BASE + idx * 100 + rep))
+
+    if [[ "${SWEEP_RESUME}" == "1" && -n "${_done_success["${idx}|${rep}"]:-}" ]]; then
+      echo "[sweep] (resume) skip idx=${idx} rep=${rep} (already successful)"
+      continue
+    fi
 
     echo "[sweep] RUN_TIMESTAMP=${run_ts} rep=${rep}/${SWEEP_REPEATS} seed=${seed}"
     export RUN_TIMESTAMP="${run_ts}"
@@ -237,19 +295,22 @@ with open(dst, 'w', newline='') as f:
             var = sum((v-m)*(v-m) for v in vals) / (len(vals)-1)
             return (m, math.sqrt(var))
 
+        # n 统计为“有效样本数”（miss_ratio 可解析为 float 的条目数），避免续跑时把 NA 也算进 n
+        n_valid = sum(1 for r in rs if to_float(r.get('miss_ratio')) is not None)
+
         mr_m, mr_s = stats('miss_ratio')
         bmr_m, bmr_s = stats('byte_miss_ratio')
         thr_m, thr_s = stats('throughput_mqps')
         w.writerow({
-            'idx': idx,
-            'n': len(rs),
-            'miss_ratio_mean': 'NA' if mr_m is None else f'{mr_m:.6f}',
-            'miss_ratio_std': 'NA' if mr_s is None else f'{mr_s:.6f}',
-            'byte_miss_ratio_mean': 'NA' if bmr_m is None else f'{bmr_m:.6f}',
-            'byte_miss_ratio_std': 'NA' if bmr_s is None else f'{bmr_s:.6f}',
-            'throughput_mqps_mean': 'NA' if thr_m is None else f'{thr_m:.6f}',
-            'throughput_mqps_std': 'NA' if thr_s is None else f'{thr_s:.6f}',
-            'config': cfg,
+          'idx': idx,
+          'n': n_valid,
+          'miss_ratio_mean': 'NA' if mr_m is None else f'{mr_m:.6f}',
+          'miss_ratio_std': 'NA' if mr_s is None else f'{mr_s:.6f}',
+          'byte_miss_ratio_mean': 'NA' if bmr_m is None else f'{bmr_m:.6f}',
+          'byte_miss_ratio_std': 'NA' if bmr_s is None else f'{bmr_s:.6f}',
+          'throughput_mqps_mean': 'NA' if thr_m is None else f'{thr_m:.6f}',
+          'throughput_mqps_std': 'NA' if thr_s is None else f'{thr_s:.6f}',
+          'config': cfg,
         })
 PY
 

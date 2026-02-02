@@ -1,0 +1,2 @@
+idx,rep,seed,run_timestamp,exit_code,miss_ratio,byte_miss_ratio,throughput_mqps,trace_file,cache_ratio,config
+1,1,101,1063_linear_only_20260108_115104_001_r01,0,0.356387,0.346686,0.00,"data/TencentCBS/1063.oracleGeneral.zst",0.1,"LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=50 LOH_SCORE_MODEL=linear"

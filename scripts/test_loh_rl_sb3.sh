@@ -33,7 +33,8 @@ usage() {
     echo
     echo "  === Misc ==="
     echo "  RL_UPDATE_INTERVAL:              RL update interval (optional)"
-    echo "  CACHESIM_NUM_REQ:                Number of requests to process (optional)"
+    echo "  CACHESIM_NUM_REQ:                Limit number of requests to simulate (default: all)"
+    echo "  CACHESIM_NUM_THREAD:             cachesim worker threads (passed as --num-thread, default: cachesim built-in)"
     echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 1)"
     echo "  LOH_ENABLE_PROFILING:            Enable profiling timer stats (default: 0)"
     echo
@@ -526,6 +527,12 @@ CACHESIM_CMD=("_build_dbg/bin/cachesim" "$TRACE_FILE" "$TRACE_TYPE" "$EVICTION_A
 if [ ${#TRACE_TYPE_PARAMS_ARG[@]} -ne 0 ]; then
     CACHESIM_CMD+=("${TRACE_TYPE_PARAMS_ARG[@]}")
 fi
+
+# 可选：控制 cachesim 的线程数（如果不设置则使用 cachesim 默认值）
+if [ -n "${CACHESIM_NUM_THREAD:-}" ]; then
+    CACHESIM_CMD+=("--num-thread=${CACHESIM_NUM_THREAD}")
+fi
+
 CACHESIM_CMD+=("--eviction-params=$EV_PARAMS")
 if [ -n "${CACHESIM_NUM_REQ_ARG:-}" ]; then
     CACHESIM_CMD+=("${CACHESIM_NUM_REQ_ARG}")

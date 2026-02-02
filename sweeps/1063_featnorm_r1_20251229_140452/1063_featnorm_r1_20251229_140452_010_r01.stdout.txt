@@ -1,0 +1,201 @@
+=== LOH + stable-baselines3 RL Integration Test ===
+
+[config] LOH_SCORE_USE_IRT=<unset>
+[config] LOH_SCORE_USE_COMPOUND=<unset>
+[config] LOH_FEATURE_LOG1P=1
+[config] LOH_DUAL_CHANNEL=1
+[config] CACHESIM_NUM_REQ=3000000
+[pre-stop] Parallel-safe mode: skip global cleanup
+State dimension controlled by LOH_INCLUDE_* environment variables
+状态向量维度由环境变量控制（默认：GLOBAL(2)+SAMPLE(192)=194维）
+Using trace file: data/TencentCBS/1063.oracleGeneral.zst
+Using cache size: 0.1
+Using weights: miss_ratio_weight=1.0, byte_miss_ratio_weight=0
+Using LOH_SHM_KEY=144900582 (shared memory: /dev/shm/loh_ac_144900582)
+Cleaning up any existing shared memory files for this run...
+[0;34m开始测试LOH算法与stable-baselines3强化学习的集成...[0m
+[build] 检测到编译相关环境变量，将触发构建
+[build] 检测到编译相关环境变量，复用现有 _build_dbg 目录执行一次增量构建...
+Configuring and building project with strict warnings...
+[debug.sh] Using LOH compile defs: -DLOH_INCLUDE_REQUEST=1
+-- Version from /home/dingkp/libCacheSim/version.txt: 0.3.1
+-- LOG_LEVEL is not set, use DEBUG as default for debug build
+-- Found Zstd: /usr/local/lib/libzstd.so
+-- ZSTD_INCLUDE_DIR /usr/local/include, ZSTD_LIBRARIES /usr/local/lib/libzstd.so
+-- Found XGBoost (found version "3.1.0")
+-- XGBOOST_INCLUDE_DIR=
+-- CMAKE_CXX_FLAGS_DEBUG -g
+-- CMAKE_CXX_FLAGS_RELWITHDEBINFO -O2 -g -DNDEBUG
+-- CMAKE_CXX_FLAGS_RELEASE -O3 -DNDEBUG
+-- SUPPORT TTL OFF, USE_HUGEPAGE ON
+-- LOGLEVEL default, ENABLE_GLCACHE ON
+-- ENABLE_LRB ON, ENABLE_3L_CACHE ON
+-- OPT_SUPPORT_ZSTD_TRACE ON
+-- <<++=====------------------\/------------------=====++>>
+-- <<++              libCacheSim summary             ++>>
+-- <<++=====------------------/\------------------=====++>>
+-- ================== dependency related ==================
+-- glib found?     TRUE - LIBS=/usr/lib/x86_64-linux-gnu/libglib-2.0.so, header=/usr/include/glib-2.0;/usr/lib/x86_64-linux-gnu/glib-2.0/include
+-- tcmalloc found?  - LIBS=, header=
+-- ZSTD found? TRUE - LIBS=/usr/local/lib/libzstd.so, header=/usr/local/include
+-- ==================== CMake related =====================
+-- platform          = Linux 6.8.0-87-generic
+-- CPU type          = x86_64
+-- cmake source      = /home/dingkp/libCacheSim
+-- cmake compiler    = /usr/bin/cc
+-- CMAKE_BUILD_TYPE  = Debug
+-- CFLAGS            = -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs -DLOH_INCLUDE_REQUEST=1
+-- dependency_libs    = m;dl;/usr/lib/x86_64-linux-gnu/libglib-2.0.so;/usr/local/lib/libzstd.so;xgboost::xgboost;/usr/local/lib/lib_lightgbm.so;/usr/local/lib/lib_lightgbm.so
+-- Installation path = /usr/local
+-- ========================================================
+-- ============= Status of optional features ==============
+-- ========================================================
+-- cache_sources_c = admission/bloomfilter.c;admission/prob.c;admission/size.c;admission/sizeProbabilistic.c;eviction/ARC.c;eviction/ARCv0.c;eviction/Belady.c;eviction/BeladySize.c;eviction/CAR.c;eviction/Cacheus.c;eviction/Clock.c;eviction/ClockPro.c;eviction/FIFO.c;eviction/Hyperbolic.c;eviction/LeCaR.c;eviction/LeCaRv0.c;eviction/LFU.c;eviction/LFUDA.c;eviction/LIRS.c;eviction/LRU.c;eviction/LRUProb.c;eviction/LRUv0.c;eviction/MRU.c;eviction/nop.c;eviction/plugin_cache.c;eviction/QDLP.c;eviction/Random.c;eviction/RandomLRU.c;eviction/RandomTwo.c;eviction/S3FIFO.c;eviction/Sieve.c;eviction/Size.c;eviction/SLRU.c;eviction/SLRUv0.c;eviction/TwoQ.c;eviction/WTinyLFU.c;eviction/LOH.c;eviction/LOH_penalty.c;eviction/LOH_mr_blocked.c;eviction/LOH_mr_noblocked.c;eviction/CR_LFU.c;eviction/SR_LRU.c;eviction/FIFO_Merge.c;eviction/FIFO_Reinsertion.c;eviction/S3FIFOv0.c;eviction/S3FIFOd.c;eviction/other/flashProb.c;eviction/other/S3LRU.c;eviction/GLCache/bucket.c;eviction/GLCache/dataPrep.c;eviction/GLCache/eviction.c;eviction/GLCache/GLCache.c;eviction/GLCache/inference.c;eviction/GLCache/init.c;eviction/GLCache/segment.c;eviction/GLCache/segSel.c;eviction/GLCache/train.c;prefetch/Mithril.c;prefetch/OBL.c;prefetch/PG.c;cache.c;plugin.c
+-- cache_sources_cpp = admission/adaptsize/adaptsize.cpp;admission/adaptsize/adaptsize_interface.cpp;eviction/cpp/LFU.cpp;eviction/cpp/GDSF.cpp;eviction/LHD/lhd.cpp;eviction/LHD/LHD_Interface.cpp;eviction/LRB/lrb.cpp;eviction/LRB/LRB_Interface.cpp;eviction/3LCache/ThreeLCache_Interface.cpp;eviction/3LCache/ThreeLCache.cpp
+-- Building with test
+-- Configuring done (0.1s)
+-- Generating done (0.2s)
+-- Build files have been written to: /home/dingkp/libCacheSim/_build_dbg
+ninja: no work to do.
+
+########################################################
+debug build is at /home/dingkp/libCacheSim/scripts/../_build_dbg/bin/cachesim
+you can debug cachesim by running: 
+gdb -ex r --args PATH_TO_CACHESIM <trace_filepath> <trace_type> <cache_name> <cache_size>
+or you can provide cachesim arguments when running the debug script: 
+bash scripts/debug.sh <trace_filepath> <trace_type> <cache_name> <cache_size>
+########################################################
+
+✅ Rebuild completed successfully
+Setting up Python environment...
+
+[notice] A new release of pip is available: 25.1.1 -> 25.3
+[notice] To update, run: python3 -m pip install --upgrade pip
+Ensuring proper permissions...
+[1;33mStarting stable-baselines3 training script... (Log: ac_sb3_1063_featnorm_r1_20251229_140452_010_r01.log)[0m
+Python script: scripts/loh_actor_critic_sb3.py
+RL Algorithm: SAC
+Miss ratio weight: 1.0
+Waiting for Python script to create shared memory file...
+[wait 0s/240s] Waiting for /dev/shm/loh_ac_144900582 ... (python pid=1272624)
+Shared memory file successfully created by Python.
+-rw-rw-rw- 1 dingkp dingkp 9728 12月 29 14:49 /dev/shm/loh_ac_144900582
+[0;32mstable-baselines3 script is running with PID: 1272624[0m
+
+[0;34mRunning cache simulation with eviction algorithm LOH (with SB3 integration)...[0m
+You should see training updates if the system is working correctly.
+Using trace file: data/TencentCBS/1063.oracleGeneral.zst (type: oracleGeneral, cache size ratio: 0.1)
+[1;33mRunning cachesim with the following parameters:[0m
+  Trace file: data/TencentCBS/1063.oracleGeneral.zst
+  Trace type: oracleGeneral
+  Cache size ratio: 0.1
+  Eviction: LOH (with SB3 RL)
+  Num requests: 3000000
+  Python script: loh_actor_critic_sb3.py
+  LOH_FIXED_WEIGHTS: <unset>
+[0;34mRunning cachesim... (Log: cachesim_sb3_1063_featnorm_r1_20251229_140452_010_r01.log)[0m
+  Miss ratio weight: 1.0
+  Byte miss ratio weight: 0
+  RL update interval: 150
+  Num requests: 3000000
+Using rl_update_interval=150 for cachesim
+Executing cachesim command:
+ _build_dbg/bin/cachesim data/TencentCBS/1063.oracleGeneral.zst oracleGeneral LOH 0.1 --eviction-params=miss-ratio-weight=1.0\,rl-update-interval=150 --num-req=3000000 -v 1
+[0;32mCachesim execution completed successfully.[0m
+
+[1;33mCachesim execution output summary:[0m
+----------------------------------------
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.469095, byte miss ratio 0.473159, throughput 0.00 MQPS
+----------------------------------------
+Full log available in cachesim_sb3_1063_featnorm_r1_20251229_140452_010_r01.log
+
+[1;33mstable-baselines3 training output:[0m
+----------------------------------------
+[TIMING][Python] Write weights total: 0.000116 seconds (shm: 0.000038, sem_post: 0.000062)
+[WEIGHTS_UPDATED] [seq 19439] dim=6/6 [0.158090, 0.156459, 0.148783, 0.175198, 0.185460, 0.176011]
+[Step 19439] Weights: [0.15809011 0.15645903 0.14878279 0.17519756 0.18545982 0.17601073]
+[2158048.277431] weights write completed, total time 0.000609 seconds
+[2158048.277633] waiting for C-side response (expecting new version != 19439)
+[SEM][Python] sem_wait success wait@newstate
+[2158048.280518] [SEM][Python] C-side response (via sem) received, waited 0.002884 seconds — [seq 19440]
+[STATE_HITRATIO] [seq 19440] [0.680000, 0.443765]
+[STATE_AVGTOPK] [seq 19440] [0.543258, 0.327298, 0.422511, 0.572099, 0.497282, 0.631096, 0.543258, 0.338231, 0.383516, 0.572099, 0.497282, 0.536585, 0.543255, 0.338231, 0.354020, 0.572101, 0.497277, 0.631097, 0.543253, 0.315349, 0.521351, 0.572102, 0.497267, 0.629597]
+[Step 19439] State info:
+  obj_hit_ratio (raw[0]): 0.680000
+  byte_hit_ratio (raw[1]): 0.443765
+  total_evicted_bytes: 0
+  total_evicted_count: 0
+[Step 19439] Immediate reward: 1.000 * 0.680000 + 0.000 * 0.443765 = 0.680000
+[2158048.280766] Step 19439 completed, total duration 0.003944 seconds
+[Step 19439] Observation returned to RL agent: [0.68    , 0.443765, 0.543258, ..., 0.      , 0.      , 0.      ]
+==================================================
+[ReplayBuffer] pos=9438, reward=0.680000, evicted_bytes=0, evicted_count=0
+[Step 19440] [2158048.287093] step started
+[Step 19440] Action logits (dim=6): [-0.282, -0.441, -0.212, -0.406, 0.146, 0.410]
+[TIMING][Python] Model inference (softmax): 0.000210 seconds
+[TIMING][Python] Wait for C ready: 0.000024 seconds (1 iterations)
+[SEM][Python] posting ack semaphore for seq 19440
+[SEM][Python] sem_post ack seq 19440
+[TIMING][Python] Write weights total: 0.000129 seconds (shm: 0.000046, sem_post: 0.000066)
+[WEIGHTS_UPDATED] [seq 19440] dim=6/6 [0.157269, 0.154463, 0.149525, 0.171612, 0.186203, 0.180928]
+[Step 19440] Weights: [0.15726903 0.15446343 0.14952496 0.17161158 0.18620268 0.18092835]
+[2158048.288770] weights write completed, total time 0.001677 seconds
+[2158048.288987] waiting for C-side response (expecting new version != 19440)
+----------------------------------------
+
+[1;33m检查日志中的错误信息...[0m
+[0;32mPython日志中未检测到错误信息。[0m
+
+[1;33mStopping stable-baselines3 training script gracefully...[0m
+Python process exited gracefully.
+Cleaning up shared memory file...
+Removed existing shared memory file /dev/shm/loh_ac_144900582
+
+[0;34m=== stable-baselines3 训练结果分析 ===[0m
+
+[1;33mC++性能指标分析 (发送给RL):[0m
+[0;31m未检测到C++性能指标日志。[0m
+
+[1;33mSB3训练与奖励分析 (Python端):[0m
+[0;32m检测到自定义训练/通信日志，SB3循环正常运行。[0m
+📊 Step事件: 116637 次，权重写入: 19440 次
+
+[1;33m最近的事件片段:[0m
+[2158048.267114] weights write completed, total time 0.000590 seconds
+[Step 19438] State info:
+[Step 19438] Immediate reward: 1.000 * 0.620000 + 0.000 * 0.565476 = 0.620000
+[Step 19438] Observation returned to RL agent: [0.62    , 0.565476, 0.47215 , ..., 0.      , 0.      , 0.      ]
+[ReplayBuffer] pos=9437, reward=0.620000, evicted_bytes=0, evicted_count=0
+⚠️  [PERF] ReplayBuffer.add() took 0.1070ms (init: 0.0063ms, super: 0.0405ms)
+[Step 19439] [2158048.276822] step started
+[Step 19439] Action logits (dim=6): [0.012, -0.566, -0.160, 0.638, 0.551, 0.682]
+[Step 19439] Weights: [0.15809011 0.15645903 0.14878279 0.17519756 0.18545982 0.17601073]
+[2158048.277431] weights write completed, total time 0.000609 seconds
+[Step 19439] State info:
+[Step 19439] Immediate reward: 1.000 * 0.680000 + 0.000 * 0.443765 = 0.680000
+[Step 19439] Observation returned to RL agent: [0.68    , 0.443765, 0.543258, ..., 0.      , 0.      , 0.      ]
+[ReplayBuffer] pos=9438, reward=0.680000, evicted_bytes=0, evicted_count=0
+[Step 19440] [2158048.287093] step started
+[Step 19440] Action logits (dim=6): [-0.282, -0.441, -0.212, -0.406, 0.146, 0.410]
+[Step 19440] Weights: [0.15726903 0.15446343 0.14952496 0.17161158 0.18620268 0.18092835]
+[2158048.288770] weights write completed, total time 0.001677 seconds
+ReplayBuffer.sample_total                    1027     6.4176       6.25      13.14
+ReplayBuffer           6.4176
+
+[1;33m权重更新分析 (C++端接收):[0m
+[0;32m检测到权重更新，C++/Python通信正常！[0m
+📊 权重更新次数: 19440
+
+[0;34m=== 测试结论 ===[0m
+[0;32mSB3集成测试成功完成！[0m
+✅ C++与Python的通信正常。
+✅ SB3模型训练已启动并更新。
+✅ 缓存模拟正常执行。
+
+[1;33m下一步: 运行 'tensorboard --logdir ./runs' 来可视化训练过程。[0m
+
+[0;32mLOH与stable-baselines3集成测试完成！[0m
+
+[1;33m两端序列号对齐摘要:[0m
+Python最后一次序号: N/A
+C端最后一次序号: N/A
