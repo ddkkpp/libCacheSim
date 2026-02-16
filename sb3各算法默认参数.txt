@@ -1,0 +1,30 @@
+TD3 默认（从 TD3.init 签名与实例属性读取）
+
+learning_rate = 0.001
+buffer_size = 1_000_000
+learning_starts = 100
+batch_size = 256
+tau = 0.005
+gamma = 0.99
+train_freq = 1 step
+gradient_steps = 1
+policy_delay = 2
+target_policy_noise = 0.2
+target_noise_clip = 0.5
+action_noise = None（默认不加 NormalActionNoise）
+证据：通过 inspect.signature(TD3.init) 和构建 TD3('MlpPolicy', env) 后访问属性得到
+
+SAC 默认（从 SAC.init 签名与实例属性读取）
+
+learning_rate = 0.0003
+buffer_size = 1_000_000
+learning_starts = 100
+batch_size = 256
+tau = 0.005
+gamma = 0.99
+train_freq = 1 step
+gradient_steps = 1
+ent_coef = 'auto'
+target_update_interval = 1
+use_sde = False
+证据：inspect.signature(SAC.init) + 实例属性
