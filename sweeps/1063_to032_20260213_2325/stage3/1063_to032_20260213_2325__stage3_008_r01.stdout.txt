@@ -1,0 +1,138 @@
+=== LOH + stable-baselines3 RL Integration Test ===
+
+[config] LOH_SCORE_USE_IRT=0
+[config] LOH_SCORE_USE_COMPOUND=0
+[config] LOH_SCORE_MODEL=<unset>
+[config] LOH_MLP_HIDDEN=<unset>
+[config] LOH_FEATURE_LOG1P=0
+[config] LOH_DUAL_CHANNEL=0
+[config] CACHESIM_NUM_REQ=3000000
+[config] LOH_RESUME_DIR=./runs
+[config] LOH_RESUME_PATH=<unset>
+[config] LOH_CHECKPOINT_FREQ=50000
+[pre-stop] Parallel-safe mode: skip global cleanup
+State dimension controlled by LOH_INCLUDE_* environment variables
+状态向量维度由环境变量控制（默认：GLOBAL(2)+SAMPLE(192)=194维）
+Using trace file: data/TencentCBS/1063.oracleGeneral.zst
+Using cache size: 0.1
+Using weights: miss_ratio_weight=1.0, byte_miss_ratio_weight=0
+Using LOH_SHM_KEY=61624241 (shared memory: /dev/shm/loh_ac_61624241)
+Cleaning up any existing shared memory files for this run...
+[0;34m开始测试LOH算法与stable-baselines3强化学习的集成...[0m
+[build] LOH_SKIP_BUILD=1, skip build step
+[build] 未设置编译相关环境变量，直接复用已有 _build_dbg/bin/cachesim（不触发构建）
+[python] LOH_SKIP_PIP_INSTALL=1, skip pip install
+Ensuring proper permissions...
+[1;33mStarting stable-baselines3 training script... (Log: ac_sb3_1063_to032_20260213_2325__stage3_008_r01.log)[0m
+Python script: scripts/loh_actor_critic_sb3.py
+RL Algorithm: SAC
+Miss ratio weight: 1.0
+Waiting for Python script to create shared memory file...
+[wait 0s/240s] Waiting for /dev/shm/loh_ac_61624241 ... (python pid=2872254)
+Shared memory file successfully created by Python.
+-rw-rw-rw- 1 dingkp dingkp 14136  2月 14 06:16 /dev/shm/loh_ac_61624241
+[0;32mstable-baselines3 script is running with PID: 2872254[0m
+
+[0;34mRunning cache simulation with eviction algorithm LOH (with SB3 integration)...[0m
+You should see training updates if the system is working correctly.
+Using trace file: data/TencentCBS/1063.oracleGeneral.zst (type: oracleGeneral, cache size ratio: 0.1)
+[1;33mRunning cachesim with the following parameters:[0m
+  Trace file: data/TencentCBS/1063.oracleGeneral.zst
+  Trace type: oracleGeneral
+  Cache size ratio: 0.1
+  Eviction: LOH (with SB3 RL)
+  Num requests: 3000000
+  Python script: loh_actor_critic_sb3.py
+  LOH_FIXED_WEIGHTS: <unset>
+[0;34mRunning cachesim... (Log: cachesim_sb3_1063_to032_20260213_2325__stage3_008_r01.log)[0m
+  Miss ratio weight: 1.0
+  Byte miss ratio weight: 0
+  RL update interval: 50
+  Num requests: 3000000
+Using rl_update_interval=50 for cachesim
+Executing cachesim command:
+ _build_dbg/bin/cachesim data/TencentCBS/1063.oracleGeneral.zst oracleGeneral LOH 0.1 --eviction-params=miss-ratio-weight=1.0\,rl-update-interval=50 --num-req=3000000 -v 0
+[0;32mCachesim execution completed successfully.[0m
+
+[1;33mCachesim execution output summary:[0m
+----------------------------------------
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.356421, byte miss ratio 0.345845, throughput 0.00 MQPS
+----------------------------------------
+Full log available in cachesim_sb3_1063_to032_20260213_2325__stage3_008_r01.log
+
+[1;33mstable-baselines3 training output:[0m
+----------------------------------------
+|    actor_loss                  | -21      |
+|    critic_loss                 | 0.428    |
+|    ent_coef                    | 0.355    |
+|    ent_coef_loss               | -5.24    |
+|    learning_rate               | 0.0003   |
+|    n_updates                   | 3456     |
+| weight/                        |          |
+|    buffer_weight_0_mean        | -0.00895 |
+|    buffer_weight_1_mean        | -0.0756  |
+|    buffer_weight_2_mean        | 0.0622   |
+|    buffer_weight_3_mean        | 0        |
+|    buffer_weight_4_mean        | 0        |
+|    buffer_weight_5_mean        | 0        |
+|    buffer_weight_6_mean        | 0        |
+|    buffer_weights_mean_norm    | 1.16     |
+|    weight_0                    | -0.521   |
+|    weight_1                    | 0.182    |
+|    weight_2                    | 0.639    |
+|    weight_3                    | 0        |
+|    weight_4                    | 0        |
+|    weight_5                    | 0        |
+|    weight_6                    | 0        |
+|    weights_norm                | 0.844    |
+| weights/                       |          |
+|    l1_delta                    | 0.278    |
+|    max                         | 0.806    |
+|    min                         | -1.14    |
+|    std                         | 0.524    |
+---------------------------------------------
+⚠️  [PERF] ReplayBuffer.add() took 0.1155ms (init: 0.0516ms, super: 0.0599ms)
+----------------------------------------
+
+[1;33m检查日志中的错误信息...[0m
+[0;32mPython日志中未检测到错误信息。[0m
+
+[1;33mStopping stable-baselines3 training script gracefully...[0m
+Python process exited gracefully.
+Cleaning up shared memory file...
+Removed existing shared memory file /dev/shm/loh_ac_61624241
+
+[0;34m=== stable-baselines3 训练结果分析 ===[0m
+
+[1;33mC++性能指标分析 (发送给RL):[0m
+[0;32m检测到C++向Python发送的性能指标日志！[0m
+OMR = Object Miss Ratio (对象未命中率), BMR = Byte Miss Ratio (字节未命中率)
+
+最后几次发送的指标:
+[986274.038803] [C-STATE] [seq 58311] Sending RL request - OMR: 0.2400, BMR: 0.1607, Temp Reward: 0.7600, Total Evicted Bytes: 0, Epoch Count: 50
+[986274.049295] [C-STATE] [seq 58312] Sending RL request - OMR: 0.4800, BMR: 0.1938, Temp Reward: 0.5200, Total Evicted Bytes: 0, Epoch Count: 50
+[986274.062810] [C-STATE] [seq 58313] Sending RL request - OMR: 0.5000, BMR: 0.4211, Temp Reward: 0.5000, Total Evicted Bytes: 0, Epoch Count: 50
+[986274.072225] [C-STATE] [seq 58314] Sending RL request - OMR: 0.2000, BMR: 0.2692, Temp Reward: 0.8000, Total Evicted Bytes: 0, Epoch Count: 50
+[986274.084856] [C-STATE] [seq 58315] Sending RL request - OMR: 0.4800, BMR: 0.5218, Temp Reward: 0.5200, Total Evicted Bytes: 1753088, Epoch Count: 50
+[986274.094191] [C-STATE] [seq 58316] Sending RL request - OMR: 0.1600, BMR: 0.1346, Temp Reward: 0.8400, Total Evicted Bytes: 1236992, Epoch Count: 50
+[986274.103167] [C-STATE] [seq 58317] Sending RL request - OMR: 0.0600, BMR: 0.1055, Temp Reward: 0.9400, Total Evicted Bytes: 806912, Epoch Count: 50
+[986274.116188] [C-STATE] [seq 58318] Sending RL request - OMR: 0.2600, BMR: 0.4033, Temp Reward: 0.7400, Total Evicted Bytes: 3616768, Epoch Count: 50
+[986274.129542] [C-STATE] [seq 58319] Sending RL request - OMR: 0.1800, BMR: 0.2112, Temp Reward: 0.8200, Total Evicted Bytes: 2449408, Epoch Count: 50
+[986274.139884] [C-STATE] [seq 58320] Sending RL request - OMR: 0.0400, BMR: 0.0382, Temp Reward: 0.9600, Total Evicted Bytes: 208896, Epoch Count: 50
+
+[1;33mSB3训练与奖励分析 (Python端):[0m
+[0;31m未检测到SB3训练更新。请检查 ac_sb3_1063_to032_20260213_2325__stage3_008_r01.log 确认环境是否正确启动。[0m
+
+[1;33m权重更新分析 (C++端接收):[0m
+[0;32m检测到权重更新，C++/Python通信正常！[0m
+📊 权重更新次数: 58320
+
+[0;34m=== 测试结论 ===[0m
+[1;33m测试完成，但SB3训练或通信未完全确认。[0m
+请检查 ac_sb3_1063_to032_20260213_2325__stage3_008_r01.log 和 cachesim_sb3_1063_to032_20260213_2325__stage3_008_r01.log 日志。
+
+[0;32mLOH与stable-baselines3集成测试完成！[0m
+
+[1;33m两端序列号对齐摘要:[0m
+Python最后一次序号: N/A
+C端最后一次序号: [986274.139884] [C-STATE] [seq 58320] Sending RL request - OMR: 0.0400, BMR: 0.0382, Temp Reward: 0.9600, Total Evicted Bytes: 208896, Epoch Count: 50

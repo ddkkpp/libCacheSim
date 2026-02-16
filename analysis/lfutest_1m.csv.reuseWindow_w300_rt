@@ -1,0 +1,2 @@
+# lfutest_1m.csv
+# reuse real time distribution per window (time granularity 5, time window 300)

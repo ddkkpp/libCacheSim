@@ -18,7 +18,8 @@
 // 1) RL / 权重相关
 //   - LOH_ENABLE_RL        : 是否启用与 Python 的 RL 同步
 //                            默认: 1（启用；仅此一个开关）
-//   - LOH_FIXED_WEIGHTS    : 固定 6 维特征权重，格式 "w1,w2,w3,w4,w5,w6"
+//   - LOH_FIXED_WEIGHTS    : 固定权重（支持 6/7 维）。格式 "w1,w2,..."；提供 6
+//   个值时第 7 个默认为 0。
 //                            默认: 未设置（使用编译时内置默认权重
 //                                   LOH / LOH-mr-blocked 均为 [1,0,0,0,0,0]）
 //   - miss-ratio-weight    : 通过 cache_specific_params 传入，例如
@@ -132,7 +133,14 @@ static int loh_use_size_buckets = 1;
 // 说明：这里只声明与环境变量对应的全局开关，具体默认值见下文。
 
 static int loh_use_heuristic_signs =
-    0;  // 默认禁用启发式符号（与 LOH_mr_blocked 行为一致）
+    1;  // 默认启用启发式符号（可通过 LOH_USE_HEURISTIC_SIGNS 关闭）
+
+#if LOH_ENABLE_PENALTY
+// Penalty 正样本发送：当 ghost entry 因容量被淘汰且期间未被再次访问时，
+// 发送一个 eviction_to_access<0 的条目作为“安全驱逐”证据。
+// 默认关闭，避免改变既有实验语义。
+static int loh_penalty_send_positive = 0;  // ← LOH_PENALTY_SEND_POSITIVE
+#endif
 
 // 评分特征选择相关开关：
 //   - loh_score_use_irt        ← LOH_SCORE_USE_IRT
@@ -156,9 +164,18 @@ static int loh_use_heuristic_signs =
 //            freq_size    = freq * size
 //            recency_size = recency * size
 //            sign = [1, 1, 1, 1, 1, 1]
+//      - 升级版（LOH_SCORE_COMPOUND_V2=1）：
+//        在原 compound 6 维的基础上新增第 7 维复合特征（权重也扩到 7 维，
+//        共享内存 weights[] 需要同步扩容）：
+//          * 第 7 项（freq_recency_size）：
+//              - LOH_FEATURE_LOG1P=1 时：freq / (recency * size)（安全除法）
+//              - LOH_FEATURE_LOG1P=0 时：freq * recency * size
+//        目的：显式引入 recency/freq/size 的三者乘除关系，保持原 6 项不变。
 //      - 在该模式下，LOH_USE_HEURISTIC_SIGNS 对评分符号不再生效。
 static int loh_score_use_irt = 1;       // 默认评分包含 IRT 特征
 static int loh_score_use_compound = 0;  // 默认关闭 compound 评分模式
+static int loh_score_compound_v2 =
+    0;  // 对应环境 LOH_SCORE_COMPOUND_V2：compound 升级版（7权重）
 
 // 特征归一化模式开关：运行期从环境读取一次后缓存
 //   - loh_feature_log1p=1 时：所有特征统一采用 log1p(raw)，并允许 Python 端直接
@@ -443,13 +460,15 @@ static void LOH_print_cache(const cache_t *cache);
 // 当前配置：MAX_CANDIDATES=96，LOH_SEEN_CAP=256，负载约 <= 96/256 ≈ 0.375。
 // 维度命名约定（与 Python RL 端保持一致）：
 //   FEATURE_DIM          → 共享内存 state[]
-//   的列上限，也是权重/动作的最大特征数（始终为6）。 layout.feature_dim   →
+//   的特征列上限（基础特征统计维度，当前为6）。 WEIGHT_DIM           →
+//   策略权重长度上限（compound v2 引入第7项，因此为7）。 layout.feature_dim   →
 //   运行时真正参与统计/候选的特征数量；当 LOH_SCORE_USE_IRT=0 时会降为3。
 //   CONTEXT_DIM          → 编译期确定的共享内存长度上限 (26/38/...)，用于
 //   shm_data_t.state 固定数组。 layout.total_dim     →
 //   当前配置下实际写入的状态长度 (<= CONTEXT_DIM)，发送给 Python 的有效部分。
 // Python 端的 `STATE_DIM`/`STATE_FEATURE_DIM` 采用同样的规则以便双方严格对齐。
-#define FEATURE_DIM 6  // 用于评分的特征数量
+#define FEATURE_DIM 6  // 基础特征数量：recency/frequency/size/irt1/irt2/irt3
+#define WEIGHT_DIM 7   // 权重维度上限：compound v2 引入第7个复合项
 
 // 评分模型选择（保持默认线性权重不变）
 #define LOH_SCORE_MODEL_LINEAR 0
@@ -625,8 +644,8 @@ typedef struct {
   // 38)，附加 72 维在 LOH_INCLUDE_CANDIDATE_FEATURES=1 时启用。
   double state[CONTEXT_DIM];
 
-  // 策略网络输出的特征权重（6 维）
-  double weights[FEATURE_DIM];
+  // 策略网络输出的特征权重（最大 7 维；v1 仅使用前 6 维）
+  double weights[WEIGHT_DIM];
 
   // 【修改】传递驱逐统计而非即时reward
   uint64_t total_evicted_bytes;  // 当前周期累计驱逐的字节数
@@ -773,8 +792,9 @@ typedef struct {
   // 【新增】Size 堆的哈希表映射 - 实现常数时间 O(1) 的 Size 堆操作
   GHashTable *size_heap_map;  // Size堆的对象到堆索引映射
 
-  // 用于评分函数的特征权重
-  double weights[FEATURE_DIM];
+  // 用于评分函数的特征权重（最大 7 维；非 compound / compound v1 仅使用前 6
+  // 维）
+  double weights[WEIGHT_DIM];
   // 评分模型（默认线性 weights）；MLP 时使用 mlp_params
   int score_model;
   int mlp_hidden;
@@ -1383,6 +1403,12 @@ static void free_ghost_cache(LOH_params_t *params) {
 
 // 【新增】Ghost 缓存的 FIFO 操作辅助函数（参考 FIFO.c 实现）
 
+#if LOH_ENABLE_PENALTY
+static bool enqueue_penalty(LOH_params_t *params, uint64_t penalty_version,
+                            int64_t eviction_to_access, int64_t obj_size,
+                            uint64_t obj_id);
+#endif
+
 // 将 ghost 条目添加到队列头部（最新的）
 static void ghost_prepend_to_head(LOH_params_t *params,
                                   LOH_ghost_entry_t *entry) {
@@ -1424,6 +1450,18 @@ static void ghost_evict_tail(LOH_params_t *params) {
   if (!params->ghost_tail) return;
 
   LOH_ghost_entry_t *tail = params->ghost_tail;
+
+#if LOH_ENABLE_PENALTY
+  // 正样本：ghost entry 在 ghost cache 中“活到被淘汰”仍未被再次访问
+  // 发送 eviction_to_access<0 的事件（Python 端将其作为正反馈证据处理）。
+  if (loh_penalty_send_positive && tail->eviction_version != 0) {
+    int64_t dist = params->current_timestamp - tail->eviction_timestamp;
+    if (dist < 0) dist = 0;
+    // 负距离作为 sentinel：表示“未被再次访问”
+    (void)enqueue_penalty(params, tail->eviction_version, -dist, tail->obj_size,
+                          tail->obj_id);
+  }
+#endif
 
   // 从哈希表中移除
   g_hash_table_remove(params->ghost_cache, GINT_TO_POINTER((int)tail->obj_id));
@@ -2843,7 +2881,7 @@ static void sync_with_actor_critic(LOH_params_t *params) {
         clock_gettime(CLOCK_MONOTONIC, &apply_start);
 
         lock_shared_memory(params);
-        memcpy(params->weights, shm_data.weights, sizeof(double) * FEATURE_DIM);
+        memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
         if (params->score_model == LOH_SCORE_MODEL_MLP &&
             shm_data.score_model == LOH_SCORE_MODEL_MLP) {
           int plen = shm_data.mlp_param_len;
@@ -2933,7 +2971,7 @@ static void sync_with_actor_critic(LOH_params_t *params) {
     clock_gettime(CLOCK_MONOTONIC, &apply_start);
 
     lock_shared_memory(params);
-    memcpy(params->weights, shm_data.weights, sizeof(double) * FEATURE_DIM);
+    memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         shm_data.score_model == LOH_SCORE_MODEL_MLP) {
       int plen = shm_data.mlp_param_len;
@@ -2967,14 +3005,16 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
     // 打印接收到的权重（C/Python 统一格式，突出有效维度 vs 共享内存上限）
-    int score_feature_dim = loh_score_use_compound
-                                ? FEATURE_DIM
-                                : (loh_score_use_irt ? FEATURE_DIM : 3);
+    int score_feature_dim =
+        loh_score_compound_v2
+            ? WEIGHT_DIM
+            : (loh_score_use_compound ? FEATURE_DIM
+                                      : (loh_score_use_irt ? FEATURE_DIM : 3));
     if (score_feature_dim < 0) score_feature_dim = 0;
-    if (score_feature_dim > FEATURE_DIM) score_feature_dim = FEATURE_DIM;
+    if (score_feature_dim > WEIGHT_DIM) score_feature_dim = WEIGHT_DIM;
 
     printf("[WEIGHTS_UPDATED] [seq %llu] dim=%d/%d [", seq_no,
-           score_feature_dim, FEATURE_DIM);
+           score_feature_dim, WEIGHT_DIM);
     for (int i = 0; i < score_feature_dim; i++) {
       printf("%.6f", params->weights[i]);
       if (i < score_feature_dim - 1) printf(", ");
@@ -3040,12 +3080,14 @@ static void sync_with_actor_critic(LOH_params_t *params) {
       final_timestamp, seq_no, timeout_duration);
 
   // 打印当前使用的缓存权重
-  LOH_DEBUG_PRINT_BASIC(
-      "[%.6f] [C-CACHED] [seq %llu] Using cached weights: [%.3f, %.3f, %.3f, "
-      "%.3f, %.3f, %.3f]\n",
-      final_timestamp, seq_no, params->weights[0], params->weights[1],
-      params->weights[2], params->weights[3], params->weights[4],
-      params->weights[5]);
+  {
+    LOH_DEBUG_PRINT_BASIC(
+        "[%.6f] [C-CACHED] [seq %llu] Using cached weights: [%.3f, %.3f, %.3f, "
+        "%.3f, %.3f, %.3f, %.3f]\n",
+        final_timestamp, seq_no, params->weights[0], params->weights[1],
+        params->weights[2], params->weights[3], params->weights[4],
+        params->weights[5], params->weights[6]);
+  }
 
   // 【重置 Epoch 统计】即使超时也要重置（Epoch 已结束）
   params->epoch_obj_count = 0;
@@ -3549,31 +3591,32 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     char *buf = g_strdup(fixed_w);
     char *p = buf;
     char *tok;
-    double tmp[FEATURE_DIM];
+    double tmp[WEIGHT_DIM];
     int idx = 0;
     while ((tok = strsep(&p, ",; ")) != NULL) {
       if (!*tok) continue;
       char *endptr = NULL;
       double v = strtod(tok, &endptr);
       if (endptr == tok) continue;
-      if (idx < FEATURE_DIM) {
+      if (idx < WEIGHT_DIM) {
         tmp[idx++] = v;
       }
     }
-    if (idx == FEATURE_DIM) {
-      for (int i = 0; i < FEATURE_DIM; i++) {
-        params->weights[i] = tmp[i];
+    if (idx == FEATURE_DIM || idx == WEIGHT_DIM) {
+      // 兼容旧 6 维：若只提供 6 个值则把第 7 个权重置为 0
+      for (int i = 0; i < WEIGHT_DIM; i++) {
+        params->weights[i] = (i < idx) ? tmp[i] : 0.0;
       }
-      LOH_DEBUG_PRINT_CONFIG(
-          "[LOH INIT] LOH_FIXED_WEIGHTS from env: [%.3f, %.3f, %.3f, %.3f, "
-          "%.3f, %.3f]\n",
-          params->weights[0], params->weights[1], params->weights[2],
-          params->weights[3], params->weights[4], params->weights[5]);
+      LOH_DEBUG_PRINT_CONFIG("[LOH INIT] LOH_FIXED_WEIGHTS from env: [");
+      for (int i = 0; i < WEIGHT_DIM; i++) {
+        LOH_DEBUG_PRINT_CONFIG("%.3f%s", params->weights[i],
+                               (i == WEIGHT_DIM - 1) ? "]\n" : ", ");
+      }
     } else {
       LOH_DEBUG_PRINT_CONFIG(
           "[LOH INIT] LOH_FIXED_WEIGHTS='%s' parsed %d values (need %d), "
           "keeping default weights\n",
-          fixed_w, idx, FEATURE_DIM);
+          fixed_w, idx, WEIGHT_DIM);
     }
     g_free(buf);
   }
@@ -3818,19 +3861,40 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
                            loh_use_heuristic_signs ? "ENABLED" : "DISABLED");
   }
 
+#if LOH_ENABLE_PENALTY
+  // 3.3b) 是否发送 penalty 正样本事件（ghost 淘汰）
+  {
+    const char *env_pos = getenv("LOH_PENALTY_SEND_POSITIVE");
+    loh_penalty_send_positive =
+        loh_parse_bool_env(env_pos, loh_penalty_send_positive) ? 1 : 0;
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Penalty positive events: %s (LOH_PENALTY_SEND_POSITIVE)\n",
+        loh_penalty_send_positive ? "ENABLED" : "DISABLED");
+  }
+#endif
+
   // 3.4) 评分特征模式（LOH_SCORE_USE_IRT / LOH_SCORE_USE_COMPOUND）
   // 说明：
   //   - LOH_SCORE_USE_COMPOUND=1 时优先生效，并隐式关闭 IRT 参与评分；
+  //   - LOH_SCORE_COMPOUND_V2=1 时等价于“开启 compound + 扩展到 7 维权重”；
   //   - 若两者均为 0，则评分仅使用 recency/freq/size 三个基础特征；
   //   - 若仅 LOH_SCORE_USE_IRT 为真，则使用 6 维基础特征（含 3 个 IRT）。
   {
     const char *env_irt = getenv("LOH_SCORE_USE_IRT");
     const char *env_comp = getenv("LOH_SCORE_USE_COMPOUND");
+    const char *env_comp_v2 = getenv("LOH_SCORE_COMPOUND_V2");
 
     // 若未设置则保持默认：use_irt=1, use_compound=0
     loh_score_use_irt = loh_parse_bool_env(env_irt, loh_score_use_irt);
     loh_score_use_compound =
         loh_parse_bool_env(env_comp, loh_score_use_compound);
+
+    // compound 升级版：可以独立开启，开启后自动启用 compound
+    loh_score_compound_v2 =
+        loh_parse_bool_env(env_comp_v2, loh_score_compound_v2);
+    if (loh_score_compound_v2) {
+      loh_score_use_compound = 1;
+    }
 
     if (loh_score_use_compound) {
       // compound 模式下不再使用 IRT 分量参与评分
@@ -3838,8 +3902,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     }
 
     LOH_DEBUG_PRINT_CONFIG(
-        "[LOH INIT] Score feature mode: USE_IRT=%d, USE_COMPOUND=%d\n",
-        loh_score_use_irt, loh_score_use_compound);
+        "[LOH INIT] Score feature mode: USE_IRT=%d, USE_COMPOUND=%d, "
+        "COMPOUND_V2=%d\n",
+        loh_score_use_irt, loh_score_use_compound, loh_score_compound_v2);
   }
 
   {
@@ -3884,7 +3949,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       memset(&shm_data, 0, sizeof(shm_data_t));
 
       // 复制初始权重到共享内存
-      memcpy(shm_data.weights, params->weights, sizeof(double) * FEATURE_DIM);
+      memcpy(shm_data.weights, params->weights, sizeof(double) * WEIGHT_DIM);
 
       // 写入文件
       fwrite(&shm_data, sizeof(shm_data_t), 1, params->shm_file);
@@ -4910,7 +4975,8 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   PERF_NOW(ts_score_loop);
   // 将权重提升到寄存器，避免在循环中反复读取
   const double *w = params->weights;
-  double sign[6];
+  double sign[WEIGHT_DIM];
+  for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
 
   if (loh_score_use_compound) {
     // Compound 模式下，符号仅由 LOH_FEATURE_LOG1P 决定：
@@ -4923,13 +4989,9 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
       sign[3] = 1.0;   // freq_recency
       sign[4] = 1.0;   // freq_size
       sign[5] = -1.0;  // recency_size
+      sign[6] = 1.0;   // freq_recency_size（仅 v2 使用）
     } else {
-      sign[0] = 1.0;
-      sign[1] = 1.0;
-      sign[2] = 1.0;
-      sign[3] = 1.0;
-      sign[4] = 1.0;
-      sign[5] = 1.0;
+      for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
     }
   } else {
     // 非 compound 模式：保持原有逻辑，允许通过 LOH_USE_HEURISTIC_SIGNS 控制
@@ -4942,14 +5004,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
       sign[3] = -1.0;  // IRT1
       sign[4] = -1.0;  // IRT2
       sign[5] = -1.0;  // IRT3
+      sign[6] = 1.0;
     } else {
       // 默认全 1.0，方向由 RL 权重决定
-      sign[0] = 1.0;
-      sign[1] = 1.0;
-      sign[2] = 1.0;
-      sign[3] = 1.0;
-      sign[4] = 1.0;
-      sign[5] = 1.0;
+      for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
     }
   }
 
@@ -5060,9 +5118,32 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
           recency_size = rec * size;
         }
 
-        const double terms[6] = {rec,          freq,      size,
-                                 freq_recency, freq_size, recency_size};
-        for (int k = 0; k < 6; ++k) {
+        double terms[WEIGHT_DIM] = {0};
+        terms[0] = rec;
+        terms[1] = freq;
+        terms[2] = size;
+        terms[3] = freq_recency;
+        terms[4] = freq_size;
+        terms[5] = recency_size;
+        if (loh_score_compound_v2) {
+          // 第7项：freq_recency_size
+          if (loh_feature_log1p) {
+            const double eps = 1e-12;
+            const double safe_rec =
+                (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+            const double safe_size =
+                (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+            const double denom = safe_rec * safe_size;
+            const double safe_denom =
+                (fabs(denom) > eps) ? denom : ((denom >= 0.0) ? eps : -eps);
+            terms[6] = freq / safe_denom;
+          } else {
+            terms[6] = freq * rec * size;
+          }
+        }
+
+        int used_dim = loh_score_compound_v2 ? WEIGHT_DIM : 6;
+        for (int k = 0; k < used_dim; ++k) {
           score += terms[k] * w[k] * sign[k];
           LOH_DEBUG_PRINT_DETAILED(
               "compound:[%d] term=%.6f w=%.6f sign=%.1f "

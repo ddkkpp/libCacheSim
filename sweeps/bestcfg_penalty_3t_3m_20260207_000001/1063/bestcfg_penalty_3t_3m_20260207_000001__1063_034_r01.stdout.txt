@@ -1,0 +1,163 @@
+=== LOH + stable-baselines3 RL Integration Test ===
+
+[config] LOH_SCORE_USE_IRT=0
+[config] LOH_SCORE_USE_COMPOUND=0
+[config] LOH_SCORE_MODEL=<unset>
+[config] LOH_MLP_HIDDEN=<unset>
+[config] LOH_FEATURE_LOG1P=0
+[config] LOH_DUAL_CHANNEL=0
+[config] CACHESIM_NUM_REQ=3000000
+[config] LOH_RESUME_DIR=./runs
+[config] LOH_RESUME_PATH=<unset>
+[config] LOH_CHECKPOINT_FREQ=50000
+[pre-stop] Parallel-safe mode: skip global cleanup
+State dimension controlled by LOH_INCLUDE_* environment variables
+状态向量维度由环境变量控制（默认：GLOBAL(2)+SAMPLE(192)=194维）
+Using trace file: data/TencentCBS/1063.oracleGeneral.zst
+Using cache size: 0.1
+Using weights: miss_ratio_weight=1.0, byte_miss_ratio_weight=0
+Using LOH_SHM_KEY=51440354 (shared memory: /dev/shm/loh_ac_51440354)
+Cleaning up any existing shared memory files for this run...
+[0;34m开始测试LOH算法与stable-baselines3强化学习的集成...[0m
+[build] LOH_SKIP_BUILD=1, skip build step
+[build] 未设置编译相关环境变量，直接复用已有 _build_dbg/bin/cachesim（不触发构建）
+[python] LOH_SKIP_PIP_INSTALL=1, skip pip install
+Ensuring proper permissions...
+[1;33mStarting stable-baselines3 training script... (Log: ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_034_r01.log)[0m
+Python script: scripts/loh_actor_critic_sb3.py
+RL Algorithm: SAC
+Miss ratio weight: 1.0
+Waiting for Python script to create shared memory file...
+[wait 0s/240s] Waiting for /dev/shm/loh_ac_51440354 ... (python pid=3254367)
+Shared memory file successfully created by Python.
+-rw-rw-rw- 1 dingkp dingkp 4248  2月  7 05:14 /dev/shm/loh_ac_51440354
+[0;32mstable-baselines3 script is running with PID: 3254367[0m
+
+[0;34mRunning cache simulation with eviction algorithm LOH (with SB3 integration)...[0m
+You should see training updates if the system is working correctly.
+Using trace file: data/TencentCBS/1063.oracleGeneral.zst (type: oracleGeneral, cache size ratio: 0.1)
+[1;33mRunning cachesim with the following parameters:[0m
+  Trace file: data/TencentCBS/1063.oracleGeneral.zst
+  Trace type: oracleGeneral
+  Cache size ratio: 0.1
+  Eviction: LOH (with SB3 RL)
+  Num requests: 3000000
+  Python script: loh_actor_critic_sb3.py
+  LOH_FIXED_WEIGHTS: <unset>
+[0;34mRunning cachesim... (Log: cachesim_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_034_r01.log)[0m
+  Miss ratio weight: 1.0
+  Byte miss ratio weight: 0
+  Num requests: 3000000
+Executing cachesim command:
+ _build_dbg/bin/cachesim data/TencentCBS/1063.oracleGeneral.zst oracleGeneral LOH 0.1 --eviction-params=miss-ratio-weight=1.0 --num-req=3000000 -v 0
+[0;32mCachesim execution completed successfully.[0m
+
+[1;33mCachesim execution output summary:[0m
+----------------------------------------
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.366341, byte miss ratio 0.348461, throughput 0.01 MQPS
+----------------------------------------
+Full log available in cachesim_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_034_r01.log
+
+[1;33mstable-baselines3 training output:[0m
+----------------------------------------
+  📊 penalty_data: 0 items
+  📊 evicted_count: 17, evicted_bytes: 1486848
+  ✅ pos_events(d<0): 0, neg_events(d>=0): 0, total_events: 0
+  ✅ good_rate: 0.000000
+  📐 obj_penalty: 0.00000000
+  📐 byte_penalty: 0.00000000
+  📐 penalty (weighted): 0.00000000
+  📐 penalty_baseline: 0.00000000
+  📐 relative_change: 0.00000000
+  🎁 reward (before clip): 1.000000
+  🎁 final_reward (after clip): 1.000000
+[ReplayBuffer] ✅ Computed 1 final rewards for positions [2578, 2579)
+[ReplayBuffer] FINALIZE_STATS: count=1, penalty_sum=0.000000, total_finalized=12578
+[376410.898971] Step 14579 completed, total duration 0.025173 seconds
+[Step 14579] Observation returned to RL agent: [0.825   , 0.673201]
+==================================================
+[ReplayBuffer] pos=4578, reward=0.825000, evicted_bytes=10421248, evicted_count=713
+⚠️  [PERF] ReplayBuffer.add() took 0.1045ms (init: 0.0216ms, super: 0.0376ms)
+[Step 14580] [376410.903331] step started
+[Step 14580] Action logits (dim=3): [0.143, 0.024, -0.087]
+[TIMING][Python] Model inference (softmax): 0.000413 seconds
+[TIMING][Python] Wait for C ready: 0.000028 seconds (1 iterations)
+[SEM][Python] posting ack semaphore for seq 14580
+[SEM][Python] sem_post ack seq 14580
+[TIMING][Python] Write weights total: 0.000122 seconds (shm: 0.000036, sem_post: 0.000064)
+[WEIGHTS_UPDATED] [seq 14580] dim=3/7 [0.142951, 0.024310, -0.087312]
+[Step 14580] Weights: [ 0.14295089  0.02430952 -0.08731246  0.          0.          0.
+  0.        ]
+[376410.904963] weights write completed, total time 0.001631 seconds
+[376410.905403] waiting for C-side response (expecting new version != 14580)
+----------------------------------------
+
+[1;33m检查日志中的错误信息...[0m
+[0;32mPython日志中未检测到错误信息。[0m
+
+[1;33mStopping stable-baselines3 training script gracefully...[0m
+Python process exited gracefully.
+Cleaning up shared memory file...
+Removed existing shared memory file /dev/shm/loh_ac_51440354
+
+[0;34m=== stable-baselines3 训练结果分析 ===[0m
+
+[1;33mC++性能指标分析 (发送给RL):[0m
+[0;32m检测到C++向Python发送的性能指标日志！[0m
+OMR = Object Miss Ratio (对象未命中率), BMR = Byte Miss Ratio (字节未命中率)
+
+最后几次发送的指标:
+[376410.386798] [C-STATE] [seq 14571] Sending RL request - OMR: 0.1050, BMR: 0.1282, Temp Reward: 0.8950, Total Evicted Bytes: 528384, Epoch Count: 200
+[376410.395379] [C-STATE] [seq 14572] Sending RL request - OMR: 0.2100, BMR: 0.1932, Temp Reward: 0.7900, Total Evicted Bytes: 524288, Epoch Count: 200
+[376410.409215] [C-STATE] [seq 14573] Sending RL request - OMR: 0.3300, BMR: 0.2092, Temp Reward: 0.6700, Total Evicted Bytes: 512000, Epoch Count: 200
+[376410.423689] [C-STATE] [seq 14574] Sending RL request - OMR: 0.3950, BMR: 0.1146, Temp Reward: 0.6050, Total Evicted Bytes: 561152, Epoch Count: 200
+[376410.438839] [C-STATE] [seq 14575] Sending RL request - OMR: 0.1850, BMR: 0.1061, Temp Reward: 0.8150, Total Evicted Bytes: 421888, Epoch Count: 200
+[376410.463755] [C-STATE] [seq 14576] Sending RL request - OMR: 0.1100, BMR: 0.2155, Temp Reward: 0.8900, Total Evicted Bytes: 4161536, Epoch Count: 200
+[376410.477312] [C-STATE] [seq 14577] Sending RL request - OMR: 0.5100, BMR: 0.6117, Temp Reward: 0.4900, Total Evicted Bytes: 7996416, Epoch Count: 200
+[376410.844655] [C-STATE] [seq 14578] Sending RL request - OMR: 0.2150, BMR: 0.0937, Temp Reward: 0.7850, Total Evicted Bytes: 225280, Epoch Count: 200
+[376410.864099] [C-STATE] [seq 14579] Sending RL request - OMR: 0.3200, BMR: 0.2129, Temp Reward: 0.6800, Total Evicted Bytes: 2576384, Epoch Count: 200
+[376410.894653] [C-STATE] [seq 14580] Sending RL request - OMR: 0.1750, BMR: 0.3268, Temp Reward: 0.8250, Total Evicted Bytes: 10421248, Epoch Count: 200
+
+[1;33mSB3训练与奖励分析 (Python端):[0m
+[0;32m检测到自定义训练/通信日志，SB3循环正常运行。[0m
+📊 Step事件: 72898 次，权重写入: 14580 次
+
+[1;33m最近的事件片段:[0m
+[ReplayBuffer] ✅ Computed 1 final rewards for positions [2577, 2578)
+[ReplayBuffer] FINALIZE_STATS: count=1, penalty_sum=0.120717, total_finalized=12577
+[Step 14578] Observation returned to RL agent: [0.68   , 0.78714]
+[ReplayBuffer] pos=4577, reward=0.680000, evicted_bytes=2576384, evicted_count=64
+[Step 14579] [376410.873798] step started
+[Step 14579] Action logits (dim=3): [0.593, 0.908, -0.136]
+[Step 14579] Weights: [ 0.59264886  0.9076152  -0.13589495  0.          0.          0.
+[376410.875184] weights write completed, total time 0.001386 seconds
+[Step 14579] Immediate reward: 1.000 * 0.825000 + 0.000 * 0.673201 = 0.825000
+[Reward→Final] 🎯 pos 2578:
+[ReplayBuffer] ✅ Computed 1 final rewards for positions [2578, 2579)
+[ReplayBuffer] FINALIZE_STATS: count=1, penalty_sum=0.000000, total_finalized=12578
+[Step 14579] Observation returned to RL agent: [0.825   , 0.673201]
+[ReplayBuffer] pos=4578, reward=0.825000, evicted_bytes=10421248, evicted_count=713
+⚠️  [PERF] ReplayBuffer.add() took 0.1045ms (init: 0.0216ms, super: 0.0376ms)
+[Step 14580] [376410.903331] step started
+[Step 14580] Action logits (dim=3): [0.143, 0.024, -0.087]
+[Step 14580] Weights: [ 0.14295089  0.02430952 -0.08731246  0.          0.          0.
+[376410.904963] weights write completed, total time 0.001631 seconds
+ReplayBuffer           0.4758
+
+[1;33m权重更新分析 (C++端接收):[0m
+[0;32m检测到权重更新，C++/Python通信正常！[0m
+📊 权重更新次数: 14580
+
+[0;34m=== 测试结论 ===[0m
+[0;32mSB3集成测试成功完成！[0m
+✅ C++与Python的通信正常。
+✅ SB3模型训练已启动并更新。
+✅ 缓存模拟正常执行。
+
+[1;33m下一步: 运行 'tensorboard --logdir ./runs' 来可视化训练过程。[0m
+
+[0;32mLOH与stable-baselines3集成测试完成！[0m
+
+[1;33m两端序列号对齐摘要:[0m
+Python最后一次序号: N/A
+C端最后一次序号: [376410.894653] [C-STATE] [seq 14580] Sending RL request - OMR: 0.1750, BMR: 0.3268, Temp Reward: 0.8250, Total Evicted Bytes: 10421248, Epoch Count: 200

@@ -9,6 +9,7 @@ import sys
 import time
 
 FEATURE_DIM = 6
+WEIGHT_DIM = 7
 DEFAULT_KEY = int(os.environ.get("LOH_SHM_KEY", "9876"))
 
 def create_shared_memory_class(context_dim: int):
@@ -19,7 +20,7 @@ def create_shared_memory_class(context_dim: int):
             ("terminate", ctypes.c_int),
             ("is_training", ctypes.c_int),
             ("state", ctypes.c_double * context_dim),
-            ("weights", ctypes.c_double * FEATURE_DIM),
+            ("weights", ctypes.c_double * WEIGHT_DIM),
             # 与 loh_actor_critic_sb3.py 保持一致
             ("total_evicted_bytes", ctypes.c_uint64),
             ("total_evicted_count", ctypes.c_uint64),

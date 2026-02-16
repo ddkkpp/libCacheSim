@@ -1,0 +1,9 @@
+# lfutest_1m.csv
+# req rate - time window 300 second
+
+# byte rate - time window 300 second
+
+# obj rate - time window 300 second
+
+# first seen obj (cold miss) rate - time window 300 second
+

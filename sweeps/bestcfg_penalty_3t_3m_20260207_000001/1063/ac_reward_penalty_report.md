@@ -1,0 +1,1541 @@
+# AC Reward/Penalty Signal Detailed Report
+
+## Inputs
+
+- patterns: ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_*.log
+- only_penalty_final: 0
+- rank_clip_sat: 0
+- progress_every: 5
+- header_only: 0
+- max_header_lines: 8000
+
+## File Manifest
+
+- count: 123
+
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_001_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_002_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_003_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_004_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_005_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_006_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_007_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_008_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_009_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_010_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_011_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_012_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_013_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_014_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_015_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_016_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_017_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_018_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_019_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_020_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_021_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_022_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_023_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_024_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_025_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_026_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_027_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_028_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_029_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_030_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_031_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_032_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_033_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_034_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_035_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_036_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_037_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_038_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_039_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_040_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_041_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_042_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_043_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_044_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_045_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_046_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_047_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_048_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_049_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_050_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_051_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_052_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_053_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_054_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_055_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_056_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_057_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_058_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_059_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_060_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_061_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_062_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_063_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_064_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_065_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_066_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_067_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_068_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_069_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_070_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_071_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_072_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_073_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_074_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_075_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_076_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_077_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_078_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_079_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_080_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_081_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_082_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_083_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_084_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_085_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_086_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_087_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_088_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_089_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_090_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_091_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_092_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_093_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_094_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_095_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_096_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_097_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_098_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_099_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_100_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_101_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_102_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_103_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_104_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_105_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_106_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_107_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_108_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_109_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_110_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_111_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_112_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_113_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_114_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_115_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_116_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_117_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_118_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_119_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_120_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_121_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_122_r01.log
+- ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_123_r01.log
+
+files: 123
+
+## penalty_scale = binary
+
+**Summary**
+- immediate_reward: n=641476, mean=0.818835, bins=[0,0.25):1.97% [0.25,0.5):10.59% [0.5,0.75):20.20% [0.75,1):67.24%
+- penalty_data: n=272326, zero=16728 (6.14%), hist=distinct=440 top10=0:6.14% 1:5.06% 2:4.08% 3:3.67% 4:3.35% 5:3.15% 6:2.98% 7:2.81% 8:2.65% 9:2.52%
+- final_reward(after clip): n=272326, mean=-0.112985, min=-1, max=1, clip_sat=32.57%
+- final_reward bins: [-1,-0.75):31.69% [-0.75,-0.5):4.38% [-0.5,-0.25):8.05% [-0.25,0):13.89% [0,0.25):5.96% [0.25,0.5):5.78% [0.5,0.75):9.77% [0.75,1):20.48%
+- penalty(weighted) bins: [0,1e-06):6.14% [0.0001,0.001):0.00% [0.001,0.01):1.09% [0.01,0.1):15.67% [0.1,1):54.00% [1,10):21.13% [10,100):1.94% [100,1000):0.02%
+
+**Files**
+
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_068_r01.log**
+  - cfg: w_pen=0.1, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12383, zero=754 (6.09%), hist=distinct=208 top10=0:6.09% 1:4.98% 2:4.10% 3:3.89% 4:3.61% 5:3.27% 6:3.06% 8:2.83% 7:2.79% 9:2.69%
+  - immediate_reward: n=29158, mean=0.819484, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.48% [0.5,0.75):20.19% [0.75,1):67.37%
+  - reward(before clip): n=12383, mean=-1.33527, min=-16410, max=1, p50=0.685754, p90=0.982803, p99=1
+  - final_reward(after clip): n=12383, mean=0.423471, min=-1, max=1, clip_sat=16.49%, p50=0.685754, p90=0.982803, p99=1
+  - final_reward bins: [-1,-0.75):11.81% [-0.75,-0.5):1.82% [-0.5,-0.25):3.04% [-0.25,0):4.05% [0,0.25):6.22% [0.25,0.5):10.60% [0.5,0.75):18.46% [0.75,1):44.00%
+  - penalty(weighted): n=12383, mean=1.21264, min=0, max=245, p50=0.333333, p90=2.43571, p99=15.5
+  - penalty bins: [0,1e-06):6.09% [0.0001,0.001):0.01% [0.001,0.01):1.20% [0.01,0.1):15.50% [0.1,1):54.00% [1,10):21.38% [10,100):1.81% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_069_r01.log**
+  - cfg: w_pen=0.2, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12369, zero=724 (5.85%), hist=distinct=210 top10=0:5.85% 1:5.00% 2:4.33% 3:3.70% 5:3.10% 4:3.04% 6:2.89% 8:2.81% 7:2.79% 9:2.77%
+  - immediate_reward: n=29158, mean=0.818581, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.99% [0.25,0.5):10.58% [0.5,0.75):20.24% [0.75,1):67.19%
+  - reward(before clip): n=12369, mean=-0.0264957, min=-118.311, max=1, p50=0.668987, p90=0.980483, p99=1
+  - final_reward(after clip): n=12369, mean=0.407759, min=-1, max=1, clip_sat=16.37%, p50=0.668987, p90=0.980483, p99=1
+  - final_reward bins: [-1,-0.75):12.13% [-0.75,-0.5):2.26% [-0.5,-0.25):2.80% [-0.25,0):4.20% [0,0.25):6.63% [0.25,0.5):10.57% [0.5,0.75):18.94% [0.75,1):42.47%
+  - penalty(weighted): n=12369, mean=1.15569, min=0, max=122, p50=0.333333, p90=2.44521, p99=14.3867
+  - penalty bins: [0,1e-06):5.85% [0.0001,0.001):0.01% [0.001,0.01):1.22% [0.01,0.1):15.58% [0.1,1):53.99% [1,10):21.55% [10,100):1.78% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_070_r01.log**
+  - cfg: w_pen=0.5, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12393, zero=747 (6.03%), hist=distinct=211 top10=0:6.03% 1:5.36% 2:4.07% 4:3.51% 3:3.34% 5:3.32% 8:3.11% 6:2.89% 7:2.84% 9:2.55%
+  - immediate_reward: n=29158, mean=0.819582, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.88% [0.25,0.5):10.58% [0.5,0.75):20.15% [0.75,1):67.38%
+  - reward(before clip): n=12393, mean=0.00542019, min=-104.951, max=1, p50=0.68074, p90=0.981804, p99=1
+  - final_reward(after clip): n=12393, mean=0.425966, min=-1, max=1, clip_sat=16.04%, p50=0.68074, p90=0.981804, p99=1
+  - final_reward bins: [-1,-0.75):11.68% [-0.75,-0.5):2.20% [-0.5,-0.25):2.69% [-0.25,0):3.84% [0,0.25):6.26% [0.25,0.5):10.68% [0.5,0.75):18.38% [0.75,1):44.27%
+  - penalty(weighted): n=12393, mean=1.22209, min=0, max=158, p50=0.333333, p90=2.36606, p99=14.77
+  - penalty bins: [0,1e-06):6.03% [0.001,0.01):1.01% [0.01,0.1):16.19% [0.1,1):53.78% [1,10):21.08% [10,100):1.88% [100,1000):0.03%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_071_r01.log**
+  - cfg: w_pen=1.0, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12366, zero=727 (5.88%), hist=distinct=207 top10=0:5.88% 1:5.02% 2:4.17% 3:3.89% 4:3.26% 7:3.04% 5:3.02% 6:2.94% 8:2.56% 9:2.47%
+  - immediate_reward: n=29158, mean=0.818186, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.71% [0.5,0.75):20.27% [0.75,1):67.05%
+  - reward(before clip): n=12366, mean=-0.0309732, min=-169.807, max=1, p50=0.668159, p90=0.980245, p99=1
+  - final_reward(after clip): n=12366, mean=0.411497, min=-1, max=1, clip_sat=16.00%, p50=0.668159, p90=0.980245, p99=1
+  - final_reward bins: [-1,-0.75):11.87% [-0.75,-0.5):2.28% [-0.5,-0.25):2.62% [-0.25,0):4.40% [0,0.25):6.61% [0.25,0.5):11.01% [0.5,0.75):18.79% [0.75,1):42.43%
+  - penalty(weighted): n=12366, mean=1.14607, min=0, max=111, p50=0.333333, p90=2.23974, p99=15.1167
+  - penalty bins: [0,1e-06):5.88% [0.0001,0.001):0.01% [0.001,0.01):1.03% [0.01,0.1):16.25% [0.1,1):54.54% [1,10):20.51% [10,100):1.77% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_072_r01.log**
+  - cfg: w_pen=0.1, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12393, zero=684 (5.52%), hist=distinct=206 top10=0:5.52% 1:4.72% 2:4.40% 3:3.48% 4:3.43% 5:3.16% 6:2.86% 8:2.76% 7:2.68% 9:2.57%
+  - immediate_reward: n=29158, mean=0.819275, min=0.01, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.90% [0.25,0.5):10.52% [0.5,0.75):20.25% [0.75,1):67.33%
+  - reward(before clip): n=12393, mean=-1.33768, min=-365, max=1, p50=0.314286, p90=0.943662, p99=1
+  - final_reward(after clip): n=12393, mean=0.0901139, min=-1, max=1, clip_sat=29.02%, p50=0.314286, p90=0.943662, p99=1
+  - final_reward bins: [-1,-0.75):25.34% [-0.75,-0.5):3.23% [-0.5,-0.25):4.37% [-0.25,0):5.50% [0,0.25):8.93% [0.25,0.5):10.93% [0.5,0.75):15.62% [0.75,1):26.09%
+  - penalty(weighted): n=12393, mean=1.16884, min=0, max=183, p50=0.342857, p90=2.4375, p99=14
+  - penalty bins: [0,1e-06):5.52% [0.0001,0.001):0.01% [0.001,0.01):0.94% [0.01,0.1):15.48% [0.1,1):54.55% [1,10):21.67% [10,100):1.83% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_073_r01.log**
+  - cfg: w_pen=0.2, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12392, zero=746 (6.02%), hist=distinct=213 top10=0:6.02% 1:5.33% 2:3.98% 3:3.70% 4:3.29% 5:3.22% 6:3.09% 9:2.63% 8:2.61% 10:2.61%
+  - immediate_reward: n=29158, mean=0.820183, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.48% [0.5,0.75):19.99% [0.75,1):67.59%
+  - reward(before clip): n=12392, mean=-1.4815, min=-353, max=1, p50=0.333333, p90=0.95, p99=1
+  - final_reward(after clip): n=12392, mean=0.099145, min=-1, max=1, clip_sat=29.03%, p50=0.333333, p90=0.95, p99=1
+  - final_reward bins: [-1,-0.75):24.90% [-0.75,-0.5):3.16% [-0.5,-0.25):4.64% [-0.25,0):5.47% [0,0.25):8.42% [0.25,0.5):11.21% [0.5,0.75):15.59% [0.75,1):26.61%
+  - penalty(weighted): n=12392, mean=1.24075, min=0, max=177, p50=0.333333, p90=2.4, p99=16.2575
+  - penalty bins: [0,1e-06):6.02% [0.001,0.01):1.34% [0.01,0.1):14.97% [0.1,1):54.66% [1,10):20.92% [10,100):2.05% [100,1000):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_074_r01.log**
+  - cfg: w_pen=0.5, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12365, zero=803 (6.49%), hist=distinct=215 top10=0:6.49% 1:5.11% 2:4.07% 3:3.51% 5:3.49% 4:3.43% 6:3.07% 8:2.76% 7:2.56% 11:2.46%
+  - immediate_reward: n=29158, mean=0.818374, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.06% [0.25,0.5):10.56% [0.5,0.75):20.26% [0.75,1):67.12%
+  - reward(before clip): n=12365, mean=-1.48089, min=-225, max=1, p50=0.348837, p90=0.953426, p99=1
+  - final_reward(after clip): n=12365, mean=0.114201, min=-1, max=1, clip_sat=29.28%, p50=0.348837, p90=0.953426, p99=1
+  - final_reward bins: [-1,-0.75):24.71% [-0.75,-0.5):2.85% [-0.5,-0.25):4.34% [-0.25,0):5.38% [0,0.25):8.53% [0.25,0.5):10.95% [0.5,0.75):15.76% [0.75,1):27.48%
+  - penalty(weighted): n=12365, mean=1.24044, min=0, max=113, p50=0.325581, p90=2.5, p99=16.68
+  - penalty bins: [0,1e-06):6.49% [0.0001,0.001):0.01% [0.001,0.01):0.94% [0.01,0.1):16.31% [0.1,1):53.46% [1,10):20.72% [10,100):2.05% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_075_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12386, zero=779 (6.29%), hist=distinct=209 top10=0:6.29% 1:5.01% 2:3.91% 3:3.88% 5:3.24% 4:3.04% 7:3.00% 8:2.76% 6:2.58% 9:2.42%
+  - immediate_reward: n=29158, mean=0.816908, min=0.005, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.04% [0.25,0.5):10.81% [0.5,0.75):20.31% [0.75,1):66.84%
+  - reward(before clip): n=12386, mean=-1.41429, min=-243, max=1, p50=0.357143, p90=0.954545, p99=1
+  - final_reward(after clip): n=12386, mean=0.116544, min=-1, max=1, clip_sat=28.80%, p50=0.357143, p90=0.954545, p99=1
+  - final_reward bins: [-1,-0.75):24.45% [-0.75,-0.5):3.00% [-0.5,-0.25):4.45% [-0.25,0):5.16% [0,0.25):8.11% [0.25,0.5):11.42% [0.5,0.75):16.19% [0.75,1):27.22%
+  - penalty(weighted): n=12386, mean=1.20714, min=0, max=122, p50=0.321429, p90=2.33333, p99=16.3433
+  - penalty bins: [0,1e-06):6.29% [0.001,0.01):1.14% [0.01,0.1):15.66% [0.1,1):54.40% [1,10):20.56% [10,100):1.93% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_076_r01.log**
+  - cfg: w_pen=0.1, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12386, zero=742 (5.99%), hist=distinct=217 top10=0:5.99% 1:5.00% 2:3.96% 3:3.73% 4:3.39% 5:3.19% 6:3.08% 7:2.77% 10:2.62% 8:2.52%
+  - immediate_reward: n=29158, mean=0.818653, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.66% [0.5,0.75):20.26% [0.75,1):67.13%
+  - reward(before clip): n=12386, mean=-0.206719, min=-208, max=1, p50=0.657943, p90=0.974115, p99=1
+  - final_reward(after clip): n=12386, mean=0.385347, min=-1, max=1, clip_sat=18.07%, p50=0.657943, p90=0.974115, p99=1
+  - final_reward bins: [-1,-0.75):13.40% [-0.75,-0.5):1.89% [-0.5,-0.25):2.78% [-0.25,0):3.29% [0,0.25):7.37% [0.25,0.5):10.13% [0.5,0.75):19.30% [0.75,1):41.84%
+  - penalty(weighted): n=12386, mean=1.20672, min=0, max=209, p50=0.342057, p90=2.33333, p99=16
+  - penalty bins: [0,1e-06):5.99% [0.0001,0.001):0.01% [0.001,0.01):1.23% [0.01,0.1):15.10% [0.1,1):54.46% [1,10):21.19% [10,100):2.02% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_077_r01.log**
+  - cfg: w_pen=0.2, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12371, zero=768 (6.21%), hist=distinct=215 top10=0:6.21% 1:5.07% 2:3.82% 3:3.82% 4:3.40% 6:3.06% 5:2.91% 7:2.73% 8:2.49% 10:2.38%
+  - immediate_reward: n=29158, mean=0.818402, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.59% [0.5,0.75):20.23% [0.75,1):67.19%
+  - reward(before clip): n=12371, mean=-0.217486, min=-135, max=1, p50=0.666667, p90=0.976744, p99=1
+  - final_reward(after clip): n=12371, mean=0.386637, min=-1, max=1, clip_sat=18.45%, p50=0.666667, p90=0.976744, p99=1
+  - final_reward bins: [-1,-0.75):13.36% [-0.75,-0.5):1.92% [-0.5,-0.25):3.09% [-0.25,0):3.72% [0,0.25):6.68% [0.25,0.5):9.92% [0.5,0.75):18.71% [0.75,1):42.62%
+  - penalty(weighted): n=12371, mean=1.21749, min=0, max=136, p50=0.333333, p90=2.33333, p99=16.5
+  - penalty bins: [0,1e-06):6.21% [0.001,0.01):1.13% [0.01,0.1):15.41% [0.1,1):53.42% [1,10):21.74% [10,100):2.08% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_078_r01.log**
+  - cfg: w_pen=0.5, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12376, zero=798 (6.45%), hist=distinct=206 top10=0:6.45% 1:4.97% 2:4.62% 3:3.58% 4:3.35% 5:3.23% 7:2.95% 6:2.86% 8:2.63% 9:2.51%
+  - immediate_reward: n=29158, mean=0.81836, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.02% [0.25,0.5):10.59% [0.5,0.75):20.23% [0.75,1):67.15%
+  - reward(before clip): n=12376, mean=-0.139686, min=-96.2, max=1, p50=0.666667, p90=0.976653, p99=1
+  - final_reward(after clip): n=12376, mean=0.396217, min=-1, max=1, clip_sat=18.61%, p50=0.666667, p90=0.976653, p99=1
+  - final_reward bins: [-1,-0.75):13.25% [-0.75,-0.5):1.66% [-0.5,-0.25):2.68% [-0.25,0):3.35% [0,0.25):6.92% [0.25,0.5):10.11% [0.5,0.75):19.74% [0.75,1):42.28%
+  - penalty(weighted): n=12376, mean=1.13969, min=0, max=97.2, p50=0.333333, p90=2.33854, p99=14.5
+  - penalty bins: [0,1e-06):6.45% [0.001,0.01):1.03% [0.01,0.1):16.03% [0.1,1):53.93% [1,10):20.77% [10,100):1.79%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_079_r01.log**
+  - cfg: w_pen=1.0, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12389, zero=767 (6.19%), hist=distinct=208 top10=0:6.19% 1:4.89% 2:4.10% 3:3.69% 4:3.29% 7:2.93% 8:2.89% 6:2.87% 5:2.78% 12:2.57%
+  - immediate_reward: n=29158, mean=0.818208, min=0.01, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.03% [0.25,0.5):10.74% [0.5,0.75):20.10% [0.75,1):67.12%
+  - reward(before clip): n=12389, mean=-0.207093, min=-124, max=1, p50=0.676471, p90=0.975744, p99=1
+  - final_reward(after clip): n=12389, mean=0.398328, min=-1, max=1, clip_sat=18.30%, p50=0.676471, p90=0.975744, p99=1
+  - final_reward bins: [-1,-0.75):13.23% [-0.75,-0.5):1.82% [-0.5,-0.25):2.79% [-0.25,0):3.53% [0,0.25):6.46% [0.25,0.5):9.68% [0.5,0.75):19.36% [0.75,1):43.14%
+  - penalty(weighted): n=12389, mean=1.20709, min=0, max=125, p50=0.323529, p90=2.41061, p99=15.4133
+  - penalty bins: [0,1e-06):6.19% [0.001,0.01):1.22% [0.01,0.1):15.88% [0.1,1):53.95% [1,10):20.74% [10,100):1.99% [100,1000):0.03%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_080_r01.log**
+  - cfg: w_pen=0.1, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12360, zero=776 (6.28%), hist=distinct=202 top10=0:6.28% 1:5.15% 2:3.97% 3:3.91% 4:3.28% 6:3.03% 5:2.94% 9:2.90% 7:2.86% 8:2.81%
+  - immediate_reward: n=29158, mean=0.821372, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.87% [0.25,0.5):10.34% [0.5,0.75):19.91% [0.75,1):67.88%
+  - reward(before clip): n=12360, mean=-1.24224, min=-214, max=-0, p50=-0.333333, p90=-0.024096, p99=-0
+  - final_reward(after clip): n=12360, mean=-0.447406, min=-1, max=-0, clip_sat=22.93%, p50=-0.333333, p90=-0.024096, p99=-0
+  - final_reward bins: [-1,-0.75):27.86% [-0.75,-0.5):9.76% [-0.5,-0.25):19.85% [-0.25,0):36.25% [0,0.25):6.28%
+  - penalty(weighted): n=12360, mean=1.24224, min=0, max=214, p50=0.333333, p90=2.4, p99=16
+  - penalty bins: [0,1e-06):6.28% [0.0001,0.001):0.01% [0.001,0.01):0.94% [0.01,0.1):16.05% [0.1,1):53.79% [1,10):20.93% [10,100):1.95% [100,1000):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_081_r01.log**
+  - cfg: w_pen=0.2, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12367, zero=779 (6.30%), hist=distinct=214 top10=0:6.30% 1:5.00% 2:4.16% 3:3.49% 4:3.34% 6:3.12% 5:3.01% 7:2.84% 8:2.54% 9:2.52%
+  - immediate_reward: n=29158, mean=0.818892, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.43% [0.5,0.75):20.51% [0.75,1):67.10%
+  - reward(before clip): n=12367, mean=-1.23282, min=-156, max=-0, p50=-0.333333, p90=-0.0243604, p99=-0
+  - final_reward(after clip): n=12367, mean=-0.451628, min=-1, max=-0, clip_sat=23.30%, p50=-0.333333, p90=-0.0243604, p99=-0
+  - final_reward bins: [-1,-0.75):28.27% [-0.75,-0.5):9.99% [-0.5,-0.25):19.54% [-0.25,0):35.91% [0,0.25):6.30%
+  - penalty(weighted): n=12367, mean=1.23282, min=0, max=156, p50=0.333333, p90=2.44444, p99=16
+  - penalty bins: [0,1e-06):6.30% [0.001,0.01):1.09% [0.01,0.1):15.48% [0.1,1):53.82% [1,10):21.12% [10,100):2.17% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_082_r01.log**
+  - cfg: w_pen=0.5, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12353, zero=767 (6.21%), hist=distinct=204 top10=0:6.21% 1:4.92% 2:4.20% 3:3.68% 4:3.21% 5:3.13% 6:2.95% 7:2.91% 8:2.56% 9:2.47%
+  - immediate_reward: n=29158, mean=0.819303, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.61% [0.5,0.75):20.09% [0.75,1):67.36%
+  - reward(before clip): n=12353, mean=-1.20607, min=-114, max=-0, p50=-0.336066, p90=-0.0239784, p99=-0
+  - final_reward(after clip): n=12353, mean=-0.451638, min=-1, max=-0, clip_sat=23.55%, p50=-0.336066, p90=-0.0239784, p99=-0
+  - final_reward bins: [-1,-0.75):28.50% [-0.75,-0.5):10.10% [-0.5,-0.25):18.78% [-0.25,0):36.41% [0,0.25):6.21%
+  - penalty(weighted): n=12353, mean=1.20607, min=0, max=114, p50=0.336066, p90=2.44444, p99=15
+  - penalty bins: [0,1e-06):6.21% [0.0001,0.001):0.01% [0.001,0.01):1.18% [0.01,0.1):15.73% [0.1,1):53.32% [1,10):21.53% [10,100):2.02% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_083_r01.log**
+  - cfg: w_pen=1.0, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12361, zero=817 (6.61%), hist=distinct=208 top10=0:6.61% 1:5.32% 2:4.26% 3:3.73% 4:3.57% 6:3.21% 5:2.91% 8:2.56% 9:2.56% 7:2.49%
+  - immediate_reward: n=29158, mean=0.818069, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.06% [0.25,0.5):10.70% [0.5,0.75):20.15% [0.75,1):67.10%
+  - reward(before clip): n=12361, mean=-1.22094, min=-201, max=-0, p50=-0.329545, p90=-0.022727, p99=-0
+  - final_reward(after clip): n=12361, mean=-0.442729, min=-1, max=-0, clip_sat=22.64%, p50=-0.329545, p90=-0.022727, p99=-0
+  - final_reward bins: [-1,-0.75):27.86% [-0.75,-0.5):9.11% [-0.5,-0.25):19.72% [-0.25,0):36.70% [0,0.25):6.61%
+  - penalty(weighted): n=12361, mean=1.22094, min=0, max=201, p50=0.329545, p90=2.28571, p99=16.7
+  - penalty bins: [0,1e-06):6.61% [0.0001,0.001):0.02% [0.001,0.01):1.10% [0.01,0.1):15.65% [0.1,1):53.98% [1,10):20.51% [10,100):2.11% [100,1000):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_084_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=reciprocal
+  - penalty_data: n=12386, zero=789 (6.37%), hist=distinct=221 top10=0:6.37% 1:5.00% 2:3.78% 3:3.55% 4:3.41% 5:3.16% 6:3.00% 7:2.79% 8:2.65% 10:2.62%
+  - immediate_reward: n=29158, mean=0.817457, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.03% [0.25,0.5):10.65% [0.5,0.75):20.42% [0.75,1):66.90%
+  - reward(before clip): n=12386, mean=-1.18014, min=-100, max=0, p50=-0.333333, p90=-0.0237815, p99=0
+  - final_reward(after clip): n=12386, mean=-0.449001, min=-1, max=0, clip_sat=23.11%, p50=-0.333333, p90=-0.0237815, p99=0
+  - final_reward bins: [-1,-0.75):28.10% [-0.75,-0.5):9.66% [-0.5,-0.25):19.98% [-0.25,0):35.90% [0,0.25):6.37%
+  - penalty(weighted): n=12386, mean=1.18014, min=0, max=100, p50=0.333333, p90=2.32456, p99=16
+  - penalty bins: [0,1e-06):6.37% [0.001,0.01):1.13% [0.01,0.1):15.14% [0.1,1):54.25% [1,10):21.12% [10,100):1.98% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_085_r01.log**
+  - cfg: w_pen=2.0, formula=net, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=reciprocal
+  - penalty_data: n=12368, zero=807 (6.52%), hist=distinct=220 top10=0:6.52% 1:4.96% 2:4.02% 3:3.40% 4:3.32% 5:3.30% 6:3.19% 7:2.72% 9:2.56% 8:2.55%
+  - immediate_reward: n=29158, mean=0.818198, min=0.005, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.78% [0.5,0.75):20.06% [0.75,1):67.20%
+  - reward(before clip): n=12368, mean=-1.16038, min=-98, max=0, p50=-0.333333, p90=-0.022727, p99=0
+  - final_reward(after clip): n=12368, mean=-0.444848, min=-1, max=0, clip_sat=22.67%, p50=-0.333333, p90=-0.022727, p99=0
+  - final_reward bins: [-1,-0.75):27.71% [-0.75,-0.5):9.71% [-0.5,-0.25):19.93% [-0.25,0):36.13% [0,0.25):6.52%
+  - penalty(weighted): n=12368, mean=1.16038, min=0, max=98, p50=0.333333, p90=2.35714, p99=15.089
+  - penalty bins: [0,1e-06):6.52% [0.0001,0.001):0.01% [0.001,0.01):1.03% [0.01,0.1):15.72% [0.1,1):54.05% [1,10):20.83% [10,100):1.84%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_086_r01.log**
+  - cfg: w_pen=3.0, formula=net, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=reciprocal
+  - penalty_data: n=12402, zero=711 (5.73%), hist=distinct=218 top10=0:5.73% 1:5.17% 3:3.91% 2:3.66% 4:3.39% 5:3.10% 6:2.90% 7:2.85% 8:2.63% 10:2.58%
+  - immediate_reward: n=29158, mean=0.818197, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.04% [0.25,0.5):10.61% [0.5,0.75):20.35% [0.75,1):66.99%
+  - reward(before clip): n=12402, mean=-1.18753, min=-110, max=0, p50=-0.333333, p90=-0.026792, p99=0
+  - final_reward(after clip): n=12402, mean=-0.453887, min=-1, max=0, clip_sat=23.63%, p50=-0.333333, p90=-0.026792, p99=0
+  - final_reward bins: [-1,-0.75):28.65% [-0.75,-0.5):10.08% [-0.5,-0.25):18.99% [-0.25,0):36.55% [0,0.25):5.73%
+  - penalty(weighted): n=12402, mean=1.18753, min=0, max=110, p50=0.333333, p90=2.41241, p99=15.25
+  - penalty bins: [0,1e-06):5.73% [0.0001,0.001):0.01% [0.001,0.01):1.05% [0.01,0.1):16.01% [0.1,1):53.58% [1,10):21.55% [10,100):2.06% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_087_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=reciprocal
+  - penalty_data: n=12379, zero=760 (6.14%), hist=distinct=224 top10=0:6.14% 1:4.98% 2:4.14% 4:3.61% 3:3.54% 5:3.48% 7:3.02% 6:2.90% 8:2.57% 10:2.46%
+  - immediate_reward: n=29158, mean=0.819499, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.47% [0.5,0.75):20.21% [0.75,1):67.37%
+  - reward(before clip): n=12379, mean=-2.21216, min=-90, max=-1, p50=-1.33516, p90=-1.02515, p99=-1
+  - final_reward(after clip): n=12379, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12379, mean=1.21216, min=0, max=89, p50=0.335165, p90=2.5, p99=16.044
+  - penalty bins: [0,1e-06):6.14% [0.001,0.01):1.03% [0.01,0.1):15.52% [0.1,1):53.70% [1,10):21.63% [10,100):1.98%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_088_r01.log**
+  - cfg: w_pen=2.0, formula=net2, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=reciprocal
+  - penalty_data: n=12409, zero=699 (5.63%), hist=distinct=218 top10=0:5.63% 1:5.23% 2:4.06% 3:3.68% 4:3.49% 5:3.26% 7:3.05% 6:2.85% 9:2.44% 8:2.40%
+  - immediate_reward: n=29158, mean=0.819751, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.49% [0.5,0.75):20.10% [0.75,1):67.45%
+  - reward(before clip): n=12409, mean=-2.15875, min=-100, max=-1, p50=-1.33333, p90=-1.02829, p99=-1
+  - final_reward(after clip): n=12409, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12409, mean=1.15875, min=0, max=99, p50=0.333333, p90=2.4, p99=14.592
+  - penalty bins: [0,1e-06):5.63% [0.001,0.01):1.11% [0.01,0.1):15.50% [0.1,1):54.25% [1,10):21.73% [10,100):1.76%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_089_r01.log**
+  - cfg: w_pen=3.0, formula=net2, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=binary<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=reciprocal
+  - penalty_data: n=12372, zero=784 (6.34%), hist=distinct=202 top10=0:6.34% 1:5.04% 2:3.90% 3:3.53% 6:3.20% 4:3.09% 5:3.08% 7:2.76% 10:2.66% 9:2.52%
+  - immediate_reward: n=29158, mean=0.819436, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.62% [0.5,0.75):20.08% [0.75,1):67.37%
+  - reward(before clip): n=12372, mean=-2.2424, min=-131, max=-1, p50=-1.33333, p90=-1.02632, p99=-1
+  - final_reward(after clip): n=12372, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12372, mean=1.2424, min=0, max=130, p50=0.333333, p90=2.4, p99=16.8362
+  - penalty bins: [0,1e-06):6.34% [0.001,0.01):0.85% [0.01,0.1):15.66% [0.1,1):54.11% [1,10):21.08% [10,100):1.93% [100,1000):0.02%
+
+## penalty_scale = log
+
+**Summary**
+- immediate_reward: n=1487058, mean=0.819553, bins=[0,0.25):1.94% [0.25,0.5):10.49% [0.5,0.75):20.23% [0.75,1):67.35%
+- penalty_data: n=631455, zero=62711 (9.93%), hist=distinct=492 top10=0:9.93% 1:5.45% 2:4.13% 3:3.58% 4:3.26% 5:3.07% 6:2.84% 7:2.68% 8:2.57% 9:2.41%
+- final_reward(after clip): n=631455, mean=0.203455, min=-1, max=1, clip_sat=26.58%
+- final_reward bins: [-1,-0.75):19.98% [-0.75,-0.5):2.75% [-0.5,-0.25):2.79% [-0.25,0):20.77% [0,0.25):3.02% [0.25,0.5):2.73% [0.5,0.75):6.43% [0.75,1):41.54%
+- penalty(weighted) bins: [0,1e-06):10.08% [1e-06,1e-05):0.00% [1e-05,0.0001):0.02% [0.0001,0.001):0.72% [0.001,0.01):10.34% [0.01,0.1):47.21% [0.1,1):28.04% [1,10):3.52% [10,100):0.07%
+
+**Files**
+
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_001_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=0<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12412, zero=648 (5.22%), hist=distinct=210 top10=1:5.56% 0:5.22% 2:4.13% 4:3.73% 3:3.55% 6:3.13% 5:3.05% 7:2.76% 8:2.66% 10:2.63%
+  - immediate_reward: n=29158, mean=0.818465, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.60% [0.5,0.75):20.33% [0.75,1):67.10%
+  - reward(before clip): n=12412, mean=0.598361, min=-47.5654, max=1, p50=0.889691, p90=0.991306, p99=1
+  - final_reward(after clip): n=12412, mean=0.708956, min=-1, max=1, clip_sat=9.02%, p50=0.889691, p90=0.991306, p99=1
+  - final_reward bins: [-1,-0.75):4.42% [-0.75,-0.5):0.71% [-0.5,-0.25):1.21% [-0.25,0):1.64% [0,0.25):2.70% [0.25,0.5):5.15% [0.5,0.75):12.56% [0.75,1):71.62%
+  - penalty(weighted): n=12412, mean=0.200819, min=0, max=24.2827, p50=0.0551545, p90=0.403111, p99=2.66474
+  - penalty bins: [0,1e-06):5.22% [1e-05,0.0001):0.01% [0.0001,0.001):0.58% [0.001,0.01):10.43% [0.01,0.1):49.71% [0.1,1):30.25% [1,10):3.72% [10,100):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_024_r01.log**
+  - cfg: w_pen=0.1, formula=relative, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=log_compressed
+  - penalty_data: n=12386, zero=733 (5.92%), hist=distinct=210 top10=0:5.92% 1:5.28% 2:4.07% 3:3.63% 4:3.07% 5:3.07% 7:2.93% 8:2.84% 6:2.79% 9:2.75%
+  - immediate_reward: n=29158, mean=0.818939, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.88% [0.25,0.5):10.60% [0.5,0.75):20.53% [0.75,1):66.99%
+  - reward(before clip): n=12386, mean=-0.418088, min=-4782.3, max=1, p50=0.689704, p90=0.982806, p99=1
+  - final_reward(after clip): n=12386, mean=0.424872, min=-1, max=1, clip_sat=16.38%, p50=0.689704, p90=0.982806, p99=1
+  - final_reward bins: [-1,-0.75):11.94% [-0.75,-0.5):2.14% [-0.5,-0.25):2.53% [-0.25,0):3.92% [0,0.25):6.44% [0.25,0.5):10.33% [0.5,0.75):18.28% [0.75,1):44.43%
+  - penalty(weighted): n=12386, mean=0.201448, min=0, max=20.3035, p50=0.0548005, p90=0.420651, p99=2.65078
+  - penalty bins: [0,1e-06):5.92% [1e-05,0.0001):0.01% [0.0001,0.001):0.73% [0.001,0.01):9.59% [0.01,0.1):49.75% [0.1,1):30.21% [1,10):3.75% [10,100):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_025_r01.log**
+  - cfg: w_pen=0.2, formula=relative, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=log_compressed
+  - penalty_data: n=12370, zero=791 (6.39%), hist=distinct=208 top10=0:6.39% 1:4.85% 2:4.05% 3:3.77% 4:3.46% 5:3.34% 7:3.06% 6:3.02% 9:2.61% 8:2.59%
+  - immediate_reward: n=29158, mean=0.820643, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.43% [0.5,0.75):19.94% [0.75,1):67.68%
+  - reward(before clip): n=12370, mean=-0.0721467, min=-734.505, max=1, p50=0.692503, p90=0.984864, p99=1
+  - final_reward(after clip): n=12370, mean=0.438548, min=-1, max=1, clip_sat=16.34%, p50=0.692503, p90=0.984864, p99=1
+  - final_reward bins: [-1,-0.75):11.47% [-0.75,-0.5):1.82% [-0.5,-0.25):2.86% [-0.25,0):3.72% [0,0.25):6.10% [0.25,0.5):10.27% [0.5,0.75):18.71% [0.75,1):45.05%
+  - penalty(weighted): n=12370, mean=0.215288, min=0, max=58.366, p50=0.0546985, p90=0.392179, p99=2.94417
+  - penalty bins: [0,1e-06):6.39% [1e-05,0.0001):0.01% [0.0001,0.001):0.62% [0.001,0.01):9.65% [0.01,0.1):49.56% [0.1,1):29.85% [1,10):3.82% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_026_r01.log**
+  - cfg: w_pen=0.5, formula=relative, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=log_compressed
+  - penalty_data: n=12350, zero=858 (6.95%), hist=distinct=205 top10=0:6.95% 1:5.25% 2:4.45% 4:3.48% 3:3.41% 5:3.13% 6:2.88% 9:2.70% 7:2.57% 8:2.45%
+  - immediate_reward: n=29158, mean=0.820136, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.29% [0.5,0.75):20.27% [0.75,1):67.48%
+  - reward(before clip): n=12350, mean=-0.00309494, min=-225.097, max=1, p50=0.720981, p90=0.989104, p99=1
+  - final_reward(after clip): n=12350, mean=0.449634, min=-1, max=1, clip_sat=16.87%, p50=0.720981, p90=0.989104, p99=1
+  - final_reward bins: [-1,-0.75):11.55% [-0.75,-0.5):1.73% [-0.5,-0.25):2.87% [-0.25,0):3.69% [0,0.25):5.60% [0.25,0.5):9.66% [0.5,0.75):17.59% [0.75,1):47.30%
+  - penalty(weighted): n=12350, mean=0.224399, min=0, max=58.4415, p50=0.0527007, p90=0.414933, p99=3.00036
+  - penalty bins: [0,1e-06):6.95% [0.0001,0.001):0.79% [0.001,0.01):10.32% [0.01,0.1):48.40% [0.1,1):29.63% [1,10):3.80% [10,100):0.11%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_027_r01.log**
+  - cfg: w_pen=1.0, formula=relative, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=log_compressed
+  - penalty_data: n=12398, zero=730 (5.89%), hist=distinct=214 top10=0:5.89% 1:4.86% 3:3.77% 2:3.65% 4:3.40% 5:3.17% 7:2.92% 6:2.87% 8:2.76% 9:2.48%
+  - immediate_reward: n=29158, mean=0.816049, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.14% [0.25,0.5):10.85% [0.5,0.75):20.29% [0.75,1):66.72%
+  - reward(before clip): n=12398, mean=-0.659564, min=-8007.44, max=1, p50=0.708581, p90=0.983636, p99=1
+  - final_reward(after clip): n=12398, mean=0.440385, min=-1, max=1, clip_sat=16.08%, p50=0.708581, p90=0.983636, p99=1
+  - final_reward bins: [-1,-0.75):11.69% [-0.75,-0.5):1.78% [-0.5,-0.25):2.77% [-0.25,0):3.70% [0,0.25):6.11% [0.25,0.5):9.40% [0.5,0.75):18.70% [0.75,1):45.85%
+  - penalty(weighted): n=12398, mean=0.213007, min=0, max=20.5092, p50=0.053887, p90=0.422834, p99=2.83208
+  - penalty bins: [0,1e-06):5.89% [0.0001,0.001):0.46% [0.001,0.01):9.93% [0.01,0.1):50.02% [0.1,1):29.57% [1,10):4.05% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_028_r01.log**
+  - cfg: w_pen=0.1, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12395, zero=730 (5.89%), hist=distinct=209 top10=0:5.89% 1:5.15% 2:4.20% 3:3.61% 5:3.36% 4:3.28% 6:2.87% 9:2.72% 7:2.69% 8:2.48%
+  - immediate_reward: n=29158, mean=0.819488, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.01% [0.25,0.5):10.46% [0.5,0.75):20.17% [0.75,1):67.36%
+  - reward(before clip): n=12395, mean=0.589805, min=-35.0048, max=1, p50=0.888126, p90=0.991891, p99=1
+  - final_reward(after clip): n=12395, mean=0.703576, min=-1, max=1, clip_sat=9.76%, p50=0.888126, p90=0.991891, p99=1
+  - final_reward bins: [-1,-0.75):4.53% [-0.75,-0.5):0.80% [-0.5,-0.25):1.02% [-0.25,0):1.73% [0,0.25):3.07% [0.25,0.5):4.99% [0.5,0.75):13.33% [0.75,1):70.54%
+  - penalty(weighted): n=12395, mean=0.205097, min=0, max=18.0024, p50=0.0559371, p90=0.413632, p99=2.83579
+  - penalty bins: [0,1e-06):5.89% [1e-05,0.0001):0.01% [0.0001,0.001):0.72% [0.001,0.01):9.85% [0.01,0.1):48.46% [0.1,1):31.21% [1,10):3.82% [10,100):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_029_r01.log**
+  - cfg: w_pen=0.2, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12392, zero=753 (6.08%), hist=distinct=209 top10=0:6.08% 1:5.00% 2:3.81% 3:3.77% 5:3.33% 4:3.20% 7:2.92% 6:2.68% 8:2.59% 10:2.53%
+  - immediate_reward: n=29158, mean=0.820295, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.42% [0.5,0.75):20.11% [0.75,1):67.55%
+  - reward(before clip): n=12392, mean=0.587841, min=-85.2407, max=1, p50=0.891191, p90=0.992271, p99=1
+  - final_reward(after clip): n=12392, mean=0.703956, min=-1, max=1, clip_sat=9.95%, p50=0.891191, p90=0.992271, p99=1
+  - final_reward bins: [-1,-0.75):4.52% [-0.75,-0.5):0.79% [-0.5,-0.25):1.33% [-0.25,0):1.81% [0,0.25):2.58% [0.25,0.5):5.28% [0.5,0.75):12.66% [0.75,1):71.03%
+  - penalty(weighted): n=12392, mean=0.206079, min=0, max=43.1204, p50=0.0544045, p90=0.418758, p99=2.63692
+  - penalty bins: [0,1e-06):6.08% [1e-05,0.0001):0.01% [0.0001,0.001):0.77% [0.001,0.01):9.69% [0.01,0.1):49.01% [0.1,1):30.57% [1,10):3.80% [10,100):0.07%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_030_r01.log**
+  - cfg: w_pen=0.5, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12405, zero=752 (6.06%), hist=distinct=208 top10=0:6.06% 1:5.31% 2:4.05% 3:3.71% 4:3.42% 5:3.31% 6:3.27% 7:2.77% 8:2.62% 10:2.49%
+  - immediate_reward: n=29158, mean=0.819503, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.57% [0.5,0.75):20.16% [0.75,1):67.34%
+  - reward(before clip): n=12405, mean=0.559184, min=-50.8219, max=1, p50=0.89083, p90=0.992312, p99=1
+  - final_reward(after clip): n=12405, mean=0.696647, min=-1, max=1, clip_sat=10.60%, p50=0.89083, p90=0.992312, p99=1
+  - final_reward bins: [-1,-0.75):5.14% [-0.75,-0.5):0.85% [-0.5,-0.25):1.35% [-0.25,0):1.63% [0,0.25):2.64% [0.25,0.5):4.81% [0.5,0.75):12.05% [0.75,1):71.52%
+  - penalty(weighted): n=12405, mean=0.220408, min=0, max=25.911, p50=0.0545851, p90=0.442434, p99=2.88923
+  - penalty bins: [0,1e-06):6.06% [0.0001,0.001):0.54% [0.001,0.01):10.47% [0.01,0.1):49.27% [0.1,1):29.12% [1,10):4.46% [10,100):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_031_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12379, zero=706 (5.70%), hist=distinct=214 top10=0:5.70% 1:4.79% 2:3.67% 3:3.51% 4:3.33% 5:3.06% 6:2.97% 7:2.84% 8:2.63% 9:2.48%
+  - immediate_reward: n=29158, mean=0.817897, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.01% [0.25,0.5):10.51% [0.5,0.75):20.53% [0.75,1):66.96%
+  - reward(before clip): n=12379, mean=0.580522, min=-75.0847, max=1, p50=0.88736, p90=0.991223, p99=1
+  - final_reward(after clip): n=12379, mean=0.707852, min=-1, max=1, clip_sat=9.69%, p50=0.88736, p90=0.991223, p99=1
+  - final_reward bins: [-1,-0.75):4.64% [-0.75,-0.5):0.77% [-0.5,-0.25):1.03% [-0.25,0):1.60% [0,0.25):2.57% [0.25,0.5):4.99% [0.5,0.75):12.70% [0.75,1):71.71%
+  - penalty(weighted): n=12379, mean=0.209739, min=0, max=38.0423, p50=0.0563202, p90=0.398815, p99=2.7737
+  - penalty bins: [0,1e-06):5.70% [0.0001,0.001):0.56% [0.001,0.01):9.56% [0.01,0.1):50.42% [0.1,1):29.78% [1,10):3.86% [10,100):0.12%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_032_r01.log**
+  - cfg: w_pen=0.1, formula=one_minus, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=log_compressed
+  - penalty_data: n=12392, zero=720 (5.81%), hist=distinct=203 top10=0:5.81% 1:5.00% 2:4.22% 3:3.69% 4:3.46% 5:3.20% 6:3.04% 8:2.62% 7:2.61% 12:2.40%
+  - immediate_reward: n=29158, mean=0.819852, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.48% [0.5,0.75):20.28% [0.75,1):67.33%
+  - reward(before clip): n=12392, mean=0.795511, min=-28.953, max=1, p50=0.943907, p90=0.995919, p99=1
+  - final_reward(after clip): n=12392, mean=0.828602, min=-1, max=1, clip_sat=7.27%, p50=0.943907, p90=0.995919, p99=1
+  - final_reward bins: [-1,-0.75):1.84% [-0.75,-0.5):0.45% [-0.5,-0.25):0.57% [-0.25,0):0.96% [0,0.25):1.59% [0.25,0.5):2.77% [0.5,0.75):7.92% [0.75,1):83.89%
+  - penalty(weighted): n=12392, mean=0.204489, min=0, max=29.953, p50=0.056093, p90=0.405072, p99=2.56804
+  - penalty bins: [0,1e-06):5.81% [0.0001,0.001):0.69% [0.001,0.01):9.93% [0.01,0.1):49.37% [0.1,1):30.37% [1,10):3.76% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_033_r01.log**
+  - cfg: w_pen=0.2, formula=one_minus, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=log_compressed
+  - penalty_data: n=12372, zero=808 (6.53%), hist=distinct=207 top10=0:6.53% 1:5.25% 2:4.02% 3:3.44% 4:3.15% 6:3.06% 5:2.97% 7:2.81% 8:2.67% 11:2.50%
+  - immediate_reward: n=29158, mean=0.820327, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.43% [0.5,0.75):20.12% [0.75,1):67.50%
+  - reward(before clip): n=12372, mean=0.788962, min=-46.7439, max=1, p50=0.945327, p90=0.996688, p99=1
+  - final_reward(after clip): n=12372, mean=0.827834, min=-1, max=1, clip_sat=8.13%, p50=0.945327, p90=0.996688, p99=1
+  - final_reward bins: [-1,-0.75):1.88% [-0.75,-0.5):0.47% [-0.5,-0.25):0.82% [-0.25,0):0.93% [0,0.25):1.28% [0.25,0.5):2.76% [0.5,0.75):7.74% [0.75,1):84.11%
+  - penalty(weighted): n=12372, mean=0.211038, min=0, max=47.7439, p50=0.0546728, p90=0.403751, p99=2.63601
+  - penalty bins: [0,1e-06):6.53% [1e-05,0.0001):0.01% [0.0001,0.001):0.58% [0.001,0.01):10.05% [0.01,0.1):48.91% [0.1,1):29.81% [1,10):3.98% [10,100):0.13%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_034_r01.log**
+  - cfg: w_pen=0.5, formula=one_minus, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=log_compressed
+  - penalty_data: n=12383, zero=739 (5.97%), hist=distinct=204 top10=0:5.97% 1:4.77% 2:3.97% 3:3.72% 6:3.48% 4:3.24% 5:3.08% 8:2.78% 7:2.73% 9:2.63%
+  - immediate_reward: n=29158, mean=0.820915, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.33% [0.5,0.75):20.08% [0.75,1):67.70%
+  - reward(before clip): n=12383, mean=0.79473, min=-21.1512, max=1, p50=0.945482, p90=0.995807, p99=1
+  - final_reward(after clip): n=12383, mean=0.829498, min=-1, max=1, clip_sat=7.60%, p50=0.945482, p90=0.995807, p99=1
+  - final_reward bins: [-1,-0.75):1.95% [-0.75,-0.5):0.58% [-0.5,-0.25):0.57% [-0.25,0):0.72% [0,0.25):1.43% [0.25,0.5):2.75% [0.5,0.75):7.62% [0.75,1):84.37%
+  - penalty(weighted): n=12383, mean=0.20527, min=0, max=22.1512, p50=0.0545178, p90=0.404153, p99=2.801
+  - penalty bins: [0,1e-06):5.97% [0.0001,0.001):0.61% [0.001,0.01):9.80% [0.01,0.1):49.93% [0.1,1):29.86% [1,10):3.76% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_035_r01.log**
+  - cfg: w_pen=1.0, formula=one_minus, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=log_compressed
+  - penalty_data: n=12374, zero=774 (6.26%), hist=distinct=207 top10=0:6.26% 1:5.15% 2:3.97% 3:3.39% 4:3.31% 6:3.17% 5:3.16% 8:2.80% 7:2.70% 9:2.64%
+  - immediate_reward: n=29158, mean=0.819751, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.50% [0.5,0.75):20.03% [0.75,1):67.51%
+  - reward(before clip): n=12374, mean=0.790131, min=-29.0367, max=1, p50=0.945785, p90=0.996379, p99=1
+  - final_reward(after clip): n=12374, mean=0.826633, min=-1, max=1, clip_sat=7.97%, p50=0.945785, p90=0.996379, p99=1
+  - final_reward bins: [-1,-0.75):2.07% [-0.75,-0.5):0.56% [-0.5,-0.25):0.57% [-0.25,0):0.67% [0,0.25):1.50% [0.25,0.5):3.01% [0.5,0.75):7.62% [0.75,1):84.01%
+  - penalty(weighted): n=12374, mean=0.209869, min=0, max=30.0367, p50=0.0542151, p90=0.414956, p99=2.92832
+  - penalty bins: [0,1e-06):6.26% [1e-05,0.0001):0.01% [0.0001,0.001):0.80% [0.001,0.01):9.60% [0.01,0.1):49.86% [0.1,1):29.61% [1,10):3.79% [10,100):0.07%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_036_r01.log**
+  - cfg: w_pen=0.1, formula=neg, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=log_compressed
+  - penalty_data: n=12379, zero=753 (6.08%), hist=distinct=205 top10=0:6.08% 1:4.90% 2:4.32% 3:3.62% 4:3.34% 5:3.09% 6:2.96% 7:2.93% 8:2.72% 11:2.52%
+  - immediate_reward: n=29158, mean=0.821701, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.87% [0.25,0.5):10.19% [0.5,0.75):20.21% [0.75,1):67.73%
+  - reward(before clip): n=12379, mean=-0.194425, min=-24.4418, max=-0, p50=-0.055887, p90=-0.0038542, p99=-0
+  - final_reward(after clip): n=12379, mean=-0.14374, min=-1, max=-0, clip_sat=3.55%, p50=-0.055887, p90=-0.0038542, p99=-0
+  - final_reward bins: [-1,-0.75):5.02% [-0.75,-0.5):2.77% [-0.5,-0.25):7.76% [-0.25,0):78.36% [0,0.25):6.08%
+  - penalty(weighted): n=12379, mean=0.194426, min=0, max=24.4418, p50=0.0558869, p90=0.394346, p99=2.34894
+  - penalty bins: [0,1e-06):6.08% [1e-05,0.0001):0.01% [0.0001,0.001):0.68% [0.001,0.01):9.93% [0.01,0.1):49.40% [0.1,1):30.35% [1,10):3.51% [10,100):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_037_r01.log**
+  - cfg: w_pen=0.2, formula=neg, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=log_compressed
+  - penalty_data: n=12368, zero=754 (6.10%), hist=distinct=203 top10=0:6.10% 1:5.00% 3:3.99% 2:3.91% 4:3.27% 5:3.19% 6:3.18% 8:2.69% 7:2.57% 10:2.51%
+  - immediate_reward: n=29158, mean=0.82062, min=0.005, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.83% [0.25,0.5):10.46% [0.5,0.75):20.07% [0.75,1):67.63%
+  - reward(before clip): n=12368, mean=-0.207895, min=-30.2309, max=-0, p50=-0.053981, p90=-0.0039058, p99=-0
+  - final_reward(after clip): n=12368, mean=-0.145595, min=-1, max=-0, clip_sat=3.84%, p50=-0.053981, p90=-0.0039058, p99=-0
+  - final_reward bins: [-1,-0.75):5.32% [-0.75,-0.5):2.93% [-0.5,-0.25):7.71% [-0.25,0):77.93% [0,0.25):6.10%
+  - penalty(weighted): n=12368, mean=0.207895, min=0, max=30.2309, p50=0.0539806, p90=0.414505, p99=2.65175
+  - penalty bins: [0,1e-06):6.10% [1e-05,0.0001):0.01% [0.0001,0.001):0.54% [0.001,0.01):9.84% [0.01,0.1):50.15% [0.1,1):29.53% [1,10):3.74% [10,100):0.11%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_038_r01.log**
+  - cfg: w_pen=0.5, formula=neg, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=log_compressed
+  - penalty_data: n=12382, zero=708 (5.72%), hist=distinct=219 top10=0:5.72% 1:4.88% 2:3.99% 3:3.55% 6:3.36% 4:3.34% 5:3.31% 7:2.87% 8:2.55% 9:2.50%
+  - immediate_reward: n=29158, mean=0.819324, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.43% [0.5,0.75):20.36% [0.75,1):67.26%
+  - reward(before clip): n=12382, mean=-0.21051, min=-34.5882, max=-0, p50=-0.055473, p90=-0.0043422, p99=-0
+  - final_reward(after clip): n=12382, mean=-0.147241, min=-1, max=-0, clip_sat=3.87%, p50=-0.055473, p90=-0.0043422, p99=-0
+  - final_reward bins: [-1,-0.75):5.20% [-0.75,-0.5):3.14% [-0.5,-0.25):7.79% [-0.25,0):78.15% [0,0.25):5.72%
+  - penalty(weighted): n=12382, mean=0.21051, min=0, max=34.5882, p50=0.0554726, p90=0.408544, p99=2.90818
+  - penalty bins: [0,1e-06):5.72% [1e-05,0.0001):0.01% [0.0001,0.001):0.57% [0.001,0.01):9.86% [0.01,0.1):49.60% [0.1,1):30.38% [1,10):3.80% [10,100):0.07%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_039_r01.log**
+  - cfg: w_pen=1.0, formula=neg, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=log_compressed
+  - penalty_data: n=12397, zero=737 (5.94%), hist=distinct=214 top10=0:5.94% 1:4.73% 2:4.01% 3:3.73% 5:3.34% 4:3.10% 6:2.97% 7:2.86% 8:2.77% 9:2.57%
+  - immediate_reward: n=29158, mean=0.818111, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.00% [0.25,0.5):10.62% [0.5,0.75):20.33% [0.75,1):67.06%
+  - reward(before clip): n=12397, mean=-0.199757, min=-23.5017, max=-0, p50=-0.054813, p90=-0.0041618, p99=-0
+  - final_reward(after clip): n=12397, mean=-0.147483, min=-1, max=-0, clip_sat=3.90%, p50=-0.054813, p90=-0.0041618, p99=-0
+  - final_reward bins: [-1,-0.75):5.31% [-0.75,-0.5):2.82% [-0.5,-0.25):7.90% [-0.25,0):78.03% [0,0.25):5.94%
+  - penalty(weighted): n=12397, mean=0.199757, min=0, max=23.5017, p50=0.0548134, p90=0.411181, p99=2.50957
+  - penalty bins: [0,1e-06):5.94% [0.0001,0.001):0.71% [0.001,0.01):9.59% [0.01,0.1):49.66% [0.1,1):30.19% [1,10):3.85% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_040_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12385, zero=718 (5.80%), hist=distinct=219 top10=0:5.80% 1:5.18% 2:4.12% 3:3.80% 5:3.42% 4:3.18% 7:3.00% 8:2.79% 6:2.75% 9:2.70%
+  - immediate_reward: n=29158, mean=0.819741, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.60% [0.5,0.75):20.06% [0.75,1):67.43%
+  - reward(before clip): n=12385, mean=-0.210135, min=-29.7898, max=0, p50=-0.054755, p90=-0.0041022, p99=0
+  - final_reward(after clip): n=12385, mean=-0.146244, min=-1, max=0, clip_sat=3.75%, p50=-0.054755, p90=-0.0041022, p99=0
+  - final_reward bins: [-1,-0.75):5.26% [-0.75,-0.5):2.87% [-0.5,-0.25):7.90% [-0.25,0):78.18% [0,0.25):5.80%
+  - penalty(weighted): n=12385, mean=0.210135, min=0, max=29.7898, p50=0.0547554, p90=0.412419, p99=2.84301
+  - penalty bins: [0,1e-06):5.80% [1e-05,0.0001):0.02% [0.0001,0.001):0.70% [0.001,0.01):10.24% [0.01,0.1):49.33% [0.1,1):30.16% [1,10):3.70% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_041_r01.log**
+  - cfg: w_pen=2.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12393, zero=700 (5.65%), hist=distinct=209 top10=0:5.65% 1:4.81% 2:4.10% 3:3.63% 4:3.32% 5:3.24% 7:2.78% 6:2.70% 8:2.57% 11:2.57%
+  - immediate_reward: n=29158, mean=0.81836, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.68% [0.5,0.75):20.42% [0.75,1):66.94%
+  - reward(before clip): n=12393, mean=-0.200303, min=-23.4567, max=0, p50=-0.05556, p90=-0.0045586, p99=0
+  - final_reward(after clip): n=12393, mean=-0.143764, min=-1, max=0, clip_sat=3.79%, p50=-0.05556, p90=-0.0045586, p99=0
+  - final_reward bins: [-1,-0.75):5.13% [-0.75,-0.5):2.74% [-0.5,-0.25):7.42% [-0.25,0):79.06% [0,0.25):5.65%
+  - penalty(weighted): n=12393, mean=0.200303, min=0, max=23.4567, p50=0.0555599, p90=0.387738, p99=2.64363
+  - penalty bins: [0,1e-06):5.65% [1e-05,0.0001):0.01% [0.0001,0.001):0.50% [0.001,0.01):10.01% [0.01,0.1):49.90% [0.1,1):30.15% [1,10):3.73% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_042_r01.log**
+  - cfg: w_pen=3.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12392, zero=753 (6.08%), hist=distinct=207 top10=0:6.08% 1:5.10% 2:4.13% 3:3.64% 5:3.28% 4:3.16% 6:2.91% 8:2.85% 7:2.66% 9:2.53%
+  - immediate_reward: n=29158, mean=0.818459, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.53% [0.5,0.75):20.45% [0.75,1):67.06%
+  - reward(before clip): n=12392, mean=-0.215942, min=-33.9528, max=0, p50=-0.0552975, p90=-0.0037262, p99=0
+  - final_reward(after clip): n=12392, mean=-0.149363, min=-1, max=0, clip_sat=4.16%, p50=-0.0552975, p90=-0.0037262, p99=0
+  - final_reward bins: [-1,-0.75):5.62% [-0.75,-0.5):2.91% [-0.5,-0.25):7.73% [-0.25,0):77.66% [0,0.25):6.08%
+  - penalty(weighted): n=12392, mean=0.215942, min=0, max=33.9528, p50=0.0552977, p90=0.431846, p99=2.78255
+  - penalty bins: [0,1e-06):6.08% [1e-05,0.0001):0.01% [0.0001,0.001):0.66% [0.001,0.01):10.26% [0.01,0.1):49.17% [0.1,1):29.66% [1,10):4.08% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_043_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12374, zero=791 (6.39%), hist=distinct=207 top10=0:6.39% 1:4.91% 2:3.85% 3:3.70% 4:3.37% 5:3.22% 8:2.76% 6:2.72% 7:2.66% 10:2.55%
+  - immediate_reward: n=29158, mean=0.820233, min=0, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.42% [0.5,0.75):20.27% [0.75,1):67.39%
+  - reward(before clip): n=12374, mean=-1.20986, min=-30.4304, max=-1, p50=-1.05421, p90=-1.00379, p99=-1
+  - final_reward(after clip): n=12374, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12374, mean=0.209858, min=0, max=29.4304, p50=0.0542118, p90=0.412999, p99=2.6534
+  - penalty bins: [0,1e-06):6.39% [1e-05,0.0001):0.01% [0.0001,0.001):0.54% [0.001,0.01):9.73% [0.01,0.1):49.46% [0.1,1):29.76% [1,10):4.02% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_044_r01.log**
+  - cfg: w_pen=2.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12364, zero=774 (6.26%), hist=distinct=216 top10=0:6.26% 1:5.14% 2:4.24% 3:3.51% 4:3.34% 5:3.20% 6:2.86% 7:2.78% 8:2.64% 9:2.63%
+  - immediate_reward: n=29158, mean=0.8204, min=0.01, max=1, p50=0.9975, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.90% [0.25,0.5):10.33% [0.5,0.75):20.34% [0.75,1):67.43%
+  - reward(before clip): n=12364, mean=-1.20833, min=-22.457, max=-1, p50=-1.05475, p90=-1.0037, p99=-1
+  - final_reward(after clip): n=12364, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12364, mean=0.208332, min=0, max=21.457, p50=0.0547463, p90=0.416698, p99=2.64679
+  - penalty bins: [0,1e-06):6.26% [1e-05,0.0001):0.01% [0.0001,0.001):0.63% [0.001,0.01):10.09% [0.01,0.1):48.78% [0.1,1):30.38% [1,10):3.74% [10,100):0.11%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_045_r01.log**
+  - cfg: w_pen=3.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12345, zero=778 (6.30%), hist=distinct=207 top10=0:6.30% 1:5.34% 2:4.26% 5:3.47% 3:3.44% 4:3.13% 6:2.92% 8:2.78% 7:2.68% 10:2.49%
+  - immediate_reward: n=29158, mean=0.821495, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.85% [0.25,0.5):10.37% [0.5,0.75):19.90% [0.75,1):67.89%
+  - reward(before clip): n=12345, mean=-1.20474, min=-23.4842, max=-1, p50=-1.05364, p90=-1.00355, p99=-1
+  - final_reward(after clip): n=12345, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12345, mean=0.204735, min=0, max=22.4842, p50=0.053643, p90=0.41192, p99=2.93943
+  - penalty bins: [0,1e-06):6.30% [1e-05,0.0001):0.01% [0.0001,0.001):0.71% [0.001,0.01):9.97% [0.01,0.1):49.62% [0.1,1):29.48% [1,10):3.84% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_090_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12390, zero=716 (5.78%), hist=distinct=207 top10=0:5.78% 1:5.11% 2:4.17% 3:3.65% 4:3.24% 6:3.05% 5:2.84% 8:2.75% 10:2.65% 7:2.64%
+  - immediate_reward: n=29158, mean=0.818462, min=0.005, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.02% [0.25,0.5):10.48% [0.5,0.75):20.43% [0.75,1):67.07%
+  - reward(before clip): n=12390, mean=0.577873, min=-44.3703, max=1, p50=0.888993, p90=0.992191, p99=1
+  - final_reward(after clip): n=12390, mean=0.704484, min=-1, max=1, clip_sat=9.89%, p50=0.888993, p90=0.992191, p99=1
+  - final_reward bins: [-1,-0.75):4.75% [-0.75,-0.5):0.78% [-0.5,-0.25):1.05% [-0.25,0):1.55% [0,0.25):2.67% [0.25,0.5):5.04% [0.5,0.75):13.04% [0.75,1):71.11%
+  - penalty(weighted): n=12390, mean=0.211063, min=0, max=22.6852, p50=0.0555032, p90=0.407488, p99=2.87695
+  - penalty bins: [0,1e-06):5.78% [0.0001,0.001):0.73% [0.001,0.01):10.36% [0.01,0.1):48.96% [0.1,1):30.06% [1,10):4.02% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_091_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=500, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=500<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_cutoff=500<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12362, zero=11541 (93.36%), hist=distinct=23 top10=0:93.36% 1:4.38% 2:0.94% 3:0.42% 4:0.23% 5:0.18% 7:0.08% 8:0.08% 6:0.07% 9:0.04%
+  - immediate_reward: n=29158, mean=0.820547, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.40% [0.5,0.75):20.00% [0.75,1):67.68%
+  - reward(before clip): n=12362, mean=0.990698, min=-2.78506, max=1, p50=1, p90=1, p99=1
+  - final_reward(after clip): n=12362, mean=0.991092, min=-1, max=1, clip_sat=93.41%, p50=1, p90=1, p99=1
+  - final_reward bins: [-1,-0.75):0.07% [-0.75,-0.5):0.01% [-0.5,-0.25):0.05% [-0.25,0):0.05% [0,0.25):0.09% [0.25,0.5):0.16% [0.5,0.75):0.39% [0.75,1):99.18%
+  - penalty(weighted): n=12362, mean=0.004651, min=0, max=1.89253, p50=0, p90=0, p99=0.105016
+  - penalty bins: [0,1e-06):93.36% [0.0001,0.001):0.03% [0.001,0.01):1.86% [0.01,0.1):3.70% [0.1,1):1.00% [1,10):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_092_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=2000, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=2000<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_cutoff=2000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12393, zero=9922 (80.06%), hist=distinct=31 top10=0:80.06% 1:11.68% 2:3.73% 3:1.67% 4:0.72% 5:0.64% 6:0.35% 7:0.27% 8:0.19% 9:0.12%
+  - immediate_reward: n=29158, mean=0.820523, min=0.01, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.87% [0.25,0.5):10.53% [0.5,0.75):20.03% [0.75,1):67.58%
+  - reward(before clip): n=12393, mean=0.976261, min=-12.2477, max=1, p50=1, p90=1, p99=1
+  - final_reward(after clip): n=12393, mean=0.97822, min=-1, max=1, clip_sat=80.16%, p50=1, p90=1, p99=1
+  - final_reward bins: [-1,-0.75):0.15% [-0.75,-0.5):0.04% [-0.5,-0.25):0.04% [-0.25,0):0.12% [0,0.25):0.23% [0.25,0.5):0.27% [0.5,0.75):1.15% [0.75,1):97.98%
+  - penalty(weighted): n=12393, mean=0.0118693, min=0, max=6.62385, p50=0, p90=0.0153711, p99=0.225905
+  - penalty bins: [0,1e-06):80.06% [0.0001,0.001):0.23% [0.001,0.01):7.12% [0.01,0.1):10.02% [0.1,1):2.46% [1,10):0.10%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_093_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=10000, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=10000<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_cutoff=10000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12403, zero=5589 (45.06%), hist=distinct=58 top10=0:45.06% 1:19.18% 2:10.62% 3:7.05% 4:4.68% 5:3.02% 6:2.06% 7:1.48% 8:1.18% 9:0.92%
+  - immediate_reward: n=29158, mean=0.819833, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.49% [0.5,0.75):20.13% [0.75,1):67.49%
+  - reward(before clip): n=12403, mean=0.907365, min=-12.5446, max=1, p50=0.993522, p90=1, p99=1
+  - final_reward(after clip): n=12403, mean=0.923441, min=-1, max=1, clip_sat=45.69%, p50=0.993522, p90=1, p99=1
+  - final_reward bins: [-1,-0.75):0.77% [-0.75,-0.5):0.13% [-0.5,-0.25):0.29% [-0.25,0):0.31% [0,0.25):0.77% [0.25,0.5):1.45% [0.5,0.75):3.32% [0.75,1):92.95%
+  - penalty(weighted): n=12403, mean=0.0463176, min=0, max=6.77232, p50=0.00323894, p90=0.0844428, p99=0.707422
+  - penalty bins: [0,1e-06):45.06% [0.0001,0.001):0.40% [0.001,0.01):18.05% [0.01,0.1):27.78% [0.1,1):8.07% [1,10):0.63%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_094_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=50000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=50000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=50000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12360, zero=779 (6.30%), hist=distinct=210 top10=0:6.30% 1:5.10% 2:4.47% 3:3.45% 4:3.20% 6:3.04% 5:2.95% 8:2.89% 7:2.52% 9:2.39%
+  - immediate_reward: n=29158, mean=0.820016, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.45% [0.5,0.75):20.26% [0.75,1):67.37%
+  - reward(before clip): n=12360, mean=0.880476, min=-15.4126, max=1, p50=0.978258, p90=1, p99=1
+  - final_reward(after clip): n=12360, mean=0.896162, min=-1, max=1, clip_sat=14.19%, p50=0.978258, p90=1, p99=1
+  - final_reward bins: [-1,-0.75):0.94% [-0.75,-0.5):0.29% [-0.5,-0.25):0.33% [-0.25,0):0.69% [0,0.25):0.77% [0.25,0.5):1.75% [0.5,0.75):4.74% [0.75,1):90.49%
+  - penalty(weighted): n=12360, mean=0.059762, min=0, max=8.20631, p50=0.0108712, p90=0.119573, p99=0.842748
+  - penalty bins: [0,1e-06):13.41% [1e-06,1e-05):0.05% [1e-05,0.0001):0.56% [0.0001,0.001):4.50% [0.001,0.01):29.87% [0.01,0.1):39.87% [0.1,1):10.95% [1,10):0.78%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_095_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=200000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=200000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=200000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12399, zero=706 (5.69%), hist=distinct=217 top10=0:5.69% 1:5.27% 2:3.94% 4:3.56% 3:3.49% 5:3.10% 6:2.96% 10:2.62% 8:2.58% 9:2.58%
+  - immediate_reward: n=29158, mean=0.818736, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.64% [0.5,0.75):20.39% [0.75,1):67.01%
+  - reward(before clip): n=12399, mean=0.690046, min=-29.2304, max=1, p50=0.922445, p90=0.995145, p99=1
+  - final_reward(after clip): n=12399, mean=0.764659, min=-1, max=1, clip_sat=8.89%, p50=0.922445, p90=0.995145, p99=1
+  - final_reward bins: [-1,-0.75):3.42% [-0.75,-0.5):0.57% [-0.5,-0.25):0.93% [-0.25,0):1.27% [0,0.25):2.11% [0.25,0.5):4.10% [0.5,0.75):9.96% [0.75,1):77.64%
+  - penalty(weighted): n=12399, mean=0.154977, min=0, max=15.1152, p50=0.0387774, p90=0.311167, p99=2.08986
+  - penalty bins: [0,1e-06):6.01% [1e-05,0.0001):0.07% [0.0001,0.001):1.53% [0.001,0.01):13.60% [0.01,0.1):52.08% [0.1,1):23.83% [1,10):2.85% [10,100):0.03%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_096_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12367, zero=759 (6.14%), hist=distinct=215 top10=0:6.14% 1:4.98% 2:4.10% 5:3.45% 3:3.44% 4:3.19% 7:2.98% 6:2.86% 8:2.79% 9:2.60%
+  - immediate_reward: n=29158, mean=0.820617, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.36% [0.5,0.75):20.19% [0.75,1):67.53%
+  - reward(before clip): n=12367, mean=0.603097, min=-32.5076, max=1, p50=0.891929, p90=0.992346, p99=1
+  - final_reward(after clip): n=12367, mean=0.708832, min=-1, max=1, clip_sat=10.02%, p50=0.891929, p90=0.992346, p99=1
+  - final_reward bins: [-1,-0.75):4.67% [-0.75,-0.5):0.68% [-0.5,-0.25):1.16% [-0.25,0):1.52% [0,0.25):2.74% [0.25,0.5):4.88% [0.5,0.75):12.61% [0.75,1):71.74%
+  - penalty(weighted): n=12367, mean=0.198451, min=0, max=16.7538, p50=0.0540353, p90=0.401122, p99=2.62804
+  - penalty bins: [0,1e-06):6.14% [1e-05,0.0001):0.02% [0.0001,0.001):0.64% [0.001,0.01):9.95% [0.01,0.1):49.57% [0.1,1):29.81% [1,10):3.84% [10,100):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_097_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=0<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12391, zero=721 (5.82%), hist=distinct=209 top10=0:5.82% 1:5.21% 2:3.87% 3:3.40% 4:3.28% 5:3.20% 6:3.07% 7:3.04% 8:2.70% 9:2.61%
+  - immediate_reward: n=29158, mean=0.819291, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.52% [0.5,0.75):20.33% [0.75,1):67.24%
+  - reward(before clip): n=12391, mean=0.582443, min=-63.8011, max=1, p50=0.887515, p90=0.991499, p99=1
+  - final_reward(after clip): n=12391, mean=0.703954, min=-1, max=1, clip_sat=9.64%, p50=0.887515, p90=0.991499, p99=1
+  - final_reward bins: [-1,-0.75):4.55% [-0.75,-0.5):0.92% [-0.5,-0.25):1.14% [-0.25,0):1.70% [0,0.25):2.91% [0.25,0.5):4.84% [0.5,0.75):12.76% [0.75,1):71.18%
+  - penalty(weighted): n=12391, mean=0.208779, min=0, max=32.4006, p50=0.0562424, p90=0.414263, p99=2.85588
+  - penalty bins: [0,1e-06):5.82% [1e-05,0.0001):0.02% [0.0001,0.001):0.73% [0.001,0.01):9.96% [0.01,0.1):49.46% [0.1,1):30.20% [1,10):3.74% [10,100):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_098_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12360, zero=808 (6.54%), hist=distinct=211 top10=0:6.54% 1:4.96% 2:4.47% 3:3.76% 4:3.16% 6:3.07% 5:2.95% 8:2.73% 7:2.68% 9:2.52%
+  - immediate_reward: n=29158, mean=0.819099, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.62% [0.5,0.75):20.09% [0.75,1):67.33%
+  - reward(before clip): n=12360, mean=0.582757, min=-52.1754, max=1, p50=0.892114, p90=0.993353, p99=1
+  - final_reward(after clip): n=12360, mean=0.707356, min=-1, max=1, clip_sat=10.61%, p50=0.892114, p90=0.993353, p99=1
+  - final_reward bins: [-1,-0.75):4.78% [-0.75,-0.5):0.74% [-0.5,-0.25):1.08% [-0.25,0):1.61% [0,0.25):2.76% [0.25,0.5):4.89% [0.5,0.75):12.24% [0.75,1):71.91%
+  - penalty(weighted): n=12360, mean=0.208621, min=0, max=26.5877, p50=0.0539431, p90=0.413197, p99=2.79495
+  - penalty bins: [0,1e-06):6.54% [0.0001,0.001):0.57% [0.001,0.01):10.20% [0.01,0.1):49.08% [0.1,1):29.53% [1,10):3.98% [10,100):0.10%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_099_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=0<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12387, zero=729 (5.89%), hist=distinct=212 top10=0:5.89% 1:5.16% 2:3.66% 3:3.65% 4:3.41% 6:3.08% 5:3.05% 7:2.84% 9:2.69% 10:2.62%
+  - immediate_reward: n=29158, mean=0.819046, min=0.01, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.55% [0.5,0.75):20.42% [0.75,1):67.08%
+  - reward(before clip): n=12387, mean=0.582592, min=-76.6092, max=1, p50=0.889934, p90=0.991787, p99=1
+  - final_reward(after clip): n=12387, mean=0.705476, min=-1, max=1, clip_sat=9.70%, p50=0.889934, p90=0.991787, p99=1
+  - final_reward bins: [-1,-0.75):4.45% [-0.75,-0.5):0.74% [-0.5,-0.25):1.24% [-0.25,0):1.84% [0,0.25):2.56% [0.25,0.5):5.31% [0.5,0.75):13.33% [0.75,1):70.53%
+  - penalty(weighted): n=12387, mean=0.208704, min=0, max=38.8046, p50=0.055033, p90=0.41287, p99=2.69998
+  - penalty bins: [0,1e-06):5.89% [1e-05,0.0001):0.01% [0.0001,0.001):0.66% [0.001,0.01):10.13% [0.01,0.1):48.77% [0.1,1):30.73% [1,10):3.72% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_100_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12378, zero=728 (5.88%), hist=distinct=209 top10=0:5.88% 1:4.77% 2:4.18% 5:3.50% 3:3.47% 4:3.18% 6:2.79% 7:2.79% 10:2.67% 8:2.61%
+  - immediate_reward: n=29158, mean=0.81834, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.02% [0.25,0.5):10.57% [0.5,0.75):20.30% [0.75,1):67.11%
+  - reward(before clip): n=12378, mean=0.623267, min=-34.2291, max=1, p50=0.890334, p90=0.992299, p99=1
+  - final_reward(after clip): n=12378, mean=0.709418, min=-1, max=1, clip_sat=9.49%, p50=0.890334, p90=0.992299, p99=1
+  - final_reward bins: [-1,-0.75):4.26% [-0.75,-0.5):0.92% [-0.5,-0.25):1.06% [-0.25,0):1.78% [0,0.25):2.88% [0.25,0.5):5.15% [0.5,0.75):12.65% [0.75,1):71.30%
+  - penalty(weighted): n=12378, mean=0.188366, min=0, max=17.6146, p50=0.0548331, p90=0.408091, p99=2.35147
+  - penalty bins: [0,1e-06):5.88% [0.0001,0.001):0.73% [0.001,0.01):9.58% [0.01,0.1):49.82% [0.1,1):30.38% [1,10):3.57% [10,100):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_101_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12389, zero=737 (5.95%), hist=distinct=204 top10=0:5.95% 1:4.72% 2:4.12% 4:3.50% 3:3.40% 5:3.08% 7:3.00% 6:2.88% 9:2.65% 8:2.63%
+  - immediate_reward: n=29158, mean=0.819602, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.56% [0.5,0.75):20.12% [0.75,1):67.39%
+  - reward(before clip): n=12389, mean=0.587044, min=-46.3696, max=1, p50=0.890553, p90=0.992399, p99=1
+  - final_reward(after clip): n=12389, mean=0.702944, min=-1, max=1, clip_sat=9.89%, p50=0.890553, p90=0.992399, p99=1
+  - final_reward bins: [-1,-0.75):4.65% [-0.75,-0.5):0.85% [-0.5,-0.25):1.16% [-0.25,0):1.79% [0,0.25):2.62% [0.25,0.5):5.08% [0.5,0.75):12.82% [0.75,1):71.03%
+  - penalty(weighted): n=12389, mean=0.206478, min=0, max=23.6848, p50=0.0547234, p90=0.415754, p99=2.67402
+  - penalty bins: [0,1e-06):5.95% [0.0001,0.001):0.53% [0.001,0.01):10.19% [0.01,0.1):49.12% [0.1,1):30.27% [1,10):3.87% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_102_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=zero<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12415, zero=700 (5.64%), hist=distinct=208 top10=0:5.64% 1:5.11% 2:3.79% 3:3.70% 4:3.21% 6:3.21% 5:3.10% 7:3.08% 8:2.77% 9:2.59%
+  - immediate_reward: n=29158, mean=0.819047, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.41% [0.5,0.75):20.41% [0.75,1):67.23%
+  - reward(before clip): n=12415, mean=0.570738, min=-44.8841, max=1, p50=0.889654, p90=0.991666, p99=1
+  - final_reward(after clip): n=12415, mean=0.705012, min=-1, max=1, clip_sat=9.64%, p50=0.889654, p90=0.991666, p99=1
+  - final_reward bins: [-1,-0.75):4.67% [-0.75,-0.5):0.79% [-0.5,-0.25):1.22% [-0.25,0):1.63% [0,0.25):2.58% [0.25,0.5):5.04% [0.5,0.75):12.68% [0.75,1):71.40%
+  - penalty(weighted): n=12415, mean=0.214631, min=0, max=22.942, p50=0.0551731, p90=0.409039, p99=2.81906
+  - penalty bins: [0,1e-06):5.64% [1e-05,0.0001):0.02% [0.0001,0.001):0.65% [0.001,0.01):9.83% [0.01,0.1):49.78% [0.1,1):30.08% [1,10):3.91% [10,100):0.10%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_103_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.95<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12363, zero=776 (6.28%), hist=distinct=221 top10=0:6.28% 1:4.93% 2:4.00% 3:3.53% 4:3.39% 5:3.22% 6:3.10% 7:2.55% 9:2.52% 8:2.43%
+  - immediate_reward: n=29158, mean=0.818673, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.59% [0.5,0.75):20.38% [0.75,1):67.07%
+  - reward(before clip): n=12363, mean=0.595161, min=-35.7649, max=1, p50=0.888624, p90=0.992302, p99=1
+  - final_reward(after clip): n=12363, mean=0.704189, min=-1, max=1, clip_sat=10.06%, p50=0.888624, p90=0.992302, p99=1
+  - final_reward bins: [-1,-0.75):4.47% [-0.75,-0.5):0.81% [-0.5,-0.25):1.46% [-0.25,0):1.69% [0,0.25):2.65% [0.25,0.5):4.97% [0.5,0.75):12.98% [0.75,1):70.95%
+  - penalty(weighted): n=12363, mean=0.20242, min=0, max=18.3824, p50=0.055688, p90=0.421054, p99=2.58037
+  - penalty bins: [0,1e-06):6.28% [0.0001,0.001):0.61% [0.001,0.01):9.79% [0.01,0.1):48.93% [0.1,1):30.61% [1,10):3.73% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_104_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12403, zero=729 (5.88%), hist=distinct=211 top10=0:5.88% 1:5.06% 2:3.95% 3:3.37% 5:3.34% 4:3.10% 7:2.99% 6:2.95% 8:2.89% 9:2.40%
+  - immediate_reward: n=29158, mean=0.818692, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.99% [0.25,0.5):10.54% [0.5,0.75):20.22% [0.75,1):67.24%
+  - reward(before clip): n=12403, mean=0.586331, min=-50.9283, max=1, p50=0.889822, p90=0.991544, p99=1
+  - final_reward(after clip): n=12403, mean=0.71088, min=-1, max=1, clip_sat=9.59%, p50=0.889822, p90=0.991544, p99=1
+  - final_reward bins: [-1,-0.75):4.26% [-0.75,-0.5):0.83% [-0.5,-0.25):1.10% [-0.25,0):1.77% [0,0.25):2.58% [0.25,0.5):5.22% [0.5,0.75):12.66% [0.75,1):71.58%
+  - penalty(weighted): n=12403, mean=0.206834, min=0, max=25.9641, p50=0.0550892, p90=0.396916, p99=2.77398
+  - penalty bins: [0,1e-06):5.88% [1e-05,0.0001):0.02% [0.0001,0.001):0.79% [0.001,0.01):9.63% [0.01,0.1):50.00% [0.1,1):29.98% [1,10):3.60% [10,100):0.11%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_105_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.995<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=log_compressed
+  - penalty_data: n=12377, zero=757 (6.12%), hist=distinct=204 top10=0:6.12% 1:4.94% 3:3.78% 2:3.72% 4:3.47% 5:3.37% 7:3.05% 8:2.92% 9:2.78% 6:2.71%
+  - immediate_reward: n=29158, mean=0.819589, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.58% [0.5,0.75):20.00% [0.75,1):67.46%
+  - reward(before clip): n=12377, mean=0.59554, min=-61.1488, max=1, p50=0.889848, p90=0.992505, p99=1
+  - final_reward(after clip): n=12377, mean=0.710003, min=-1, max=1, clip_sat=9.85%, p50=0.889848, p90=0.992505, p99=1
+  - final_reward bins: [-1,-0.75):4.31% [-0.75,-0.5):0.86% [-0.5,-0.25):1.23% [-0.25,0):1.70% [0,0.25):2.55% [0.25,0.5):4.95% [0.5,0.75):12.87% [0.75,1):71.54%
+  - penalty(weighted): n=12377, mean=0.20223, min=0, max=31.0744, p50=0.0550761, p90=0.402585, p99=2.54077
+  - penalty bins: [0,1e-06):6.12% [0.0001,0.001):0.56% [0.001,0.01):9.88% [0.01,0.1):49.45% [0.1,1):30.26% [1,10):3.64% [10,100):0.10%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_112_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=0.5<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12403, zero=681 (5.49%), hist=distinct=216 top10=0:5.49% 1:5.09% 2:3.97% 4:3.55% 3:3.43% 5:3.31% 6:2.96% 8:2.74% 10:2.64% 7:2.64%
+  - immediate_reward: n=29158, mean=0.819487, min=0.01, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.43% [0.5,0.75):20.22% [0.75,1):67.38%
+  - reward(before clip): n=12403, mean=-0.211525, min=-41.2122, max=0, p50=-0.056554, p90=-0.0046608, p99=0
+  - final_reward(after clip): n=12403, mean=-0.144844, min=-1, max=0, clip_sat=3.68%, p50=-0.056554, p90=-0.0046608, p99=0
+  - final_reward bins: [-1,-0.75):5.06% [-0.75,-0.5):2.76% [-0.5,-0.25):7.95% [-0.25,0):78.74% [0,0.25):5.49%
+  - penalty(weighted): n=12403, mean=0.211525, min=0, max=41.2122, p50=0.0565541, p90=0.396435, p99=2.78054
+  - penalty bins: [0,1e-06):5.49% [1e-05,0.0001):0.01% [0.0001,0.001):0.54% [0.001,0.01):9.76% [0.01,0.1):50.13% [0.1,1):30.39% [1,10):3.60% [10,100):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_113_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12384, zero=738 (5.96%), hist=distinct=215 top10=0:5.96% 1:5.03% 2:4.06% 3:3.58% 4:3.39% 5:2.99% 6:2.89% 7:2.75% 8:2.72% 10:2.66%
+  - immediate_reward: n=29158, mean=0.818708, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.66% [0.5,0.75):20.27% [0.75,1):67.14%
+  - reward(before clip): n=12384, mean=-0.20909, min=-20.0297, max=0, p50=-0.0553705, p90=-0.0040122, p99=0
+  - final_reward(after clip): n=12384, mean=-0.14728, min=-1, max=0, clip_sat=3.97%, p50=-0.0553705, p90=-0.0040122, p99=0
+  - final_reward bins: [-1,-0.75):5.41% [-0.75,-0.5):2.74% [-0.5,-0.25):7.79% [-0.25,0):78.10% [0,0.25):5.96%
+  - penalty(weighted): n=12384, mean=0.20909, min=0, max=20.0297, p50=0.0553705, p90=0.41114, p99=2.85602
+  - penalty bins: [0,1e-06):5.96% [1e-05,0.0001):0.01% [0.0001,0.001):0.54% [0.001,0.01):9.85% [0.01,0.1):50.02% [0.1,1):29.64% [1,10):3.88% [10,100):0.09%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_114_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=2.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12390, zero=690 (5.57%), hist=distinct=212 top10=0:5.57% 1:4.97% 2:4.20% 3:3.85% 4:3.33% 7:3.08% 5:3.05% 8:2.88% 6:2.70% 10:2.47%
+  - immediate_reward: n=29158, mean=0.818904, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.57% [0.5,0.75):20.28% [0.75,1):67.24%
+  - reward(before clip): n=12390, mean=-0.206883, min=-24.4888, max=0, p50=-0.0549575, p90=-0.0045956, p99=0
+  - final_reward(after clip): n=12390, mean=-0.145453, min=-1, max=0, clip_sat=3.84%, p50=-0.0549575, p90=-0.0045956, p99=0
+  - final_reward bins: [-1,-0.75):5.25% [-0.75,-0.5):2.87% [-0.5,-0.25):7.59% [-0.25,0):78.72% [0,0.25):5.57%
+  - penalty(weighted): n=12390, mean=0.206883, min=0, max=24.4888, p50=0.0549575, p90=0.404216, p99=2.7735
+  - penalty bins: [0,1e-06):5.57% [0.0001,0.001):0.75% [0.001,0.01):9.69% [0.01,0.1):49.91% [0.1,1):30.24% [1,10):3.76% [10,100):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_115_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=0.5<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=0.500<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12370, zero=784 (6.34%), hist=distinct=207 top10=0:6.34% 1:4.92% 2:4.17% 4:3.54% 3:3.52% 5:3.12% 6:2.94% 8:2.74% 7:2.64% 10:2.60%
+  - immediate_reward: n=29158, mean=0.819527, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.60% [0.5,0.75):20.01% [0.75,1):67.47%
+  - reward(before clip): n=12370, mean=-0.102764, min=-10.2705, max=0, p50=-0.0275175, p90=-0.0019467, p99=0
+  - final_reward(after clip): n=12370, mean=-0.0853512, min=-1, max=0, clip_sat=1.44%, p50=-0.0275175, p90=-0.0019467, p99=0
+  - final_reward bins: [-1,-0.75):2.29% [-0.75,-0.5):1.54% [-0.5,-0.25):4.39% [-0.25,0):85.44% [0,0.25):6.34%
+  - penalty(weighted): n=12370, mean=0.205529, min=0, max=20.5409, p50=0.0550352, p90=0.410233, p99=2.53777
+  - penalty bins: [0,1e-06):6.34% [0.0001,0.001):0.61% [0.001,0.01):9.85% [0.01,0.1):49.04% [0.1,1):30.33% [1,10):3.72% [10,100):0.11%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_116_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12379, zero=733 (5.92%), hist=distinct=203 top10=0:5.92% 1:5.31% 2:4.20% 3:3.50% 4:3.32% 5:3.27% 6:2.98% 7:2.84% 9:2.65% 8:2.49%
+  - immediate_reward: n=29158, mean=0.819301, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.53% [0.5,0.75):20.19% [0.75,1):67.31%
+  - reward(before clip): n=12379, mean=-0.213912, min=-23.2477, max=0, p50=-0.054139, p90=-0.003751, p99=0
+  - final_reward(after clip): n=12379, mean=-0.146882, min=-1, max=0, clip_sat=4.07%, p50=-0.054139, p90=-0.003751, p99=0
+  - final_reward bins: [-1,-0.75):5.44% [-0.75,-0.5):2.68% [-0.5,-0.25):7.89% [-0.25,0):78.06% [0,0.25):5.92%
+  - penalty(weighted): n=12379, mean=0.213912, min=0, max=23.2477, p50=0.0541387, p90=0.413327, p99=2.88689
+  - penalty bins: [0,1e-06):5.92% [1e-05,0.0001):0.01% [0.0001,0.001):0.63% [0.001,0.01):10.31% [0.01,0.1):49.30% [0.1,1):29.76% [1,10):3.97% [10,100):0.11%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_117_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=2.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty=2.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=log_compressed
+  - penalty_data: n=12344, zero=762 (6.17%), hist=distinct=207 top10=0:6.17% 1:5.01% 2:4.03% 3:3.65% 4:3.24% 7:3.09% 5:2.89% 8:2.72% 6:2.70% 9:2.62%
+  - immediate_reward: n=29158, mean=0.819084, min=0.01, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.38% [0.5,0.75):20.30% [0.75,1):67.34%
+  - reward(before clip): n=12344, mean=-0.409225, min=-38.1401, max=0, p50=-0.109576, p90=-0.0075593, p99=0
+  - final_reward(after clip): n=12344, mean=-0.236894, min=-1, max=0, clip_sat=8.07%, p50=-0.109576, p90=-0.0075593, p99=0
+  - final_reward bins: [-1,-0.75):10.62% [-0.75,-0.5):5.27% [-0.5,-0.25):13.02% [-0.25,0):64.92% [0,0.25):6.17%
+  - penalty(weighted): n=12344, mean=0.204613, min=0, max=19.0701, p50=0.0547884, p90=0.405038, p99=2.92004
+  - penalty bins: [0,1e-06):6.17% [1e-05,0.0001):0.01% [0.0001,0.001):0.70% [0.001,0.01):9.80% [0.01,0.1):49.19% [0.1,1):30.36% [1,10):3.69% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_118_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=0.5<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12388, zero=663 (5.35%), hist=distinct=205 top10=0:5.35% 1:5.09% 2:4.18% 3:3.57% 4:3.34% 7:3.23% 5:2.90% 6:2.78% 8:2.75% 10:2.59%
+  - immediate_reward: n=29158, mean=0.819921, min=0.005, max=1, p50=0.98, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.88% [0.25,0.5):10.35% [0.5,0.75):20.49% [0.75,1):67.28%
+  - reward(before clip): n=12388, mean=-0.702482, min=-25.5911, max=-0.5, p50=-0.555771, p90=-0.504503, p99=-0.5
+  - final_reward(after clip): n=12388, mean=-0.619336, min=-1, max=-0.5, clip_sat=8.26%, p50=-0.555771, p90=-0.504503, p99=-0.5
+  - final_reward bins: [-1,-0.75):16.07% [-0.75,-0.5):78.58% [-0.5,-0.25):5.35%
+  - penalty(weighted): n=12388, mean=0.202482, min=0, max=25.0911, p50=0.0557708, p90=0.406407, p99=2.54353
+  - penalty bins: [0,1e-06):5.35% [1e-05,0.0001):0.01% [0.0001,0.001):0.72% [0.001,0.01):10.15% [0.01,0.1):49.62% [0.1,1):30.34% [1,10):3.73% [10,100):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_119_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12377, zero=763 (6.16%), hist=distinct=215 top10=0:6.16% 1:4.78% 2:4.16% 4:3.78% 3:3.68% 5:3.34% 6:3.18% 7:2.74% 8:2.74% 9:2.59%
+  - immediate_reward: n=29158, mean=0.820041, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.34% [0.5,0.75):20.33% [0.75,1):67.39%
+  - reward(before clip): n=12377, mean=-1.20728, min=-21.3191, max=-1, p50=-1.05596, p90=-1.00363, p99=-1
+  - final_reward(after clip): n=12377, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12377, mean=0.207285, min=0, max=20.3191, p50=0.0559565, p90=0.400461, p99=2.9448
+  - penalty bins: [0,1e-06):6.16% [1e-05,0.0001):0.01% [0.0001,0.001):0.82% [0.001,0.01):9.82% [0.01,0.1):48.97% [0.1,1):30.45% [1,10):3.70% [10,100):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_120_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=2.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12343, zero=796 (6.45%), hist=distinct=216 top10=0:6.45% 1:5.30% 2:4.29% 3:3.83% 4:3.82% 6:3.01% 5:2.97% 8:2.67% 7:2.54% 10:2.47%
+  - immediate_reward: n=29158, mean=0.821132, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.83% [0.25,0.5):10.37% [0.5,0.75):20.09% [0.75,1):67.70%
+  - reward(before clip): n=12343, mean=-2.20694, min=-35.2566, max=-2, p50=-2.05409, p90=-2.00331, p99=-2
+  - final_reward(after clip): n=12343, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12343, mean=0.206945, min=0, max=33.2566, p50=0.0540879, p90=0.410568, p99=2.63481
+  - penalty bins: [0,1e-06):6.45% [0.0001,0.001):0.78% [0.001,0.01):10.02% [0.01,0.1):48.92% [0.1,1):29.92% [1,10):3.82% [10,100):0.10%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_121_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=0.5<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12378, zero=745 (6.02%), hist=distinct=219 top10=0:6.02% 1:5.09% 2:4.10% 3:4.01% 4:3.79% 5:3.19% 6:2.87% 8:2.87% 7:2.63% 10:2.50%
+  - immediate_reward: n=29158, mean=0.821136, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.25% [0.5,0.75):20.17% [0.75,1):67.66%
+  - reward(before clip): n=12378, mean=-1.09946, min=-10.1364, max=-1, p50=-1.02725, p90=-1.00189, p99=-1
+  - final_reward(after clip): n=12378, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12378, mean=0.19892, min=0, max=18.2728, p50=0.0545089, p90=0.416656, p99=2.57964
+  - penalty bins: [0,1e-06):6.02% [1e-05,0.0001):0.03% [0.0001,0.001):0.64% [0.001,0.01):10.13% [0.01,0.1):49.42% [0.1,1):29.96% [1,10):3.75% [10,100):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_122_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12381, zero=739 (5.97%), hist=distinct=219 top10=0:5.97% 1:5.37% 2:4.09% 3:3.51% 4:3.32% 6:3.25% 5:3.24% 7:2.91% 10:2.60% 8:2.51%
+  - immediate_reward: n=29158, mean=0.81981, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.43% [0.5,0.75):20.24% [0.75,1):67.38%
+  - reward(before clip): n=12381, mean=-1.20682, min=-20.025, max=-1, p50=-1.05554, p90=-1.00398, p99=-1
+  - final_reward(after clip): n=12381, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12381, mean=0.206818, min=0, max=19.025, p50=0.0555359, p90=0.404883, p99=2.72202
+  - penalty bins: [0,1e-06):5.97% [0.0001,0.001):0.73% [0.001,0.01):9.87% [0.01,0.1):49.45% [0.1,1):30.13% [1,10):3.72% [10,100):0.12%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_123_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=2.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>dmax=400000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=log_compressed
+  - penalty_data: n=12394, zero=712 (5.74%), hist=distinct=218 top10=0:5.74% 1:5.18% 2:3.99% 3:3.61% 5:3.35% 4:3.31% 7:3.01% 8:2.82% 6:2.73% 10:2.54%
+  - immediate_reward: n=29158, mean=0.819318, min=0.01, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.59% [0.5,0.75):20.14% [0.75,1):67.36%
+  - reward(before clip): n=12394, mean=-1.39866, min=-44.4605, max=-1, p50=-1.11258, p90=-1.0086, p99=-1
+  - final_reward(after clip): n=12394, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12394, mean=0.199328, min=0, max=21.7303, p50=0.05629, p90=0.392468, p99=2.43558
+  - penalty bins: [0,1e-06):5.74% [1e-05,0.0001):0.01% [0.0001,0.001):0.65% [0.001,0.01):9.92% [0.01,0.1):49.42% [0.1,1):30.45% [1,10):3.74% [10,100):0.06%
+
+## penalty_scale = reciprocal
+
+**Summary**
+- immediate_reward: n=641476, mean=0.820254, bins=[0,0.25):1.90% [0.25,0.5):10.43% [0.5,0.75):20.18% [0.75,1):67.49%
+- penalty_data: n=272242, zero=16522 (6.07%), hist=distinct=420 top10=0:6.07% 1:5.08% 2:4.13% 3:3.65% 4:3.40% 5:3.17% 6:3.00% 7:2.88% 8:2.65% 9:2.53%
+- final_reward(after clip): n=272242, mean=0.380896, min=-1, max=1, clip_sat=18.58%
+- final_reward bins: [-1,-0.75):14.35% [-0.75,-0.5):0.07% [-0.5,-0.25):0.11% [-0.25,0):28.78% [0,0.25):3.23% [0.25,0.5):0.28% [0.5,0.75):0.68% [0.75,1):52.50%
+- penalty(weighted) bins: [0,1e-06):12.71% [1e-06,1e-05):31.55% [1e-05,0.0001):40.63% [0.0001,0.001):11.17% [0.001,0.01):1.66% [0.01,0.1):1.77% [0.1,1):0.45% [1,10):0.05% [10,100):0.00%
+
+**Files**
+
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_002_r01.log**
+  - cfg: w_pen=0.1, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12374, zero=761 (6.15%), hist=distinct=211 top10=0:6.15% 1:5.01% 2:3.89% 3:3.76% 5:3.39% 4:3.15% 6:2.95% 9:2.88% 7:2.82% 12:2.37%
+  - immediate_reward: n=29158, mean=0.820002, min=0.01, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.48% [0.5,0.75):20.28% [0.75,1):67.35%
+  - reward(before clip): n=12374, mean=-1.3712, min=-5023.96, max=1, p50=0.990286, p90=0.99976, p99=1
+  - final_reward(after clip): n=12374, mean=0.860674, min=-1, max=1, clip_sat=9.65%, p50=0.990286, p90=0.99976, p99=1
+  - final_reward bins: [-1,-0.75):3.72% [-0.75,-0.5):0.29% [-0.5,-0.25):0.37% [-0.25,0):0.53% [0,0.25):0.76% [0.25,0.5):1.27% [0.5,0.75):3.24% [0.75,1):89.82%
+  - penalty(weighted): n=12374, mean=0.00269259, min=0, max=3.00481, p50=1.306e-05, p90=0.000184983, p99=0.0472471
+  - penalty bins: [0,1e-06):12.57% [1e-06,1e-05):31.53% [1e-05,0.0001):40.72% [0.0001,0.001):11.36% [0.001,0.01):1.50% [0.01,0.1):1.76% [0.1,1):0.49% [1,10):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_003_r01.log**
+  - cfg: w_pen=0.2, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12363, zero=784 (6.34%), hist=distinct=207 top10=0:6.34% 1:5.40% 2:4.27% 3:3.78% 4:3.23% 5:3.17% 6:2.99% 8:2.86% 7:2.81% 11:2.60%
+  - immediate_reward: n=29158, mean=0.821692, min=0, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.88% [0.25,0.5):10.29% [0.5,0.75):19.85% [0.75,1):67.98%
+  - reward(before clip): n=12363, mean=-7.11671, min=-59536.6, max=1, p50=0.98943, p90=0.999817, p99=1
+  - final_reward(after clip): n=12363, mean=0.863359, min=-1, max=1, clip_sat=9.61%, p50=0.98943, p90=0.999817, p99=1
+  - final_reward bins: [-1,-0.75):3.48% [-0.75,-0.5):0.27% [-0.5,-0.25):0.41% [-0.25,0):0.41% [0,0.25):0.85% [0.25,0.5):1.42% [0.5,0.75):3.39% [0.75,1):89.78%
+  - penalty(weighted): n=12363, mean=0.00338293, min=0, max=13.0305, p50=1.259e-05, p90=0.000171648, p99=0.0435419
+  - penalty bins: [0,1e-06):13.35% [1e-06,1e-05):31.46% [1e-05,0.0001):40.53% [0.0001,0.001):10.81% [0.001,0.01):1.70% [0.01,0.1):1.62% [0.1,1):0.49% [1,10):0.03% [10,100):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_004_r01.log**
+  - cfg: w_pen=0.5, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12390, zero=741 (5.98%), hist=distinct=212 top10=0:5.98% 1:5.21% 2:4.13% 3:3.64% 4:3.50% 5:3.30% 6:3.15% 8:2.84% 7:2.76% 9:2.35%
+  - immediate_reward: n=29158, mean=0.818643, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.71% [0.5,0.75):20.21% [0.75,1):67.19%
+  - reward(before clip): n=12390, mean=-1.99025, min=-5697.59, max=1, p50=0.988078, p90=0.999716, p99=1
+  - final_reward(after clip): n=12390, mean=0.849739, min=-1, max=1, clip_sat=9.48%, p50=0.988078, p90=0.999716, p99=1
+  - final_reward bins: [-1,-0.75):3.75% [-0.75,-0.5):0.38% [-0.5,-0.25):0.36% [-0.25,0):0.61% [0,0.25):0.91% [0.25,0.5):1.65% [0.5,0.75):3.84% [0.75,1):88.50%
+  - penalty(weighted): n=12390, mean=0.00241759, min=0, max=5.00031, p50=1.324e-05, p90=0.00019406, p99=0.0413791
+  - penalty bins: [0,1e-06):12.70% [1e-06,1e-05):31.23% [1e-05,0.0001):40.86% [0.0001,0.001):11.36% [0.001,0.01):1.60% [0.01,0.1):1.74% [0.1,1):0.48% [1,10):0.02%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_005_r01.log**
+  - cfg: w_pen=1.0, formula=relative, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=reciprocal
+  - penalty_data: n=12377, zero=758 (6.12%), hist=distinct=204 top10=0:6.12% 1:5.11% 2:4.41% 3:3.82% 5:3.45% 4:3.21% 6:2.99% 7:2.82% 10:2.67% 9:2.42%
+  - immediate_reward: n=29158, mean=0.821134, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.85% [0.25,0.5):10.33% [0.5,0.75):20.16% [0.75,1):67.66%
+  - reward(before clip): n=12377, mean=-2.28972, min=-13478.7, max=1, p50=0.989375, p90=0.999766, p99=1
+  - final_reward(after clip): n=12377, mean=0.854038, min=-1, max=1, clip_sat=9.58%, p50=0.989375, p90=0.999766, p99=1
+  - final_reward bins: [-1,-0.75):3.76% [-0.75,-0.5):0.36% [-0.5,-0.25):0.47% [-0.25,0):0.48% [0,0.25):0.88% [0.25,0.5):1.40% [0.5,0.75):3.45% [0.75,1):89.21%
+  - penalty(weighted): n=12377, mean=0.00269333, min=0, max=2.60011, p50=1.28e-05, p90=0.000183274, p99=0.0399447
+  - penalty bins: [0,1e-06):12.61% [1e-06,1e-05):32.12% [1e-05,0.0001):40.00% [0.0001,0.001):11.35% [0.001,0.01):1.67% [0.01,0.1):1.80% [0.1,1):0.36% [1,10):0.07%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_006_r01.log**
+  - cfg: w_pen=0.1, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12358, zero=786 (6.36%), hist=distinct=202 top10=0:6.36% 1:5.41% 2:4.04% 3:3.53% 4:3.38% 5:3.16% 6:2.95% 7:2.90% 9:2.74% 8:2.64%
+  - immediate_reward: n=29158, mean=0.821061, min=0, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.86% [0.25,0.5):10.42% [0.5,0.75):19.88% [0.75,1):67.84%
+  - reward(before clip): n=12358, mean=0.994706, min=-7.00801, max=1, p50=0.999975, p90=0.999999, p99=1
+  - final_reward(after clip): n=12358, mean=0.995356, min=-1, max=1, clip_sat=8.38%, p50=0.999975, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.06% [-0.5,-0.25):0.02% [-0.25,0):0.02% [0,0.25):0.02% [0.25,0.5):0.07% [0.5,0.75):0.21% [0.75,1):99.60%
+  - penalty(weighted): n=12358, mean=0.00264696, min=0, max=4.00401, p50=1.257e-05, p90=0.000189216, p99=0.0431407
+  - penalty bins: [0,1e-06):13.30% [1e-06,1e-05):31.59% [1e-05,0.0001):39.88% [0.0001,0.001):11.28% [0.001,0.01):1.72% [0.01,0.1):1.67% [0.1,1):0.52% [1,10):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_007_r01.log**
+  - cfg: w_pen=0.2, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12381, zero=763 (6.16%), hist=distinct=209 top10=0:6.16% 1:4.99% 2:4.16% 4:3.56% 3:3.34% 7:3.21% 5:3.19% 6:3.04% 8:2.71% 10:2.46%
+  - immediate_reward: n=29158, mean=0.819402, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.60% [0.5,0.75):20.10% [0.75,1):67.36%
+  - reward(before clip): n=12381, mean=0.995376, min=-3.0064, max=1, p50=0.999974, p90=0.999999, p99=1
+  - final_reward(after clip): n=12381, mean=0.99554, min=-1, max=1, clip_sat=7.94%, p50=0.999974, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.05% [-0.75,-0.5):0.02% [-0.5,-0.25):0.02% [-0.25,0):0.04% [0,0.25):0.02% [0.25,0.5):0.06% [0.5,0.75):0.20% [0.75,1):99.60%
+  - penalty(weighted): n=12381, mean=0.00231204, min=0, max=2.0032, p50=1.296e-05, p90=0.00019395, p99=0.0370604
+  - penalty bins: [0,1e-06):12.91% [1e-06,1e-05):31.52% [1e-05,0.0001):40.33% [0.0001,0.001):11.23% [0.001,0.01):1.72% [0.01,0.1):1.83% [0.1,1):0.40% [1,10):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_008_r01.log**
+  - cfg: w_pen=0.5, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12362, zero=735 (5.95%), hist=distinct=216 top10=0:5.95% 1:4.89% 2:4.07% 4:3.60% 3:3.52% 6:3.00% 7:2.95% 5:2.92% 9:2.77% 8:2.74%
+  - immediate_reward: n=29158, mean=0.819806, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.46% [0.5,0.75):20.21% [0.75,1):67.36%
+  - reward(before clip): n=12362, mean=0.993856, min=-13.6673, max=1, p50=0.999974, p90=0.999999, p99=1
+  - final_reward(after clip): n=12362, mean=0.99514, min=-1, max=1, clip_sat=7.77%, p50=0.999974, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.06% [-0.25,0):0.04% [0,0.25):0.04% [0.25,0.5):0.06% [0.5,0.75):0.19% [0.75,1):99.60%
+  - penalty(weighted): n=12362, mean=0.00307178, min=0, max=7.33366, p50=1.295e-05, p90=0.000191756, p99=0.047651
+  - penalty bins: [0,1e-06):12.56% [1e-06,1e-05):31.60% [1e-05,0.0001):40.46% [0.0001,0.001):11.46% [0.001,0.01):1.50% [0.01,0.1):1.92% [0.1,1):0.43% [1,10):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_009_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal
+  - penalty_data: n=12354, zero=725 (5.87%), hist=distinct=207 top10=0:5.87% 1:5.00% 2:4.21% 3:3.74% 4:3.33% 5:3.15% 6:2.95% 8:2.71% 9:2.61% 7:2.57%
+  - immediate_reward: n=29158, mean=0.820777, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.44% [0.5,0.75):20.10% [0.75,1):67.58%
+  - reward(before clip): n=12354, mean=0.992555, min=-25.0684, max=1, p50=0.999974, p90=0.999999, p99=1
+  - final_reward(after clip): n=12354, mean=0.995605, min=-1, max=1, clip_sat=7.75%, p50=0.999974, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.06% [-0.5,-0.25):0.02% [-0.25,0):0.02% [0,0.25):0.03% [0.25,0.5):0.06% [0.5,0.75):0.19% [0.75,1):99.64%
+  - penalty(weighted): n=12354, mean=0.00372264, min=0, max=13.0342, p50=1.2905e-05, p90=0.000183755, p99=0.0433426
+  - penalty bins: [0,1e-06):12.60% [1e-06,1e-05):31.71% [1e-05,0.0001):40.72% [0.0001,0.001):11.12% [0.001,0.01):1.64% [0.01,0.1):1.74% [0.1,1):0.41% [1,10):0.05% [10,100):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_010_r01.log**
+  - cfg: w_pen=0.1, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12359, zero=725 (5.87%), hist=distinct=212 top10=0:5.87% 1:5.40% 2:4.05% 3:3.66% 4:3.33% 6:3.17% 5:3.12% 7:2.95% 8:2.65% 11:2.41%
+  - immediate_reward: n=29158, mean=0.819877, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.42% [0.5,0.75):20.50% [0.75,1):67.19%
+  - reward(before clip): n=12359, mean=0.997265, min=-3.00367, max=1, p50=0.999987, p90=0.999999, p99=1
+  - final_reward(after clip): n=12359, mean=0.99744, min=-1, max=1, clip_sat=9.51%, p50=0.999987, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.02% [-0.25,0):0.02% [0,0.25):0.01% [0.25,0.5):0.08% [0.5,0.75):0.08% [0.75,1):99.79%
+  - penalty(weighted): n=12359, mean=0.00273491, min=0, max=4.00367, p50=1.289e-05, p90=0.00018428, p99=0.0444435
+  - penalty bins: [0,1e-06):12.37% [1e-06,1e-05):31.82% [1e-05,0.0001):40.51% [0.0001,0.001):11.17% [0.001,0.01):1.82% [0.01,0.1):1.80% [0.1,1):0.46% [1,10):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_011_r01.log**
+  - cfg: w_pen=0.2, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12409, zero=758 (6.11%), hist=distinct=212 top10=0:6.11% 1:4.89% 2:3.92% 3:3.39% 5:3.36% 4:3.23% 7:3.09% 6:3.03% 8:2.72% 10:2.48%
+  - immediate_reward: n=29158, mean=0.819135, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.42% [0.5,0.75):20.35% [0.75,1):67.26%
+  - reward(before clip): n=12409, mean=0.997675, min=-1.14353, max=1, p50=0.999987, p90=0.999999, p99=1
+  - final_reward(after clip): n=12409, mean=0.997686, min=-1, max=1, clip_sat=9.45%, p50=0.999987, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.01% [-0.75,-0.5):0.01% [-0.5,-0.25):0.01% [-0.25,0):0.02% [0,0.25):0.01% [0.25,0.5):0.06% [0.5,0.75):0.05% [0.75,1):99.84%
+  - penalty(weighted): n=12409, mean=0.00232535, min=0, max=2.14353, p50=1.343e-05, p90=0.000190222, p99=0.0481739
+  - penalty bins: [0,1e-06):12.53% [1e-06,1e-05):30.82% [1e-05,0.0001):41.73% [0.0001,0.001):10.90% [0.001,0.01):1.68% [0.01,0.1):1.85% [0.1,1):0.46% [1,10):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_012_r01.log**
+  - cfg: w_pen=0.5, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12391, zero=711 (5.74%), hist=distinct=218 top10=0:5.74% 1:5.14% 2:4.30% 3:3.58% 4:3.30% 5:3.23% 6:3.18% 7:3.07% 10:2.67% 8:2.58%
+  - immediate_reward: n=29158, mean=0.819063, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.52% [0.5,0.75):20.31% [0.75,1):67.23%
+  - reward(before clip): n=12391, mean=0.996081, min=-11.5005, max=1, p50=0.999987, p90=0.999999, p99=1
+  - final_reward(after clip): n=12391, mean=0.997251, min=-1, max=1, clip_sat=9.38%, p50=0.999987, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.02% [-0.75,-0.5):0.01% [-0.5,-0.25):0.02% [-0.25,0):0.04% [0.25,0.5):0.05% [0.5,0.75):0.06% [0.75,1):99.81%
+  - penalty(weighted): n=12391, mean=0.00391934, min=0, max=12.5005, p50=1.32e-05, p90=0.00019598, p99=0.0471397
+  - penalty bins: [0,1e-06):12.49% [1e-06,1e-05):31.30% [1e-05,0.0001):40.55% [0.0001,0.001):11.44% [0.001,0.01):1.84% [0.01,0.1):1.90% [0.1,1):0.40% [1,10):0.07% [10,100):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_013_r01.log**
+  - cfg: w_pen=1.0, formula=one_minus, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=reciprocal
+  - penalty_data: n=12371, zero=727 (5.88%), hist=distinct=211 top10=0:5.88% 1:4.75% 2:4.27% 3:3.40% 4:3.29% 5:3.14% 6:3.13% 7:2.96% 8:2.75% 9:2.72%
+  - immediate_reward: n=29158, mean=0.820101, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.90% [0.25,0.5):10.42% [0.5,0.75):20.23% [0.75,1):67.46%
+  - reward(before clip): n=12371, mean=0.997282, min=-3.00409, max=1, p50=0.999987, p90=0.999999, p99=1
+  - final_reward(after clip): n=12371, mean=0.997444, min=-1, max=1, clip_sat=9.59%, p50=0.999987, p90=0.999999, p99=1
+  - final_reward bins: [-1,-0.75):0.02% [-0.25,0):0.03% [0,0.25):0.01% [0.25,0.5):0.03% [0.5,0.75):0.13% [0.75,1):99.78%
+  - penalty(weighted): n=12371, mean=0.00271806, min=0, max=4.00409, p50=1.325e-05, p90=0.00018435, p99=0.0517208
+  - penalty bins: [0,1e-06):12.58% [1e-06,1e-05):31.37% [1e-05,0.0001):40.89% [0.0001,0.001):11.27% [0.001,0.01):1.69% [0.01,0.1):1.62% [0.1,1):0.53% [1,10):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_014_r01.log**
+  - cfg: w_pen=0.1, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12371, zero=775 (6.26%), hist=distinct=211 top10=0:6.26% 1:5.18% 2:4.13% 4:3.52% 3:3.47% 5:3.20% 7:2.90% 6:2.75% 8:2.49% 11:2.47%
+  - immediate_reward: n=29158, mean=0.820401, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.86% [0.25,0.5):10.51% [0.5,0.75):20.04% [0.75,1):67.59%
+  - reward(before clip): n=12371, mean=-0.00254418, min=-5.00639, max=-0, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward(after clip): n=12371, mean=-0.00222017, min=-1, max=-0, clip_sat=0.03%, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward bins: [-1,-0.75):0.04% [-0.75,-0.5):0.03% [-0.5,-0.25):0.15% [-0.25,0):89.98% [0,0.25):9.81%
+  - penalty(weighted): n=12371, mean=0.00254418, min=0, max=5.00639, p50=1.259e-05, p90=0.00018249, p99=0.0442871
+  - penalty bins: [0,1e-06):12.80% [1e-06,1e-05):32.04% [1e-05,0.0001):40.38% [0.0001,0.001):11.03% [0.001,0.01):1.56% [0.01,0.1):1.63% [0.1,1):0.53% [1,10):0.03%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_015_r01.log**
+  - cfg: w_pen=0.2, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12374, zero=757 (6.12%), hist=distinct=206 top10=0:6.12% 1:5.12% 2:4.35% 3:3.73% 4:3.59% 5:3.13% 8:2.92% 6:2.77% 7:2.72% 9:2.69%
+  - immediate_reward: n=29158, mean=0.821015, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.33% [0.5,0.75):20.13% [0.75,1):67.62%
+  - reward(before clip): n=12374, mean=-0.00290738, min=-2.50622, max=-0, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward(after clip): n=12374, mean=-0.0024604, min=-1, max=-0, clip_sat=0.07%, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward bins: [-1,-0.75):0.07% [-0.75,-0.5):0.03% [-0.5,-0.25):0.06% [-0.25,0):90.14% [0,0.25):9.69%
+  - penalty(weighted): n=12374, mean=0.00290738, min=0, max=2.50622, p50=1.306e-05, p90=0.000189494, p99=0.0492454
+  - penalty bins: [0,1e-06):12.78% [1e-06,1e-05):31.42% [1e-05,0.0001):40.63% [0.0001,0.001):11.03% [0.001,0.01):1.80% [0.01,0.1):1.75% [0.1,1):0.51% [1,10):0.07%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_016_r01.log**
+  - cfg: w_pen=0.5, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12374, zero=785 (6.34%), hist=distinct=210 top10=0:6.34% 1:5.16% 2:3.77% 4:3.67% 3:3.52% 6:2.98% 5:2.93% 7:2.92% 8:2.82% 10:2.68%
+  - immediate_reward: n=29158, mean=0.820419, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.35% [0.5,0.75):20.20% [0.75,1):67.54%
+  - reward(before clip): n=12374, mean=-0.00258656, min=-2.0103, max=-0, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward(after clip): n=12374, mean=-0.00239965, min=-1, max=-0, clip_sat=0.08%, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward bins: [-1,-0.75):0.09% [-0.75,-0.5):0.03% [-0.5,-0.25):0.05% [-0.25,0):90.03% [0,0.25):9.80%
+  - penalty(weighted): n=12374, mean=0.00258656, min=0, max=2.0103, p50=1.315e-05, p90=0.000176185, p99=0.0454708
+  - penalty bins: [0,1e-06):13.02% [1e-06,1e-05):30.78% [1e-05,0.0001):41.39% [0.0001,0.001):10.94% [0.001,0.01):1.64% [0.01,0.1):1.72% [0.1,1):0.42% [1,10):0.08%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_017_r01.log**
+  - cfg: w_pen=1.0, formula=neg, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=reciprocal
+  - penalty_data: n=12365, zero=766 (6.19%), hist=distinct=222 top10=0:6.19% 1:5.21% 2:4.01% 3:3.74% 4:3.54% 5:3.37% 6:2.90% 7:2.82% 10:2.64% 8:2.52%
+  - immediate_reward: n=29158, mean=0.820887, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.82% [0.25,0.5):10.46% [0.5,0.75):20.07% [0.75,1):67.66%
+  - reward(before clip): n=12365, mean=-0.00257078, min=-5.00035, max=-0, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward(after clip): n=12365, mean=-0.00216552, min=-1, max=-0, clip_sat=0.05%, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward bins: [-1,-0.75):0.05% [-0.75,-0.5):0.05% [-0.5,-0.25):0.07% [-0.25,0):89.88% [0,0.25):9.95%
+  - penalty(weighted): n=12365, mean=0.00257078, min=0, max=5.00035, p50=1.288e-05, p90=0.000183036, p99=0.0454719
+  - penalty bins: [0,1e-06):12.94% [1e-06,1e-05):31.71% [1e-05,0.0001):40.51% [0.0001,0.001):10.62% [0.001,0.01):1.81% [0.01,0.1):1.96% [0.1,1):0.40% [1,10):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_018_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=reciprocal
+  - penalty_data: n=12357, zero=721 (5.83%), hist=distinct=205 top10=0:5.83% 1:4.98% 2:4.38% 3:3.80% 4:3.33% 5:3.23% 6:2.88% 7:2.74% 8:2.64% 10:2.46%
+  - immediate_reward: n=29158, mean=0.820296, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.43% [0.5,0.75):20.14% [0.75,1):67.52%
+  - reward(before clip): n=12357, mean=-0.00272614, min=-6.0148, max=0, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward(after clip): n=12357, mean=-0.00223462, min=-1, max=0, clip_sat=0.05%, p50=-1.3e-05, p90=-1e-06, p99=-0
+  - final_reward bins: [-1,-0.75):0.06% [-0.75,-0.5):0.03% [-0.5,-0.25):0.12% [-0.25,0):90.40% [0,0.25):9.39%
+  - penalty(weighted): n=12357, mean=0.00272614, min=0, max=6.0148, p50=1.304e-05, p90=0.000190122, p99=0.043514
+  - penalty bins: [0,1e-06):12.48% [1e-06,1e-05):31.81% [1e-05,0.0001):40.54% [0.0001,0.001):11.25% [0.001,0.01):1.71% [0.01,0.1):1.72% [0.1,1):0.45% [1,10):0.05%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_019_r01.log**
+  - cfg: w_pen=2.0, formula=net, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=reciprocal
+  - penalty_data: n=12372, zero=777 (6.28%), hist=distinct=215 top10=0:6.28% 1:5.01% 2:4.26% 3:3.73% 4:3.57% 5:3.17% 6:2.97% 7:2.93% 9:2.50% 10:2.47%
+  - immediate_reward: n=29158, mean=0.819596, min=0.01, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.48% [0.5,0.75):20.29% [0.75,1):67.32%
+  - reward(before clip): n=12372, mean=-0.00248419, min=-2.01158, max=0, p50=-1.3e-05, p90=-1e-06, p99=0
+  - final_reward(after clip): n=12372, mean=-0.00229007, min=-1, max=0, clip_sat=0.06%, p50=-1.3e-05, p90=-1e-06, p99=0
+  - final_reward bins: [-1,-0.75):0.06% [-0.75,-0.5):0.06% [-0.5,-0.25):0.07% [-0.25,0):89.99% [0,0.25):9.81%
+  - penalty(weighted): n=12372, mean=0.00248419, min=0, max=2.01157, p50=1.275e-05, p90=0.000188998, p99=0.0419921
+  - penalty bins: [0,1e-06):12.80% [1e-06,1e-05):32.08% [1e-05,0.0001):39.71% [0.0001,0.001):11.50% [0.001,0.01):1.63% [0.01,0.1):1.83% [0.1,1):0.39% [1,10):0.06%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_020_r01.log**
+  - cfg: w_pen=3.0, formula=net, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=reciprocal
+  - penalty_data: n=12376, zero=713 (5.76%), hist=distinct=206 top10=0:5.76% 1:4.97% 2:4.10% 3:3.89% 4:3.32% 6:3.21% 5:2.86% 7:2.80% 8:2.70% 10:2.65%
+  - immediate_reward: n=29158, mean=0.820769, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.35% [0.5,0.75):20.33% [0.75,1):67.43%
+  - reward(before clip): n=12376, mean=-0.00195437, min=-1.00838, max=0, p50=-1.3e-05, p90=-1e-06, p99=0
+  - final_reward(after clip): n=12376, mean=-0.00195303, min=-1, max=0, clip_sat=0.03%, p50=-1.3e-05, p90=-1e-06, p99=0
+  - final_reward bins: [-1,-0.75):0.04% [-0.75,-0.5):0.02% [-0.5,-0.25):0.10% [-0.25,0):90.64% [0,0.25):9.20%
+  - penalty(weighted): n=12376, mean=0.00195438, min=0, max=1.00838, p50=1.348e-05, p90=0.00019007, p99=0.0398335
+  - penalty bins: [0,1e-06):12.33% [1e-06,1e-05):31.38% [1e-05,0.0001):41.21% [0.0001,0.001):11.37% [0.001,0.01):1.50% [0.01,0.1):1.79% [0.1,1):0.40% [1,10):0.03%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_021_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=reciprocal
+  - penalty_data: n=12384, zero=747 (6.03%), hist=distinct=218 top10=0:6.03% 1:5.08% 2:4.01% 3:3.69% 4:3.44% 6:2.88% 7:2.88% 9:2.82% 5:2.70% 8:2.63%
+  - immediate_reward: n=29158, mean=0.820829, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.86% [0.25,0.5):10.32% [0.5,0.75):20.18% [0.75,1):67.64%
+  - reward(before clip): n=12384, mean=-1.00299, min=-12.0286, max=-1, p50=-1.00001, p90=-1, p99=-1
+  - final_reward(after clip): n=12384, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12384, mean=0.00299061, min=0, max=11.0286, p50=1.308e-05, p90=0.000179446, p99=0.0419301
+  - penalty bins: [0,1e-06):12.66% [1e-06,1e-05):31.82% [1e-05,0.0001):40.63% [0.0001,0.001):11.01% [0.001,0.01):1.79% [0.01,0.1):1.57% [0.1,1):0.49% [1,10):0.02% [10,100):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_022_r01.log**
+  - cfg: w_pen=2.0, formula=net2, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=reciprocal
+  - penalty_data: n=12386, zero=768 (6.20%), hist=distinct=212 top10=0:6.20% 1:4.91% 2:4.01% 3:3.72% 4:3.40% 5:3.29% 6:2.88% 7:2.79% 10:2.59% 9:2.57%
+  - immediate_reward: n=29158, mean=0.819205, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.46% [0.5,0.75):20.44% [0.75,1):67.19%
+  - reward(before clip): n=12386, mean=-1.00223, min=-3.00355, max=-1, p50=-1.00001, p90=-1, p99=-1
+  - final_reward(after clip): n=12386, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12386, mean=0.00223164, min=0, max=2.00355, p50=1.315e-05, p90=0.000180675, p99=0.0435835
+  - penalty bins: [0,1e-06):12.73% [1e-06,1e-05):31.18% [1e-05,0.0001):41.26% [0.0001,0.001):11.14% [0.001,0.01):1.42% [0.01,0.1):1.74% [0.1,1):0.48% [1,10):0.04%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_023_r01.log**
+  - cfg: w_pen=3.0, formula=net2, cutoff=0
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=reciprocal
+  - penalty_data: n=12394, zero=739 (5.96%), hist=distinct=207 top10=0:5.96% 1:4.92% 2:4.18% 3:3.76% 4:3.30% 5:3.20% 6:3.18% 7:2.95% 10:2.78% 8:2.61%
+  - immediate_reward: n=29158, mean=0.821488, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.88% [0.25,0.5):10.25% [0.5,0.75):19.95% [0.75,1):67.92%
+  - reward(before clip): n=12394, mean=-1.00255, min=-3.00221, max=-1, p50=-1.00001, p90=-1, p99=-1
+  - final_reward(after clip): n=12394, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12394, mean=0.00254755, min=0, max=2.00221, p50=1.2835e-05, p90=0.000183361, p99=0.0476469
+  - penalty bins: [0,1e-06):12.59% [1e-06,1e-05):31.85% [1e-05,0.0001):40.43% [0.0001,0.001):11.14% [0.001,0.01):1.53% [0.01,0.1):1.92% [0.1,1):0.48% [1,10):0.06%
+
+## penalty_scale = survival
+
+**Summary**
+- immediate_reward: n=816424, mean=0.818965, bins=[0,0.25):1.95% [0.25,0.5):10.58% [0.5,0.75):20.25% [0.75,1):67.22%
+- penalty_data: n=346752, zero=20646 (5.95%), hist=distinct=445 top10=0:5.95% 1:4.99% 2:4.14% 3:3.60% 4:3.41% 5:3.16% 6:2.93% 7:2.84% 8:2.71% 9:2.57%
+- final_reward(after clip): n=346752, mean=0.121786, min=-1, max=1, clip_sat=23.61%
+- final_reward bins: [-1,-0.75):21.57% [-0.75,-0.5):2.75% [-0.5,-0.25):5.37% [-0.25,0):16.57% [0,0.25):4.94% [0.25,0.5):5.74% [0.5,0.75):11.37% [0.75,1):31.69%
+- penalty(weighted) bins: [0,1e-06):6.01% [1e-06,1e-05):0.01% [1e-05,0.0001):0.07% [0.0001,0.001):0.36% [0.001,0.01):3.64% [0.01,0.1):29.40% [0.1,1):49.34% [1,10):10.53% [10,100):0.63% [100,1000):0.00%
+
+**Files**
+
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_046_r01.log**
+  - cfg: w_pen=0.1, formula=relative, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12386, zero=742 (5.99%), hist=distinct=212 top10=0:5.99% 1:4.84% 2:4.02% 4:3.79% 3:3.63% 7:3.16% 5:3.04% 9:2.85% 6:2.82% 8:2.75%
+  - immediate_reward: n=29158, mean=0.820876, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.86% [0.25,0.5):10.44% [0.5,0.75):20.07% [0.75,1):67.63%
+  - reward(before clip): n=12386, mean=-0.0402232, min=-190.653, max=1, p50=0.701714, p90=0.985127, p99=1
+  - final_reward(after clip): n=12386, mean=0.432356, min=-1, max=1, clip_sat=16.39%, p50=0.701714, p90=0.985127, p99=1
+  - final_reward bins: [-1,-0.75):11.91% [-0.75,-0.5):2.03% [-0.5,-0.25):2.56% [-0.25,0):3.85% [0,0.25):6.09% [0.25,0.5):9.94% [0.5,0.75):18.12% [0.75,1):45.50%
+  - penalty(weighted): n=12386, mean=0.570116, min=0, max=66.8057, p50=0.154557, p90=1.14029, p99=7.51538
+  - penalty bins: [0,1e-06):6.10% [1e-06,1e-05):0.01% [1e-05,0.0001):0.10% [0.0001,0.001):0.31% [0.001,0.01):3.53% [0.01,0.1):28.89% [0.1,1):49.87% [1,10):10.59% [10,100):0.61%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_047_r01.log**
+  - cfg: w_pen=0.2, formula=relative, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12403, zero=669 (5.39%), hist=distinct=210 top10=0:5.39% 1:4.89% 2:4.06% 4:3.65% 3:3.64% 5:3.32% 6:2.95% 8:2.77% 7:2.75% 9:2.52%
+  - immediate_reward: n=29158, mean=0.818808, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.60% [0.5,0.75):20.39% [0.75,1):67.08%
+  - reward(before clip): n=12403, mean=-0.09567, min=-1191.22, max=1, p50=0.690966, p90=0.98159, p99=1
+  - final_reward(after clip): n=12403, mean=0.42364, min=-1, max=1, clip_sat=15.74%, p50=0.690966, p90=0.98159, p99=1
+  - final_reward bins: [-1,-0.75):11.88% [-0.75,-0.5):2.10% [-0.5,-0.25):2.60% [-0.25,0):4.25% [0,0.25):6.24% [0.25,0.5):10.03% [0.5,0.75):18.41% [0.75,1):44.49%
+  - penalty(weighted): n=12403, mean=0.554109, min=0, max=46.2105, p50=0.154716, p90=1.10664, p99=7.3406
+  - penalty bins: [0,1e-06):5.43% [1e-06,1e-05):0.02% [1e-05,0.0001):0.07% [0.0001,0.001):0.31% [0.001,0.01):3.49% [0.01,0.1):29.50% [0.1,1):49.96% [1,10):10.62% [10,100):0.60%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_048_r01.log**
+  - cfg: w_pen=0.5, formula=relative, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12386, zero=759 (6.13%), hist=distinct=214 top10=0:6.13% 1:4.79% 2:4.39% 4:3.50% 3:3.37% 7:3.00% 5:2.96% 6:2.88% 9:2.80% 8:2.59%
+  - immediate_reward: n=29158, mean=0.819069, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.57% [0.5,0.75):20.30% [0.75,1):67.24%
+  - reward(before clip): n=12386, mean=-0.0420748, min=-255.82, max=1, p50=0.694887, p90=0.985543, p99=1
+  - final_reward(after clip): n=12386, mean=0.426813, min=-1, max=1, clip_sat=16.65%, p50=0.694887, p90=0.985543, p99=1
+  - final_reward bins: [-1,-0.75):11.99% [-0.75,-0.5):2.07% [-0.5,-0.25):2.69% [-0.25,0):4.16% [0,0.25):6.10% [0.25,0.5):9.69% [0.5,0.75):18.30% [0.75,1):44.99%
+  - penalty(weighted): n=12386, mean=0.549444, min=0, max=78.507, p50=0.150813, p90=1.12869, p99=6.69158
+  - penalty bins: [0,1e-06):6.18% [1e-06,1e-05):0.02% [1e-05,0.0001):0.08% [0.0001,0.001):0.36% [0.001,0.01):3.63% [0.01,0.1):29.21% [0.1,1):49.47% [1,10):10.53% [10,100):0.52%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_049_r01.log**
+  - cfg: w_pen=1.0, formula=relative, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=relative<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=relative<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12386, zero=723 (5.84%), hist=distinct=200 top10=0:5.84% 1:5.05% 2:4.22% 3:3.43% 4:3.29% 5:3.17% 10:2.95% 8:2.90% 7:2.86% 6:2.84%
+  - immediate_reward: n=29158, mean=0.818422, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.97% [0.25,0.5):10.59% [0.5,0.75):20.39% [0.75,1):67.05%
+  - reward(before clip): n=12386, mean=-0.142369, min=-1364.4, max=1, p50=0.713817, p90=0.984574, p99=1
+  - final_reward(after clip): n=12386, mean=0.435384, min=-1, max=1, clip_sat=16.25%, p50=0.713817, p90=0.984574, p99=1
+  - final_reward bins: [-1,-0.75):11.79% [-0.75,-0.5):2.08% [-0.5,-0.25):2.76% [-0.25,0):4.17% [0,0.25):5.72% [0.25,0.5):9.49% [0.5,0.75):17.29% [0.75,1):46.71%
+  - penalty(weighted): n=12386, mean=0.577438, min=0, max=105.071, p50=0.144186, p90=1.11366, p99=7.40891
+  - penalty bins: [0,1e-06):5.87% [1e-06,1e-05):0.02% [1e-05,0.0001):0.05% [0.0001,0.001):0.36% [0.001,0.01):3.51% [0.01,0.1):30.84% [0.1,1):48.40% [1,10):10.34% [10,100):0.60% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_050_r01.log**
+  - cfg: w_pen=0.1, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12382, zero=698 (5.64%), hist=distinct=205 top10=0:5.64% 1:5.36% 2:4.14% 3:3.84% 4:3.58% 5:3.08% 6:2.99% 7:2.86% 8:2.61% 10:2.51%
+  - immediate_reward: n=29158, mean=0.820311, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.89% [0.25,0.5):10.48% [0.5,0.75):20.07% [0.75,1):67.56%
+  - reward(before clip): n=12382, mean=-0.132023, min=-121.554, max=1, p50=0.691461, p90=0.97934, p99=1
+  - final_reward(after clip): n=12382, mean=0.413956, min=-1, max=1, clip_sat=16.94%, p50=0.691461, p90=0.97934, p99=1
+  - final_reward bins: [-1,-0.75):12.92% [-0.75,-0.5):1.85% [-0.5,-0.25):2.70% [-0.25,0):3.88% [0,0.25):5.72% [0.25,0.5):9.88% [0.5,0.75):18.40% [0.75,1):44.65%
+  - penalty(weighted): n=12382, mean=0.566012, min=0, max=61.2768, p50=0.154269, p90=1.14132, p99=7.50069
+  - penalty bins: [0,1e-06):5.65% [1e-06,1e-05):0.02% [1e-05,0.0001):0.08% [0.0001,0.001):0.40% [0.001,0.01):3.76% [0.01,0.1):29.31% [0.1,1):49.49% [1,10):10.68% [10,100):0.61%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_051_r01.log**
+  - cfg: w_pen=0.2, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12393, zero=749 (6.04%), hist=distinct=218 top10=0:6.04% 1:4.85% 2:3.95% 3:3.74% 5:3.53% 4:3.11% 6:3.07% 8:2.77% 7:2.62% 9:2.47%
+  - immediate_reward: n=29158, mean=0.81854, min=0.005, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.68% [0.5,0.75):20.25% [0.75,1):67.14%
+  - reward(before clip): n=12393, mean=-0.166214, min=-97.8307, max=1, p50=0.692265, p90=0.980834, p99=1
+  - final_reward(after clip): n=12393, mean=0.409552, min=-1, max=1, clip_sat=17.45%, p50=0.692265, p90=0.980834, p99=1
+  - final_reward bins: [-1,-0.75):12.89% [-0.75,-0.5):2.32% [-0.5,-0.25):2.62% [-0.25,0):3.72% [0,0.25):5.87% [0.25,0.5):9.82% [0.5,0.75):18.41% [0.75,1):44.33%
+  - penalty(weighted): n=12393, mean=0.583107, min=0, max=49.4154, p50=0.153868, p90=1.1381, p99=8.17629
+  - penalty bins: [0,1e-06):6.08% [1e-05,0.0001):0.09% [0.0001,0.001):0.31% [0.001,0.01):3.68% [0.01,0.1):28.70% [0.1,1):49.75% [1,10):10.70% [10,100):0.69%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_052_r01.log**
+  - cfg: w_pen=0.5, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12403, zero=698 (5.63%), hist=distinct=216 top10=0:5.63% 1:4.93% 2:4.09% 3:3.43% 4:3.30% 6:2.96% 5:2.92% 7:2.81% 8:2.78% 10:2.54%
+  - immediate_reward: n=29158, mean=0.818763, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.94% [0.25,0.5):10.58% [0.5,0.75):20.33% [0.75,1):67.15%
+  - reward(before clip): n=12403, mean=-0.174714, min=-148.968, max=1, p50=0.691308, p90=0.978276, p99=1
+  - final_reward(after clip): n=12403, mean=0.412272, min=-1, max=1, clip_sat=17.15%, p50=0.691308, p90=0.978276, p99=1
+  - final_reward bins: [-1,-0.75):12.90% [-0.75,-0.5):1.84% [-0.5,-0.25):2.52% [-0.25,0):4.08% [0,0.25):6.00% [0.25,0.5):9.85% [0.5,0.75):18.60% [0.75,1):44.22%
+  - penalty(weighted): n=12403, mean=0.587357, min=0, max=74.9839, p50=0.154346, p90=1.17651, p99=8.03055
+  - penalty bins: [0,1e-06):5.69% [1e-06,1e-05):0.02% [1e-05,0.0001):0.10% [0.0001,0.001):0.35% [0.001,0.01):3.47% [0.01,0.1):28.57% [0.1,1):50.32% [1,10):10.81% [10,100):0.65%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_053_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12406, zero=709 (5.71%), hist=distinct=207 top10=0:5.71% 1:5.14% 2:3.52% 3:3.34% 4:3.33% 5:3.18% 6:2.93% 7:2.81% 9:2.79% 8:2.57%
+  - immediate_reward: n=29158, mean=0.817113, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.99% [0.25,0.5):10.77% [0.5,0.75):20.40% [0.75,1):66.84%
+  - reward(before clip): n=12406, mean=-0.135329, min=-108.397, max=1, p50=0.698533, p90=0.978287, p99=1
+  - final_reward(after clip): n=12406, mean=0.420872, min=-1, max=1, clip_sat=16.85%, p50=0.698533, p90=0.978287, p99=1
+  - final_reward bins: [-1,-0.75):12.78% [-0.75,-0.5):1.99% [-0.5,-0.25):2.60% [-0.25,0):3.64% [0,0.25):5.44% [0.25,0.5):9.67% [0.5,0.75):18.71% [0.75,1):45.17%
+  - penalty(weighted): n=12406, mean=0.567664, min=0, max=54.6984, p50=0.150734, p90=1.11417, p99=7.57611
+  - penalty bins: [0,1e-06):5.72% [1e-05,0.0001):0.08% [0.0001,0.001):0.35% [0.001,0.01):3.53% [0.01,0.1):29.81% [0.1,1):49.39% [1,10):10.46% [10,100):0.66%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_054_r01.log**
+  - cfg: w_pen=0.1, formula=one_minus, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12361, zero=748 (6.05%), hist=distinct=199 top10=0:6.05% 1:4.79% 2:4.17% 3:3.93% 4:3.22% 5:3.20% 8:3.03% 6:2.75% 7:2.69% 10:2.55%
+  - immediate_reward: n=29158, mean=0.820219, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.87% [0.25,0.5):10.52% [0.5,0.75):20.10% [0.75,1):67.51%
+  - reward(before clip): n=12361, mean=0.45948, min=-52.4714, max=1, p50=0.849826, p90=0.990287, p99=1
+  - final_reward(after clip): n=12361, mean=0.633583, min=-1, max=1, clip_sat=11.50%, p50=0.849826, p90=0.990287, p99=1
+  - final_reward bins: [-1,-0.75):6.32% [-0.75,-0.5):1.11% [-0.5,-0.25):1.43% [-0.25,0):2.09% [0,0.25):3.57% [0.25,0.5):6.48% [0.5,0.75):15.43% [0.75,1):63.58%
+  - penalty(weighted): n=12361, mean=0.54052, min=0, max=53.4714, p50=0.150174, p90=1.11594, p99=6.81631
+  - penalty bins: [0,1e-06):6.10% [1e-05,0.0001):0.07% [0.0001,0.001):0.40% [0.001,0.01):3.54% [0.01,0.1):29.36% [0.1,1):49.59% [1,10):10.46% [10,100):0.49%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_055_r01.log**
+  - cfg: w_pen=0.2, formula=one_minus, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12378, zero=722 (5.83%), hist=distinct=210 top10=0:5.83% 1:5.03% 2:4.02% 3:3.52% 4:3.51% 5:3.27% 7:2.81% 8:2.71% 6:2.71% 9:2.58%
+  - immediate_reward: n=29158, mean=0.81982, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.53% [0.5,0.75):20.12% [0.75,1):67.40%
+  - reward(before clip): n=12378, mean=0.448629, min=-161.668, max=1, p50=0.849546, p90=0.989377, p99=1
+  - final_reward(after clip): n=12378, mean=0.639068, min=-1, max=1, clip_sat=11.18%, p50=0.849546, p90=0.989377, p99=1
+  - final_reward bins: [-1,-0.75):5.99% [-0.75,-0.5):1.19% [-0.5,-0.25):1.45% [-0.25,0):1.89% [0,0.25):3.70% [0.25,0.5):6.30% [0.5,0.75):15.64% [0.75,1):63.84%
+  - penalty(weighted): n=12378, mean=0.551371, min=0, max=162.668, p50=0.150454, p90=1.05592, p99=6.91815
+  - penalty bins: [0,1e-06):5.92% [1e-05,0.0001):0.02% [0.0001,0.001):0.28% [0.001,0.01):3.57% [0.01,0.1):29.52% [0.1,1):50.17% [1,10):10.02% [10,100):0.49% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_056_r01.log**
+  - cfg: w_pen=0.5, formula=one_minus, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12392, zero=787 (6.35%), hist=distinct=211 top10=0:6.35% 1:4.98% 2:4.06% 4:3.49% 3:3.22% 5:3.07% 6:3.03% 7:2.90% 9:2.72% 8:2.49%
+  - immediate_reward: n=29158, mean=0.818474, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.54% [0.5,0.75):20.36% [0.75,1):67.12%
+  - reward(before clip): n=12392, mean=0.39431, min=-113.103, max=1, p50=0.850124, p90=0.991182, p99=1
+  - final_reward(after clip): n=12392, mean=0.629619, min=-1, max=1, clip_sat=12.16%, p50=0.850124, p90=0.991182, p99=1
+  - final_reward bins: [-1,-0.75):6.56% [-0.75,-0.5):0.98% [-0.5,-0.25):1.78% [-0.25,0):1.97% [0,0.25):3.62% [0.25,0.5):6.26% [0.5,0.75):15.28% [0.75,1):63.54%
+  - penalty(weighted): n=12392, mean=0.60569, min=0, max=114.103, p50=0.149877, p90=1.17161, p99=8.20047
+  - penalty bins: [0,1e-06):6.42% [1e-06,1e-05):0.02% [1e-05,0.0001):0.07% [0.0001,0.001):0.37% [0.001,0.01):3.51% [0.01,0.1):29.11% [0.1,1):49.22% [1,10):10.52% [10,100):0.76% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_057_r01.log**
+  - cfg: w_pen=1.0, formula=one_minus, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=one_minus<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=one_minus<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12376, zero=770 (6.22%), hist=distinct=215 top10=0:6.22% 1:4.81% 2:3.93% 3:3.56% 4:3.49% 6:3.24% 7:2.96% 5:2.90% 8:2.83% 9:2.67%
+  - immediate_reward: n=29158, mean=0.818537, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.98% [0.25,0.5):10.56% [0.5,0.75):20.41% [0.75,1):67.05%
+  - reward(before clip): n=12376, mean=0.389383, min=-60.9514, max=1, p50=0.849903, p90=0.990979, p99=1
+  - final_reward(after clip): n=12376, mean=0.620558, min=-1, max=1, clip_sat=12.56%, p50=0.849903, p90=0.990979, p99=1
+  - final_reward bins: [-1,-0.75):7.00% [-0.75,-0.5):1.09% [-0.5,-0.25):1.66% [-0.25,0):2.28% [0,0.25):3.32% [0.25,0.5):6.34% [0.5,0.75):15.00% [0.75,1):63.32%
+  - penalty(weighted): n=12376, mean=0.610617, min=0, max=61.9514, p50=0.150097, p90=1.21439, p99=7.54239
+  - penalty bins: [0,1e-06):6.28% [1e-06,1e-05):0.02% [1e-05,0.0001):0.05% [0.0001,0.001):0.32% [0.001,0.01):3.76% [0.01,0.1):29.15% [0.1,1):48.42% [1,10):11.33% [10,100):0.69%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_058_r01.log**
+  - cfg: w_pen=0.1, formula=neg, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.1<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12408, zero=723 (5.83%), hist=distinct=224 top10=0:5.83% 1:5.14% 2:4.30% 3:3.55% 4:3.43% 6:3.09% 5:2.98% 8:2.86% 7:2.82% 9:2.62%
+  - immediate_reward: n=29158, mean=0.819604, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.49% [0.5,0.75):20.05% [0.75,1):67.49%
+  - reward(before clip): n=12408, mean=-0.591925, min=-53.5326, max=-0, p50=-0.154354, p90=-0.0103745, p99=-0
+  - final_reward(after clip): n=12408, mean=-0.295043, min=-1, max=-0, clip_sat=11.39%, p50=-0.154354, p90=-0.0103745, p99=-0
+  - final_reward bins: [-1,-0.75):15.23% [-0.75,-0.5):6.42% [-0.5,-0.25):15.57% [-0.25,0):56.89% [0,0.25):5.88%
+  - penalty(weighted): n=12408, mean=0.591925, min=0, max=53.5326, p50=0.154354, p90=1.17179, p99=7.70041
+  - penalty bins: [0,1e-06):5.88% [1e-05,0.0001):0.09% [0.0001,0.001):0.38% [0.001,0.01):3.51% [0.01,0.1):28.82% [0.1,1):49.93% [1,10):10.71% [10,100):0.68%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_059_r01.log**
+  - cfg: w_pen=0.2, formula=neg, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12381, zero=708 (5.72%), hist=distinct=210 top10=0:5.72% 1:4.83% 2:4.39% 3:3.58% 5:3.46% 4:3.28% 6:2.90% 8:2.83% 7:2.71% 9:2.67%
+  - immediate_reward: n=29158, mean=0.819928, min=0, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.92% [0.25,0.5):10.61% [0.5,0.75):20.03% [0.75,1):67.44%
+  - reward(before clip): n=12381, mean=-0.548566, min=-58.5367, max=-0, p50=-0.147912, p90=-0.0106, p99=-0
+  - final_reward(after clip): n=12381, mean=-0.292714, min=-1, max=-0, clip_sat=11.54%, p50=-0.147912, p90=-0.0106, p99=-0
+  - final_reward bins: [-1,-0.75):15.07% [-0.75,-0.5):6.38% [-0.5,-0.25):14.87% [-0.25,0):57.91% [0,0.25):5.77%
+  - penalty(weighted): n=12381, mean=0.548566, min=0, max=58.5367, p50=0.147912, p90=1.15135, p99=6.48046
+  - penalty bins: [0,1e-06):5.77% [1e-05,0.0001):0.08% [0.0001,0.001):0.46% [0.001,0.01):3.49% [0.01,0.1):29.46% [0.1,1):49.20% [1,10):11.06% [10,100):0.48%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_060_r01.log**
+  - cfg: w_pen=0.5, formula=neg, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.5<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12368, zero=725 (5.86%), hist=distinct=211 top10=0:5.86% 1:5.83% 2:4.42% 4:3.44% 3:3.32% 5:2.97% 6:2.89% 7:2.87% 8:2.60% 9:2.51%
+  - immediate_reward: n=29158, mean=0.819606, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.44% [0.5,0.75):20.19% [0.75,1):67.42%
+  - reward(before clip): n=12368, mean=-0.563263, min=-62.8815, max=-0, p50=-0.149761, p90=-0.0090456, p99=-0
+  - final_reward(after clip): n=12368, mean=-0.29151, min=-1, max=-0, clip_sat=11.32%, p50=-0.149761, p90=-0.0090456, p99=-0
+  - final_reward bins: [-1,-0.75):14.87% [-0.75,-0.5):6.57% [-0.5,-0.25):14.94% [-0.25,0):57.67% [0,0.25):5.94%
+  - penalty(weighted): n=12368, mean=0.563263, min=0, max=62.8815, p50=0.149761, p90=1.14181, p99=7.36881
+  - penalty bins: [0,1e-06):5.94% [1e-05,0.0001):0.10% [0.0001,0.001):0.47% [0.001,0.01):3.87% [0.01,0.1):28.78% [0.1,1):49.52% [1,10):10.66% [10,100):0.65%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_061_r01.log**
+  - cfg: w_pen=1.0, formula=neg, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=neg<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=neg<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12393, zero=719 (5.80%), hist=distinct=215 top10=0:5.80% 1:5.03% 2:4.08% 4:3.44% 3:3.26% 6:3.09% 5:3.03% 7:2.70% 10:2.61% 8:2.59%
+  - immediate_reward: n=29158, mean=0.819303, min=0.005, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.91% [0.25,0.5):10.44% [0.5,0.75):20.48% [0.75,1):67.17%
+  - reward(before clip): n=12393, mean=-0.570021, min=-52.4771, max=-0, p50=-0.151342, p90=-0.009796, p99=-0
+  - final_reward(after clip): n=12393, mean=-0.290861, min=-1, max=-0, clip_sat=11.18%, p50=-0.151342, p90=-0.009796, p99=-0
+  - final_reward bins: [-1,-0.75):14.79% [-0.75,-0.5):6.09% [-0.5,-0.25):15.63% [-0.25,0):57.61% [0,0.25):5.88%
+  - penalty(weighted): n=12393, mean=0.570021, min=0, max=52.4771, p50=0.151342, p90=1.12591, p99=7.49099
+  - penalty bins: [0,1e-06):5.88% [1e-05,0.0001):0.06% [0.0001,0.001):0.46% [0.001,0.01):3.66% [0.01,0.1):29.36% [0.1,1):49.40% [1,10):10.51% [10,100):0.68%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_062_r01.log**
+  - cfg: w_pen=1.0, formula=net, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12375, zero=753 (6.08%), hist=distinct=208 top10=0:6.08% 1:4.61% 2:4.32% 3:3.79% 5:3.35% 4:3.20% 7:3.13% 6:3.10% 8:2.62% 10:2.55%
+  - immediate_reward: n=29158, mean=0.819309, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.56% [0.5,0.75):20.29% [0.75,1):67.20%
+  - reward(before clip): n=12375, mean=-0.572931, min=-145.598, max=0, p50=-0.147255, p90=-0.0098668, p99=0
+  - final_reward(after clip): n=12375, mean=-0.290661, min=-1, max=0, clip_sat=11.23%, p50=-0.147255, p90=-0.0098668, p99=0
+  - final_reward bins: [-1,-0.75):14.92% [-0.75,-0.5):6.30% [-0.5,-0.25):15.26% [-0.25,0):57.41% [0,0.25):6.11%
+  - penalty(weighted): n=12375, mean=0.572931, min=0, max=145.598, p50=0.147255, p90=1.13184, p99=7.34911
+  - penalty bins: [0,1e-06):6.11% [1e-06,1e-05):0.01% [1e-05,0.0001):0.06% [0.0001,0.001):0.31% [0.001,0.01):3.56% [0.01,0.1):30.10% [0.1,1):48.63% [1,10):10.59% [10,100):0.63% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_063_r01.log**
+  - cfg: w_pen=2.0, formula=net, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12387, zero=742 (5.99%), hist=distinct=209 top10=0:5.99% 1:4.94% 2:3.88% 4:3.75% 3:3.58% 5:3.26% 6:3.15% 7:2.98% 8:2.96% 11:2.53%
+  - immediate_reward: n=29158, mean=0.817817, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.79% [0.5,0.75):20.32% [0.75,1):66.95%
+  - reward(before clip): n=12387, mean=-0.560213, min=-68.8153, max=0, p50=-0.148239, p90=-0.0094032, p99=0
+  - final_reward(after clip): n=12387, mean=-0.289316, min=-1, max=0, clip_sat=11.19%, p50=-0.148239, p90=-0.0094032, p99=0
+  - final_reward bins: [-1,-0.75):14.81% [-0.75,-0.5):6.23% [-0.5,-0.25):15.19% [-0.25,0):57.74% [0,0.25):6.02%
+  - penalty(weighted): n=12387, mean=0.560213, min=0, max=68.8153, p50=0.148239, p90=1.12984, p99=7.6229
+  - penalty bins: [0,1e-06):6.02% [1e-06,1e-05):0.03% [1e-05,0.0001):0.06% [0.0001,0.001):0.44% [0.001,0.01):3.71% [0.01,0.1):29.70% [0.1,1):48.84% [1,10):10.58% [10,100):0.61%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_064_r01.log**
+  - cfg: w_pen=3.0, formula=net, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12330, zero=831 (6.74%), hist=distinct=206 top10=0:6.74% 1:4.61% 2:4.23% 3:3.91% 4:3.29% 5:3.13% 6:2.85% 10:2.83% 7:2.77% 8:2.57%
+  - immediate_reward: n=29158, mean=0.819603, min=0.01, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.55% [0.5,0.75):20.11% [0.75,1):67.39%
+  - reward(before clip): n=12330, mean=-0.580293, min=-79.4824, max=0, p50=-0.14758, p90=-0.0081274, p99=0
+  - final_reward(after clip): n=12330, mean=-0.285405, min=-1, max=0, clip_sat=11.02%, p50=-0.14758, p90=-0.0081274, p99=0
+  - final_reward bins: [-1,-0.75):14.31% [-0.75,-0.5):6.27% [-0.5,-0.25):15.21% [-0.25,0):57.36% [0,0.25):6.85%
+  - penalty(weighted): n=12330, mean=0.580293, min=0, max=79.4824, p50=0.14758, p90=1.09764, p99=8.04387
+  - penalty bins: [0,1e-06):6.85% [1e-05,0.0001):0.02% [0.0001,0.001):0.31% [0.001,0.01):3.50% [0.01,0.1):29.31% [0.1,1):48.99% [1,10):10.32% [10,100):0.70%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_065_r01.log**
+  - cfg: w_pen=1.0, formula=net2, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12356, zero=779 (6.30%), hist=distinct=208 top10=0:6.30% 1:5.50% 2:4.37% 3:3.85% 5:3.49% 4:3.36% 6:2.95% 7:2.86% 8:2.65% 9:2.57%
+  - immediate_reward: n=29158, mean=0.821345, min=0.005, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.34% [0.5,0.75):19.91% [0.75,1):67.80%
+  - reward(before clip): n=12356, mean=-1.57019, min=-106.529, max=-1, p50=-1.15112, p90=-1.00812, p99=-1
+  - final_reward(after clip): n=12356, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12356, mean=0.570187, min=0, max=105.529, p50=0.15112, p90=1.13186, p99=6.91993
+  - penalty bins: [0,1e-06):6.38% [1e-06,1e-05):0.04% [1e-05,0.0001):0.06% [0.0001,0.001):0.39% [0.001,0.01):3.99% [0.01,0.1):28.95% [0.1,1):48.97% [1,10):10.61% [10,100):0.60% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_066_r01.log**
+  - cfg: w_pen=2.0, formula=net2, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=2.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12386, zero=700 (5.65%), hist=distinct=217 top10=0:5.65% 1:4.93% 2:4.38% 4:3.69% 3:3.62% 5:3.37% 6:3.03% 7:2.75% 8:2.63% 9:2.57%
+  - immediate_reward: n=29158, mean=0.820514, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.95% [0.25,0.5):10.40% [0.5,0.75):20.04% [0.75,1):67.60%
+  - reward(before clip): n=12386, mean=-1.56711, min=-68.1367, max=-1, p50=-1.15201, p90=-1.01019, p99=-1
+  - final_reward(after clip): n=12386, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12386, mean=0.567112, min=0, max=67.1367, p50=0.152011, p90=1.13231, p99=7.52733
+  - penalty bins: [0,1e-06):5.76% [1e-05,0.0001):0.06% [0.0001,0.001):0.40% [0.001,0.01):3.71% [0.01,0.1):29.27% [0.1,1):49.60% [1,10):10.56% [10,100):0.64%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_067_r01.log**
+  - cfg: w_pen=3.0, formula=net2, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NET_GOOD_SCALE=1.0<br>LOH_PENALTY_NET_PENALTY_SCALE=1.0<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=net2<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=3.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=net2<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12353, zero=788 (6.38%), hist=distinct=228 top10=0:6.38% 1:5.09% 2:4.15% 3:3.60% 4:3.45% 5:3.43% 8:2.89% 6:2.84% 7:2.83% 9:2.58%
+  - immediate_reward: n=29158, mean=0.820139, min=0.005, max=1, p50=0.985, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.93% [0.25,0.5):10.53% [0.5,0.75):20.11% [0.75,1):67.44%
+  - reward(before clip): n=12353, mean=-1.58221, min=-92.181, max=-1, p50=-1.14948, p90=-1.00866, p99=-1
+  - final_reward(after clip): n=12353, mean=-1, min=-1, max=-1, clip_sat=100.00%, p50=-1, p90=-1, p99=-1
+  - final_reward bins: [-1,-0.75):100.00%
+  - penalty(weighted): n=12353, mean=0.582214, min=0, max=91.181, p50=0.149478, p90=1.10739, p99=7.98298
+  - penalty bins: [0,1e-06):6.47% [1e-06,1e-05):0.01% [1e-05,0.0001):0.14% [0.0001,0.001):0.34% [0.001,0.01):3.61% [0.01,0.1):29.04% [0.1,1):49.39% [1,10):10.32% [10,100):0.69%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_106_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.950, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.950
+  - penalty_data: n=12397, zero=728 (5.87%), hist=distinct=205 top10=0:5.87% 1:4.94% 2:4.05% 3:3.93% 4:3.40% 5:3.24% 6:2.87% 7:2.72% 8:2.58% 10:2.52%
+  - immediate_reward: n=29158, mean=0.817354, min=0, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.03% [0.25,0.5):10.76% [0.5,0.75):20.33% [0.75,1):66.88%
+  - reward(before clip): n=12397, mean=-0.110096, min=-199.585, max=1, p50=0.706661, p90=0.979912, p99=1
+  - final_reward(after clip): n=12397, mean=0.427019, min=-1, max=1, clip_sat=16.88%, p50=0.706661, p90=0.979912, p99=1
+  - final_reward bins: [-1,-0.75):12.30% [-0.75,-0.5):1.97% [-0.5,-0.25):2.75% [-0.25,0):3.57% [0,0.25):5.90% [0.25,0.5):9.62% [0.5,0.75):18.15% [0.75,1):45.74%
+  - penalty(weighted): n=12397, mean=0.555048, min=0, max=100.292, p50=0.146669, p90=1.0732, p99=6.76468
+  - penalty bins: [0,1e-06):6.05% [0.0001,0.001):0.29% [0.001,0.01):3.65% [0.01,0.1):30.00% [0.1,1):49.18% [1,10):10.26% [10,100):0.56% [100,1000):0.01%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_107_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12392, zero=709 (5.72%), hist=distinct=202 top10=0:5.72% 1:4.71% 2:4.23% 3:3.68% 4:3.38% 5:3.11% 8:2.81% 7:2.73% 9:2.61% 6:2.60%
+  - immediate_reward: n=29158, mean=0.817437, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.04% [0.25,0.5):10.63% [0.5,0.75):20.43% [0.75,1):66.90%
+  - reward(before clip): n=12392, mean=-0.121284, min=-145.297, max=1, p50=0.701843, p90=0.978581, p99=1
+  - final_reward(after clip): n=12392, mean=0.420545, min=-1, max=1, clip_sat=16.68%, p50=0.701843, p90=0.978581, p99=1
+  - final_reward bins: [-1,-0.75):12.46% [-0.75,-0.5):2.10% [-0.5,-0.25):2.84% [-0.25,0):3.52% [0,0.25):5.79% [0.25,0.5):9.51% [0.5,0.75):18.97% [0.75,1):44.80%
+  - penalty(weighted): n=12392, mean=0.560642, min=0, max=73.1486, p50=0.149079, p90=1.09632, p99=7.35707
+  - penalty bins: [0,1e-06):5.75% [1e-05,0.0001):0.03% [0.0001,0.001):0.33% [0.001,0.01):3.62% [0.01,0.1):29.33% [0.1,1):50.00% [1,10):10.32% [10,100):0.61%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_108_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=32, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=32<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12360, zero=777 (6.29%), hist=distinct=202 top10=0:6.29% 1:5.23% 2:4.43% 3:3.69% 6:3.26% 7:3.05% 4:3.04% 5:2.82% 8:2.60% 9:2.52%
+  - immediate_reward: n=29158, mean=0.818953, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):1.96% [0.25,0.5):10.65% [0.5,0.75):20.15% [0.75,1):67.24%
+  - reward(before clip): n=12360, mean=-0.103746, min=-122.398, max=1, p50=0.734603, p90=0.98485, p99=1
+  - final_reward(after clip): n=12360, mean=0.451001, min=-1, max=1, clip_sat=16.76%, p50=0.734603, p90=0.98485, p99=1
+  - final_reward bins: [-1,-0.75):11.91% [-0.75,-0.5):2.02% [-0.5,-0.25):2.55% [-0.25,0):3.49% [0,0.25):4.94% [0.25,0.5):8.81% [0.5,0.75):18.00% [0.75,1):48.28%
+  - penalty(weighted): n=12360, mean=0.551873, min=0, max=61.699, p50=0.132698, p90=1.05387, p99=7.594
+  - penalty bins: [0,1e-06):6.32% [1e-06,1e-05):0.08% [1e-05,0.0001):0.19% [0.0001,0.001):0.43% [0.001,0.01):4.13% [0.01,0.1):31.57% [0.1,1):46.84% [1,10):9.73% [10,100):0.71%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_109_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12386, zero=743 (6.00%), hist=distinct=211 top10=0:6.00% 1:4.87% 2:4.23% 4:3.59% 3:3.56% 5:3.09% 8:2.68% 7:2.66% 6:2.65% 12:2.53%
+  - immediate_reward: n=29158, mean=0.817704, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.04% [0.25,0.5):10.70% [0.5,0.75):20.24% [0.75,1):67.02%
+  - reward(before clip): n=12386, mean=-0.17744, min=-165.591, max=1, p50=0.695016, p90=0.980351, p99=1
+  - final_reward(after clip): n=12386, mean=0.41961, min=-1, max=1, clip_sat=17.05%, p50=0.695016, p90=0.980351, p99=1
+  - final_reward bins: [-1,-0.75):12.64% [-0.75,-0.5):1.92% [-0.5,-0.25):2.71% [-0.25,0):3.55% [0,0.25):6.11% [0.25,0.5):9.73% [0.5,0.75):18.57% [0.75,1):44.77%
+  - penalty(weighted): n=12386, mean=0.58872, min=0, max=83.2954, p50=0.152492, p90=1.10624, p99=7.99736
+  - penalty bins: [0,1e-06):6.06% [1e-06,1e-05):0.03% [1e-05,0.0001):0.08% [0.0001,0.001):0.23% [0.001,0.01):3.71% [0.01,0.1):29.34% [0.1,1):49.55% [1,10):10.32% [10,100):0.69%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_110_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=500
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=500<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12409, zero=756 (6.09%), hist=distinct=209 top10=0:6.09% 1:5.10% 3:3.72% 2:3.68% 4:3.44% 5:3.14% 7:2.83% 8:2.75% 9:2.66% 6:2.64%
+  - immediate_reward: n=29158, mean=0.816137, min=0.01, max=1, p50=0.995, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.00% [0.25,0.5):10.91% [0.5,0.75):20.48% [0.75,1):66.61%
+  - reward(before clip): n=12409, mean=-0.153362, min=-119.77, max=1, p50=0.698772, p90=0.980171, p99=1
+  - final_reward(after clip): n=12409, mean=0.41189, min=-1, max=1, clip_sat=17.55%, p50=0.698772, p90=0.980171, p99=1
+  - final_reward bins: [-1,-0.75):13.08% [-0.75,-0.5):2.06% [-0.5,-0.25):2.60% [-0.25,0):3.68% [0,0.25):5.87% [0.25,0.5):9.69% [0.5,0.75):18.08% [0.75,1):44.93%
+  - penalty(weighted): n=12409, mean=0.576681, min=0, max=60.3849, p50=0.150614, p90=1.16815, p99=7.39329
+  - penalty bins: [0,1e-06):6.14% [1e-05,0.0001):0.05% [0.0001,0.001):0.39% [0.001,0.01):3.45% [0.01,0.1):29.23% [0.1,1):49.33% [1,10):10.73% [10,100):0.68%
+- **ac_sb3_bestcfg_penalty_3t_3m_20260207_000001__1063_111_r01.log**
+  - cfg: w_pen=1.0, formula=centered, cutoff=0, dmax=400000, q=0.990, bins=64, min_count=1000
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_BASELINE_DECAY=0.99<br>LOH_PENALTY_CUTOFF=0<br>LOH_PENALTY_DMAX=400000<br>LOH_PENALTY_EMPTY_AS_GOOD=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=survival<br>LOH_PENALTY_NO_EVICT_REWARD=keep<br>LOH_PENALTY_REFINE_ON_LATE=1<br>LOH_PENALTY_REWARD_FORMULA=centered<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>bins=64<br>byte_penalty=0.000<br>dmax=400000<br>min_count=1000<br>obj_penalty=1.000<br>penalty_entry_size=32<br>penalty_reward_formula=centered<br>penalty_scale=survival<br>q=0.990
+  - penalty_data: n=12419, zero=691 (5.56%), hist=distinct=212 top10=0:5.56% 1:4.94% 2:4.19% 3:3.55% 4:3.11% 5:3.03% 6:2.90% 7:2.80% 9:2.68% 8:2.50%
+  - immediate_reward: n=29158, mean=0.817301, min=0.005, max=1, p50=1, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):2.04% [0.25,0.5):10.59% [0.5,0.75):20.53% [0.75,1):66.84%
+  - reward(before clip): n=12419, mean=-0.191394, min=-110.385, max=1, p50=0.690033, p90=0.977749, p99=1
+  - final_reward(after clip): n=12419, mean=0.409233, min=-1, max=1, clip_sat=16.87%, p50=0.690033, p90=0.977749, p99=1
+  - final_reward bins: [-1,-0.75):12.96% [-0.75,-0.5):2.13% [-0.5,-0.25):2.79% [-0.25,0):3.80% [0,0.25):5.74% [0.25,0.5):9.53% [0.5,0.75):18.92% [0.75,1):44.13%
+  - penalty(weighted): n=12419, mean=0.595697, min=0, max=55.6925, p50=0.154983, p90=1.1335, p99=8.0293
+  - penalty bins: [0,1e-06):5.56% [1e-06,1e-05):0.01% [1e-05,0.0001):0.05% [0.0001,0.001):0.27% [0.001,0.01):3.74% [0.01,0.1):28.91% [0.1,1):50.16% [1,10):10.57% [10,100):0.73%

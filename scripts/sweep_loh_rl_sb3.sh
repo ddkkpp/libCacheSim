@@ -12,7 +12,7 @@ configs.txt format:
   - 行内写 shell 风格的 KEY=VALUE，用空格分隔
 
 Example line:
-  LOH_RL_ALGO=TD3 LOH_SCORE_USE_COMPOUND=1 LOH_ACTION_SCALE=3 LOH_SOFTMAX_TEMP=0.3
+  LOH_RL_ALGO=TD3 LOH_SCORE_USE_COMPOUND=1 LOH_ACTION_SCALE=3
 
 Outputs:
   - sweeps/<SWEEP_ID>/results.csv   汇总表
@@ -319,3 +319,16 @@ echo "[sweep] Done."
 echo "[sweep] Results: ${RESULTS_CSV}"
 echo "[sweep] Summary:  ${SUMMARY_CSV}"
 echo "[sweep] Runs:    ${RUNS_TXT}"
+
+# 可选：自动把本次 sweep 的 results.csv 追加到测试汇总（按 trace 分组）
+# 默认开启；如不需要可设 SWEEP_APPEND_TO_MD=0
+SWEEP_APPEND_TO_MD=${SWEEP_APPEND_TO_MD:-1}
+SUMMARY_MD=${SUMMARY_MD:-LOH_TESTED_CONFIGS_SUMMARY.md}
+if [[ "${SWEEP_APPEND_TO_MD}" == "1" && -f "${SUMMARY_MD}" ]]; then
+  python3 scripts/append_sweep_results_to_summary.py \
+    --summary-md "${SUMMARY_MD}" \
+    --trace "${TRACE_FILE}" \
+    --results "${RESULTS_CSV}" \
+    --sweep-id "${SWEEP_ID}" \
+    --results-link "${RESULTS_CSV}"
+fi

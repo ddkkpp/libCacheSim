@@ -2,10 +2,14 @@
 """Collect root-level cachesim/ac sb3 logs and inject them into LOH_TESTED_CONFIGS_SUMMARY.md.
 
 This script is intentionally conservative:
-- Only considers root-level files matching cachesim_sb3_MMDD_HHMMSS.log
+- Considers root-level files matching cachesim_sb3_*.log
 - Extracts metrics from the *final* 'LOH-OMR ... miss ratio ... byte miss ratio ... throughput ... MQPS' line
 - Extracts a small set of config lines from the head of cachesim/ac logs
 - Filters to req>=3,000,000 (to avoid tiny sanity runs dominating the summary)
+
+Notes:
+- The injected blocks are marker-based (ROOT_LOG_INDEX_* and ROOT_LOGS_*).
+- When regenerating, we preserve existing per-run `note` cells in the global index.
 
 Usage:
   python3 scripts/collect_root_logs_into_summary.py
@@ -28,12 +32,11 @@ SUMMARY_MD = REPO_ROOT / "LOH_TESTED_CONFIGS_SUMMARY.md"
 @dataclass(frozen=True)
 class RootRun:
     date_yyyymmdd: str
-    mmdd_hhmmss: str
+    run_id: str
     trace_path: str
     req_count: int
     omr: str
     bmr: str
-    mqps: str
     cachesim_log: str
     ac_log: str | None
     rl_update_interval: int | None
@@ -61,7 +64,8 @@ class RootRun:
     ac_notes: list[str]
 
 
-_MMDD_HHMMSS_RE = re.compile(r"^cachesim_sb3_(?P<mmdd>\d{4})_(?P<hhmmss>\d{6})\.log$")
+_CACHESIM_LOG_RE = re.compile(r"^cachesim_sb3_(?P<run>.+)\.log$")
+_MMDD_PREFIX_RE = re.compile(r"^(?P<mmdd>\d{4})(?:_|$)")
 
 _METRIC_RE = re.compile(
     r"(?P<trace>\S+)\s+LOH-OMR\b.*?,\s*(?P<req>\d+)\s+req,\s*miss ratio\s+(?P<omr>\d+\.\d+),\s+byte miss ratio\s+(?P<bmr>\d+\.\d+),\s+throughput\s+(?P<mqps>\d+\.\d+)\s+MQPS",
@@ -89,6 +93,18 @@ def infer_year_for_mmdd(mmdd: str) -> int:
 def to_yyyymmdd(mmdd: str) -> str:
     year = infer_year_for_mmdd(mmdd)
     return f"{year}{mmdd}"
+
+
+def infer_date_from_run_id(run_id: str, log_path: Path) -> str:
+    m = _MMDD_PREFIX_RE.match(run_id)
+    if m:
+        return to_yyyymmdd(m.group("mmdd"))
+
+    try:
+        d = date.fromtimestamp(log_path.stat().st_mtime)
+        return f"{d.year:04d}{d.month:02d}{d.day:02d}"
+    except Exception:
+        return "unknown"
 
 
 def extract_last_metric_line(log_path: Path) -> tuple[str, int, str, str, str] | None:
@@ -365,18 +381,17 @@ def parse_ac_cfg(lines: list[str]) -> tuple[
 
 def collect_root_runs() -> list[RootRun]:
     root = REPO_ROOT
-    cachesim_logs = sorted(root.glob("cachesim_sb3_????_??????.log"))
+    cachesim_logs = sorted(root.glob("cachesim_sb3_*.log"))
 
     runs: list[RootRun] = []
     for log_path in cachesim_logs:
         name = log_path.name
-        match = _MMDD_HHMMSS_RE.match(name)
+        match = _CACHESIM_LOG_RE.match(name)
         if not match:
             continue
 
-        mmdd = match.group("mmdd")
-        hhmmss = match.group("hhmmss")
-        yyyymmdd = to_yyyymmdd(mmdd)
+        run_id = match.group("run")
+        yyyymmdd = infer_date_from_run_id(run_id, log_path)
 
         metric = extract_last_metric_line(log_path)
         if not metric:
@@ -407,7 +422,7 @@ def collect_root_runs() -> list[RootRun]:
             cachesim_notes,
         ) = parse_cachesim_cfg(cachesim_head)
 
-        ac_name = f"ac_sb3_{mmdd}_{hhmmss}.log"
+        ac_name = f"ac_sb3_{run_id}.log"
         ac_path = root / ac_name
         algo: str | None = None
         batch_size: int | None = None
@@ -435,12 +450,11 @@ def collect_root_runs() -> list[RootRun]:
         runs.append(
             RootRun(
                 date_yyyymmdd=yyyymmdd,
-                mmdd_hhmmss=f"{mmdd}_{hhmmss}",
+                run_id=run_id,
                 trace_path=trace_path,
                 req_count=req_count,
                 omr=omr,
                 bmr=bmr,
-                mqps=mqps,
                 cachesim_log=log_path.name,
                 ac_log=ac_path.name if ac_path.exists() else None,
                 rl_update_interval=rl_update_interval,
@@ -470,7 +484,7 @@ def collect_root_runs() -> list[RootRun]:
         )
 
     # newest -> oldest
-    runs.sort(key=lambda r: (r.date_yyyymmdd, r.mmdd_hhmmss), reverse=True)
+    runs.sort(key=lambda r: (r.date_yyyymmdd, r.run_id), reverse=True)
     return runs
 
 
@@ -518,10 +532,10 @@ def build_index_block(runs: list[RootRun]) -> str:
     lines: list[str] = []
     lines.append("\n<!-- ROOT_LOG_INDEX_BEGIN -->")
     lines.append("\n### 根目录日志索引（cachesim_sb3_MMDD_HHMMSS.log）\n")
-    lines.append("说明：扫描仓库根目录下 `cachesim_sb3_MMDD_HHMMSS.log` / `ac_sb3_MMDD_HHMMSS.log`，按文件名推断日期（基于当前日期跨年），并从日志末尾的 `LOH-OMR ... miss ratio ... byte miss ratio ... throughput ... MQPS` 汇总行提取 OMR/BMR/MQPS。\n")
+    lines.append("说明：扫描仓库根目录下 `cachesim_sb3_*.log` / `ac_sb3_*.log`，按文件名推断日期（基于当前日期跨年；或回退到文件 mtime），并从日志末尾的 `LOH-OMR ... miss ratio ... byte miss ratio ... throughput ... MQPS` 汇总行提取 OMR/BMR。\n")
     lines.append("只保留 `req>=3000000` 的 runs；trace 内再按 `req` 分组。\n")
-    lines.append("| date | run | trace | req | OMR | BMR | MQPS | cfg | ref | note |")
-    lines.append("|---:|---|---|---:|---:|---:|---:|---|---|---|")
+    lines.append("| date | run | trace | req | OMR | BMR | cfg | ref | note |")
+    lines.append("| ---: | --- | --- | ---: | ---: | ---: | --- | --- | --- |")
 
     for r in runs:
         trace_id = trace_short_id(r.trace_path)
@@ -533,7 +547,7 @@ def build_index_block(runs: list[RootRun]) -> str:
         cfg_short = build_cfg_short(r)
 
         lines.append(
-            f"| {r.date_yyyymmdd} | {r.mmdd_hhmmss} | {trace_id} | {r.req_count} | {r.omr} | {r.bmr} | {r.mqps} | {cfg_short} | {ref} |  |"
+            f"| {r.date_yyyymmdd} | {r.run_id} | {trace_id} | {r.req_count} | {r.omr} | {r.bmr} | {cfg_short} | {ref} |  |"
         )
 
     lines.append("\n<!-- ROOT_LOG_INDEX_END -->\n")
@@ -551,8 +565,8 @@ def build_trace_block(trace_runs: list[RootRun]) -> str:
 
     for req, req_runs in sorted(runs_by_req.items(), key=lambda kv: kv[0], reverse=True):
         lines.append(f"#### req={req}（{len(req_runs)} 条）\n")
-        lines.append("| date | run | OMR | BMR | MQPS | cfg | ref | note |")
-        lines.append("|---:|---|---:|---:|---:|---|---|---|")
+        lines.append("| date | run | OMR | BMR | cfg | ref | note |")
+        lines.append("| ---: | --- | ---: | ---: | --- | --- | --- |")
 
         for r in req_runs:
             ref_parts = [f"[cs]({r.cachesim_log})"]
@@ -560,14 +574,14 @@ def build_trace_block(trace_runs: list[RootRun]) -> str:
                 ref_parts.append(f"[ac]({r.ac_log})")
             ref = " ".join(ref_parts)
             cfg_short = build_cfg_short(r)
-            lines.append(f"| {r.date_yyyymmdd} | {r.mmdd_hhmmss} | {r.omr} | {r.bmr} | {r.mqps} | {cfg_short} | {ref} |  |")
+            lines.append(f"| {r.date_yyyymmdd} | {r.run_id} | {r.omr} | {r.bmr} | {cfg_short} | {ref} |  |")
 
         lines.append("")
         lines.append(f"##### 逐日志明细（req={req}）\n")
 
         for r in req_runs:
-            lines.append(f"**{r.mmdd_hhmmss}**（{r.date_yyyymmdd}）\n")
-            lines.append(f"- 结果：OMR={r.omr}，BMR={r.bmr}，MQPS={r.mqps}")
+            lines.append(f"**{r.run_id}**（{r.date_yyyymmdd}）\n")
+            lines.append(f"- 结果：OMR={r.omr}，BMR={r.bmr}")
             lines.append(f"- logs：[{r.cachesim_log}]({r.cachesim_log})" + (f" / [{r.ac_log}]({r.ac_log})" if r.ac_log else ""))
 
             cachesim_kv: list[str] = []
@@ -664,11 +678,66 @@ def remove_existing_injected_blocks(md_text: str) -> str:
     return md_text
 
 
+def parse_existing_notes(md_text: str) -> dict[str, str]:
+    """Parse existing note cells from the global ROOT_LOG_INDEX block.
+
+    Keyed by run_id.
+    Supports both current 9-column layout (no MQPS) and legacy 10-column layout.
+    """
+    notes: dict[str, str] = {}
+
+    m = re.search(
+        r"<!-- ROOT_LOG_INDEX_BEGIN -->(?P<body>.*?)<!-- ROOT_LOG_INDEX_END -->",
+        md_text,
+        flags=re.DOTALL,
+    )
+    if not m:
+        return notes
+
+    for raw in m.group("body").splitlines():
+        line = raw.strip()
+        if not line.startswith("|"):
+            continue
+        if "| date |" in line:
+            continue
+        if "| ---" in line or "|---" in line:
+            continue
+
+        cols = [c.strip() for c in line.strip("|").split("|")]
+
+        # Current layout: date, run, trace, req, OMR, BMR, cfg, ref, note
+        # Legacy layout:  date, run, trace, req, OMR, BMR, MQPS, cfg, ref, note
+        if len(cols) >= 9:
+            run_id = cols[1]
+            note = cols[8] if len(cols) == 9 else cols[9] if len(cols) >= 10 else ""
+            if run_id and note:
+                notes[run_id] = note
+
+    return notes
+
+
 def inject_blocks(md_text: str, runs: list[RootRun]) -> str:
+    preserved_notes = parse_existing_notes(md_text)
     md_text = remove_existing_injected_blocks(md_text)
 
     # 1) global index injection (before first '## Trace:')
     index_block = build_index_block(runs)
+
+    # Re-apply preserved notes into the global index table.
+    if preserved_notes:
+        rebuilt: list[str] = []
+        for raw in index_block.splitlines():
+            line = raw
+            s = raw.strip()
+            if s.startswith("|") and ("| date |" not in s) and ("| ---" not in s) and ("|---" not in s):
+                cols = [c.strip() for c in s.strip("|").split("|")]
+                if len(cols) >= 9:
+                    run_id = cols[1]
+                    if run_id in preserved_notes:
+                        cols[-1] = preserved_notes[run_id]
+                        line = "| " + " | ".join(cols) + " |"
+            rebuilt.append(line)
+        index_block = "\n".join(rebuilt) + "\n"
     first_trace_pos = md_text.find("\n## Trace:")
     if first_trace_pos == -1:
         md_text = md_text + "\n" + index_block
@@ -704,7 +773,26 @@ def inject_blocks(md_text: str, runs: list[RootRun]) -> str:
             md_text = md_text[:existing_pos] + md_text[inject_pos:]
             inject_pos = existing_pos
 
-        md_text = md_text[:inject_pos] + build_trace_block(trace_runs) + md_text[inject_pos:]
+        trace_block = build_trace_block(trace_runs)
+
+        # Re-apply preserved notes into the per-trace tables.
+        if preserved_notes:
+            rebuilt: list[str] = []
+            for raw in trace_block.splitlines():
+                line = raw
+                s = raw.strip()
+                if s.startswith("|") and ("| date |" not in s) and ("| ---" not in s) and ("|---" not in s):
+                    cols = [c.strip() for c in s.strip("|").split("|")]
+                    # date, run, OMR, BMR, cfg, ref, note
+                    if len(cols) >= 7:
+                        run_id = cols[1]
+                        if run_id in preserved_notes:
+                            cols[-1] = preserved_notes[run_id]
+                            line = "| " + " | ".join(cols) + " |"
+                rebuilt.append(line)
+            trace_block = "\n".join(rebuilt) + "\n"
+
+        md_text = md_text[:inject_pos] + trace_block + md_text[inject_pos:]
 
     # 3) Any runs whose trace section doesn't exist (or lacks the marker) go to an appendix.
     if unknown_runs:

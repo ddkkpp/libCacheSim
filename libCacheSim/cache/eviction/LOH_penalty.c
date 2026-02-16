@@ -12,7 +12,9 @@
 #include <strings.h>
 #include <time.h>
 // 状态向量配置开关（保持单行，供脚本 sed 切换 26/38）
+#ifndef LOH_INCLUDE_CACHE_FEATURES
 #define LOH_INCLUDE_CACHE_FEATURES 1
+#endif
 
 // 候选特征汇总开关（编译期）：0 关闭，1 开启（附加72维）
 #ifndef LOH_INCLUDE_CANDIDATE_FEATURES

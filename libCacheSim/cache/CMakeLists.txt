@@ -58,6 +58,7 @@ set(eviction_sources_c
         eviction/TwoQ.c
         eviction/WTinyLFU.c
         eviction/LOH.c           # LOH cache algorithm - unified version (supports blocked/nonblocked/penalty modes)
+        eviction/LOH_teacher.c   # LOH teacher variant (copy-based, keeps original LOH untouched)
         eviction/LOH_penalty.c   # LOH penalty mechanism variant (independent implementation)
         eviction/LOH_mr_blocked.c   # LOH MR variant (blocked) - legacy wrapper
         eviction/LOH_mr_noblocked.c # LOH MR variant (non-blocking) - legacy wrapper

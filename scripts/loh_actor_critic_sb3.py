@@ -57,6 +57,8 @@ import pstats
 from collections import defaultdict
 import math
 
+import glob
+
 # ============================================================
 # LOH 统一脚本使用的环境变量总览（按类别分组，仅列本文件实际读取）
 # ============================================================
@@ -87,13 +89,15 @@ import math
 #   - LOH_FEATURE_LOG1P_RECIPROCAL       : C 端 reciprocal 模式调试打印
 #   - LOH_DUAL_CHANNEL                   : 是否启用正负双通道动作空间
 #   - LOH_USE_SOFTMAX                    : 是否对动作 logits 做 softmax
-#   - LOH_SOFTMAX_TEMP                   : softmax 温度（平滑/锐化权重）
+#   - LOH_ACTION_SCALE                   : 动作 logits 缩放（softmax 锐化/平滑主要通过 scale 控制）
+#   - LOH_SOFTMAX_TEMP                   : 【deprecated】历史实验用 softmax 温度；若设置会被折算进 scale（effective_scale=scale/temp）
 #   - LOH_FIXED_OBS                      : 固定观测模式（0/1/2/3）
 #
 # 5) 奖励 / 惩罚与趋势
 #   - LOH_ENABLE_PENALTY                 : 是否启用 penalty 机制
 #   - LOH_PENALTY_SCALE / LOH_PENALTY_MODE: penalty 缩放模式 (reciprocal/log/survival)
 #   - LOH_PENALTY_DMAX                   : penalty 缩放距离上限
+#   - LOH_PENALTY_CUTOFF                 : 只统计 eviction_to_access <= cutoff 的 penalty（0=禁用）
 #   - LOH_SURVIVAL_QUANTILE              : survival 模式分位数
 #   - LOH_SURVIVAL_BINS                  : survival 模式直方图 bin 数
 #   - LOH_SURVIVAL_MINCOUNT              : survival 模式最小样本数
@@ -116,10 +120,14 @@ import math
 #   - PPO_* / SAC_* / TD3_*               : 各算法超参覆盖（buffer_size 等）
 #   - LOH_SOFT_PRIOR                      : 是否启用动作头软先验（所有算法通用）
 #   - LOH_SOFT_PRIOR_BIAS                 : 软先验强度
-#   - LOH_USE_HEURISTIC_SIGNS             : PPO soft prior 与 C 端启发式符号对齐
+#   - LOH_USE_HEURISTIC_SIGNS             : soft prior 与 C 端启发式符号对齐（仅影响 soft prior，不改变 C 端行为）
 #
 # 7) 日志与 run 目录
 #   - RUN_TIMESTAMP                       : 外部脚本传入的 run 时间戳前缀
+#   - LOH_RESUME                          : 是否尝试从历史 runs 中恢复最新模型并继续在线训练
+#   - LOH_RESUME_DIR                      : 查找历史 checkpoint 的目录（默认 ./runs）
+#   - LOH_RESUME_PATH                     : 显式指定要加载的 .zip 模型路径（优先级高于目录扫描）
+#   - LOH_CHECKPOINT_FREQ                 : checkpoint 保存频率（每 N 个 timesteps 保存一次，0=关闭）
 #
 # 说明：
 #   1) 上述变量仅概括本脚本中通过 os.environ / _env_flag 显式读取的键；
@@ -155,9 +163,8 @@ DEFAULT_RL_STATE_USE_MISSRATIO = "1"
 DEFAULT_LOH_FEATURE_LOG1P = "0"
 DEFAULT_LOH_DUAL_CHANNEL = "0" # 是否启用正负双通道动作空间
 DEFAULT_LOH_USE_SOFTMAX = "1" # 是否对动作 logits 做 softmax
-DEFAULT_LOH_SOFTMAX_TEMP = "1.0"
 DEFAULT_LOH_ACTION_BOUND = "1.0"        # 动作空间 bounds: [-bound, bound]
-DEFAULT_LOH_ACTION_SCALE = "1.0"        # 动作 logits 放大（配合 softmax/temp 使用）
+DEFAULT_LOH_ACTION_SCALE = "1.0"        # 动作 logits 缩放（softmax 锐化/平滑主要通过 scale 控制）
 DEFAULT_LOH_WEIGHT_EMA = "0.0"          # 写回权重 EMA 平滑系数（0=关闭）
 DEFAULT_LOH_WEIGHT_CLIP = "0.0"         # 写回权重幅度裁剪（0=关闭）
 DEFAULT_LOH_FIXED_OBS = "0"
@@ -167,22 +174,33 @@ DEFAULT_LOH_USE_HEURISTIC_SIGNS = "1"
 
 # 5) 奖励 / 惩罚与趋势
 DEFAULT_LOH_ENABLE_PENALTY = "0"
-DEFAULT_LOH_PENALTY_SCALE = "reciprocal"
+DEFAULT_LOH_PENALTY_SCALE = "log"
 DEFAULT_LOH_PENALTY_DMAX = "400000"
+DEFAULT_LOH_PENALTY_CUTOFF = "0"  # 0=disable; >0: only count penalties with eviction_to_access <= cutoff
+DEFAULT_LOH_PENALTY_REWARD_FORMULA = "centered"  # relative|centered|one_minus|neg|net|net2
+DEFAULT_LOH_PENALTY_NET_GOOD_SCALE = "1.0"
+DEFAULT_LOH_PENALTY_NET_PENALTY_SCALE = "1.0"
+DEFAULT_LOH_PENALTY_EMPTY_AS_GOOD = "1"  # 1=evicted_count>0 且无 penalty 事件时给正反馈（penalty=0）
+DEFAULT_LOH_PENALTY_REFINE_ON_LATE = "1"  # 1=late penalty 到达时触发该位置重新 finalize
+DEFAULT_LOH_PENALTY_NO_EVICT_REWARD = "keep"  # keep|zero
 DEFAULT_LOH_SURVIVAL_QUANTILE = "0.99"
 DEFAULT_LOH_SURVIVAL_BINS = "64"
 DEFAULT_LOH_SURVIVAL_MINCOUNT = "1000"
 DEFAULT_LOH_REWARD_USE_PENALTY = "1"
 DEFAULT_LOH_REWARD_USE_MISSRATIO = "0"
 DEFAULT_LOH_REWARD_USE_MISSRATIOTREND = "0"
+DEFAULT_LOH_REWARD_USE_ORIGINAL = ""  # ""=auto (penalty启用时默认开启), 0/1=强制
 DEFAULT_LOH_REWARD_W_PENALTY = "1.0"
 DEFAULT_LOH_REWARD_W_MISS = "1.0"
 DEFAULT_LOH_REWARD_W_TREND = "0.5"
+DEFAULT_LOH_REWARD_W_ORIGINAL = "0.5"
+DEFAULT_LOH_REWARD_ORIGINAL_MAP = ""  # ""=auto (penalty启用时center01，否则raw), raw|clip01|center01
 DEFAULT_LOH_MISSRATIOTREND_WINDOW = "100"
 DEFAULT_LOH_TREND_WINDOW = "100"
 DEFAULT_LOH_MISSRATIOTREND_MODE = "slope"
 DEFAULT_LOH_TREND_MODE = "slope"
 DEFAULT_LOH_MISS_COMPONENT = "neg"
+DEFAULT_LOH_PENALTY_BASELINE_DECAY = "0.99"
 DEFAULT_LOH_REWARD_EMA = "0"
 DEFAULT_LOH_REWARD_EMAWINDOW = "10"
 DEFAULT_LOH_MISS_RATIO_WEIGHT = "1.0"
@@ -231,7 +249,7 @@ class FunctionTimer:
 
     def record(self, name: str, duration: float):
         """手动记录一次耗时（秒）。用于不便用 with 包裹的跨段统计。"""
-        if not self._enabled:
+        if not getattr(self, "_enabled", LOH_ENABLE_PROFILING):
             return
         try:
             d = float(duration)
@@ -244,17 +262,27 @@ class FunctionTimer:
         """支持pickle序列化 - 只保存统计数据"""
         return {
             'timings': dict(self.timings),  # 转换为普通dict
-            'call_counts': dict(self.call_counts)
+            'call_counts': dict(self.call_counts),
+            # 兼容：允许在恢复模型/回放缓冲区时保持 profiling 开关
+            '_enabled': bool(getattr(self, '_enabled', LOH_ENABLE_PROFILING)),
         }
 
     def __setstate__(self, state):
         """从pickle恢复"""
         self.timings = defaultdict(list, state['timings'])
         self.call_counts = defaultdict(int, state['call_counts'])
+        # 兼容旧 checkpoint：历史 state 里可能没有 _enabled
+        try:
+            if isinstance(state, dict) and '_enabled' in state:
+                self._enabled = bool(state.get('_enabled'))
+            else:
+                self._enabled = bool(LOH_ENABLE_PROFILING)
+        except Exception:
+            self._enabled = bool(LOH_ENABLE_PROFILING)
 
     def time_function(self, func_name):
         """装饰器或上下文管理器。禁用 profiling 时返回空操作上下文。"""
-        if not self._enabled:
+        if not getattr(self, "_enabled", LOH_ENABLE_PROFILING):
             return _NOOP_CONTEXT
 
         class TimerContext:
@@ -669,21 +697,27 @@ except Exception:
 # --- 常量定义 ---
 # C 端共享内存中的 FEATURE_DIM 固定为 6（recency/freq/size/3×IRT）
 # 维度命名与 C 端对齐：
-#   FEATURE_DIM        → 共享内存 state[] 上限 + 策略权重长度（恒为6）。
-#   STATE_FEATURE_DIM  → 运行时真实写入/读取的特征列数（IRT 关闭时降为3）。
+#   STATE_OBJ_FEATURE_CAP_DIM → 共享内存 state[] 中“单对象特征列数”的上限（恒为6）。
+#   SHM_WEIGHT_DIM            → 共享内存 weights[] 长度（compound v2 扩到 7）。
+#   STATE_OBJ_FEATURE_DIM → 运行时每个对象实际使用的特征列数（IRT 关闭时降为3）。
 #   CONTEXT_DIM        → 编译期固定的共享内存长度，由 LOH_INCLUDE_* 宏决定。
 #   STATE_DIM          → 运行时有效状态长度（<= CONTEXT_DIM）。
 # C/Python 在 loh_get_state_layout()/get_state_dim() 中用相同公式，保证共享内存布局一致。
-FEATURE_DIM = 6
+STATE_OBJ_FEATURE_CAP_DIM = 6
+SHM_WEIGHT_DIM = 7
+
+# 兼容别名：历史代码/文档可能 import 这些名字
+FEATURE_DIM = STATE_OBJ_FEATURE_CAP_DIM
+WEIGHT_DIM = SHM_WEIGHT_DIM
 
 # 评分模型选择（与 C 端对齐）：linear(默认) / mlp
 LOH_SCORE_MODEL = os.environ.get("LOH_SCORE_MODEL", "linear").strip().lower()
 LOH_SCORE_MODEL_LINEAR = 0
 LOH_SCORE_MODEL_MLP = 1
 
-# MLP 配置：固定输入维度=6（与 FEATURE_DIM 一致），单隐层 ReLU，输出 1
+# MLP 配置：固定输入维度=6（与 STATE_OBJ_FEATURE_CAP_DIM 一致），单隐层 ReLU，输出 1
 LOH_MLP_MAX_HIDDEN = 64
-LOH_MLP_MAX_PARAMS = LOH_MLP_MAX_HIDDEN * (FEATURE_DIM + 2) + 1
+LOH_MLP_MAX_PARAMS = LOH_MLP_MAX_HIDDEN * (STATE_OBJ_FEATURE_CAP_DIM + 2) + 1
 
 def loh_mlp_param_len(hidden: int) -> int:
     try:
@@ -694,7 +728,7 @@ def loh_mlp_param_len(hidden: int) -> int:
         return 0
     if h > LOH_MLP_MAX_HIDDEN:
         h = LOH_MLP_MAX_HIDDEN
-    return h * (FEATURE_DIM + 2) + 1
+    return h * (STATE_OBJ_FEATURE_CAP_DIM + 2) + 1
 
 try:
     LOH_MLP_HIDDEN = int(os.environ.get("LOH_MLP_HIDDEN", "16").strip())
@@ -728,6 +762,12 @@ def _env_int_flag(name: str, default: int) -> int:
 LOH_SCORE_USE_IRT = _env_int_flag("LOH_SCORE_USE_IRT", int(DEFAULT_LOH_SCORE_USE_IRT))
 LOH_SCORE_USE_COMPOUND = _env_int_flag("LOH_SCORE_USE_COMPOUND", int(DEFAULT_LOH_SCORE_USE_COMPOUND))
 
+# compound v2：评分权重从 6 扩到 7（新增 triple-term），并强制走 compound 模式
+LOH_SCORE_COMPOUND_V2 = _env_int_flag("LOH_SCORE_COMPOUND_V2", 0)
+if LOH_SCORE_COMPOUND_V2:
+    LOH_SCORE_USE_COMPOUND = 1
+    LOH_SCORE_USE_IRT = 0
+
 # compound 模式优先生效：一旦开启，则评分与动作都按照 6 维 compound 特征解释，IRT 不参与评分
 if LOH_SCORE_USE_COMPOUND:
     LOH_SCORE_USE_IRT = 0
@@ -737,14 +777,14 @@ if LOH_SCORE_USE_COMPOUND:
 #   - compound=0 且 use_irt=0 → 3 维（rec/freq/size）
 #   - 其它 → 6 维基础特征
 if LOH_SCORE_USE_COMPOUND:
-    SCORE_FEATURE_DIM = 6
+    SCORE_FEATURE_DIM = SHM_WEIGHT_DIM if LOH_SCORE_COMPOUND_V2 else 6
 elif LOH_SCORE_USE_IRT == 0:
     SCORE_FEATURE_DIM = 3
 else:
     SCORE_FEATURE_DIM = 6
 
-# Runtime state特征数量：当关闭 IRT 时仅保留 rec/freq/size 三维
-STATE_FEATURE_DIM = FEATURE_DIM if LOH_SCORE_USE_IRT else 3
+# Runtime state 每对象特征数量：当关闭 IRT 时仅保留 rec/freq/size 三维
+STATE_OBJ_FEATURE_DIM = STATE_OBJ_FEATURE_CAP_DIM if LOH_SCORE_USE_IRT else 3
 
 LOH_DUAL_CHANNEL = _env_flag("LOH_DUAL_CHANNEL", DEFAULT_LOH_DUAL_CHANNEL == "1")
 # Softmax default: True (always enabled by default unless explicitly disabled)
@@ -765,12 +805,12 @@ else:
     ACTION_DIM = 2 * SCORE_FEATURE_DIM if LOH_DUAL_CHANNEL else SCORE_FEATURE_DIM
 
 loh_print_config(
-    f"[LOH CONFIG] Score model: {LOH_SCORE_MODEL} (ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, FEATURE_DIM={FEATURE_DIM}, MLP_HIDDEN={LOH_MLP_HIDDEN})"
+    f"[LOH CONFIG] Score model: {LOH_SCORE_MODEL} (ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, STATE_OBJ_FEATURE_CAP_DIM={STATE_OBJ_FEATURE_CAP_DIM}, SHM_WEIGHT_DIM={SHM_WEIGHT_DIM}, MLP_HIDDEN={LOH_MLP_HIDDEN})"
 )
 loh_print_config(f"[LOH CONFIG] Dual-channel action space: {'ENABLED' if LOH_DUAL_CHANNEL else 'DISABLED'}")
 loh_print_config(f"[LOH CONFIG] Softmax activation: {'ENABLED' if LOH_USE_SOFTMAX else 'DISABLED'}")
 loh_print_config(f"[LOH CONFIG] Score feature mode: LOH_SCORE_USE_IRT={LOH_SCORE_USE_IRT}, LOH_SCORE_USE_COMPOUND={LOH_SCORE_USE_COMPOUND}")
-loh_print_config(f"[LOH CONFIG] State feature dim: {STATE_FEATURE_DIM} (CONTEXT feature cap={FEATURE_DIM})")
+loh_print_config(f"[LOH CONFIG] State obj feature dim: {STATE_OBJ_FEATURE_DIM} (STATE_OBJ_FEATURE_CAP_DIM={STATE_OBJ_FEATURE_CAP_DIM})")
 
 # --- 状态维度配置（与 C 端 LOH_INCLUDE_* 宏对齐）---
 def _env_truthy(name: str) -> bool:
@@ -799,7 +839,7 @@ def get_state_dim(feature_dim: int, scope: str = "STATE") -> int:
     """
     N_TOPK_SAMPLES = 32  # 必须与 C 端一致
     SAMPLES_PER_EVICTION = 4  # 必须与 C 端一致
-    candidate_source_dim = FEATURE_DIM if feature_dim >= FEATURE_DIM else feature_dim
+    candidate_source_dim = STATE_OBJ_FEATURE_CAP_DIM if feature_dim >= STATE_OBJ_FEATURE_CAP_DIM else feature_dim
 
     # Miss Ratio 特征 (2维) - 始终传递
     missratio_dim = 2
@@ -850,8 +890,8 @@ def get_state_dim(feature_dim: int, scope: str = "STATE") -> int:
 
     return total
 
-CONTEXT_DIM = get_state_dim(FEATURE_DIM, scope="context")
-STATE_DIM = get_state_dim(STATE_FEATURE_DIM, scope="active")
+CONTEXT_DIM = get_state_dim(STATE_OBJ_FEATURE_CAP_DIM, scope="context")
+STATE_DIM = get_state_dim(STATE_OBJ_FEATURE_DIM, scope="active")
 loh_print_config(f"[LOH CONFIG] Shared state dims: CONTEXT_DIM={CONTEXT_DIM}, STATE_DIM={STATE_DIM}")
 
 # 【移除】惩罚队列常量 - 改为动态读取
@@ -876,7 +916,7 @@ class SharedMemoryData(ctypes.Structure):
         ("terminate", ctypes.c_int),
         ("is_training", ctypes.c_int),
         ("state", ctypes.c_double * CONTEXT_DIM),  # 使用固定的 CONTEXT_DIM
-        ("weights", ctypes.c_double * FEATURE_DIM),
+        ("weights", ctypes.c_double * SHM_WEIGHT_DIM),
         # 【修改】驱逐统计
         ("total_evicted_bytes", ctypes.c_uint64),  # 周期累计驱逐字节数
         ("total_evicted_count", ctypes.c_uint64),  # 周期累计驱逐对象数
@@ -989,7 +1029,13 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
         # 【新增】Penalty baseline（滑动平均）
         self.penalty_baseline = 0.0  # 初始为0
-        self.baseline_decay = 0.99   # 指数衰减系数
+        try:
+            self.baseline_decay = float(os.environ.get("LOH_PENALTY_BASELINE_DECAY", DEFAULT_LOH_PENALTY_BASELINE_DECAY))
+        except Exception:
+            self.baseline_decay = float(DEFAULT_LOH_PENALTY_BASELINE_DECAY)
+        # 合法值保护：过小会导致 baseline 抖动，过大适应太慢
+        if not (0.0 < self.baseline_decay < 1.0):
+            self.baseline_decay = float(DEFAULT_LOH_PENALTY_BASELINE_DECAY)
 
         # 奖励计算参数
         self.obj_penalty_weight = obj_penalty_weight    # 默认1.0
@@ -1000,9 +1046,33 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
         # --- penalty 缩放模式相关配置（仅在启用 penalty 时初始化） ---
         if self.enable_penalty:
-            # penalty 缩放模式：支持 reciprocal(倒数)/log(对数)/survival(生存函数)
+            # penalty 缩放模式：支持 reciprocal(倒数)/log(对数)/survival(生存函数)/binary(二值，配合 cutoff)
             penalty_scale_env = os.environ.get("LOH_PENALTY_SCALE", DEFAULT_LOH_PENALTY_SCALE).strip().lower()
-            self.penalty_scale_mode = penalty_scale_env if penalty_scale_env in {"reciprocal", "log", "survival"} else "reciprocal"
+            self.penalty_scale_mode = penalty_scale_env if penalty_scale_env in {"reciprocal", "log", "survival", "binary"} else "reciprocal"
+
+            # penalty -> reward 的公式（避免 baseline 归一化导致长期接近 1 的饱和）
+            raw_formula = os.environ.get("LOH_PENALTY_REWARD_FORMULA", DEFAULT_LOH_PENALTY_REWARD_FORMULA)
+            raw_formula = ("relative" if raw_formula is None else str(raw_formula).strip().lower())
+            self.penalty_reward_formula = raw_formula if raw_formula in {"relative", "centered", "one_minus", "neg", "net", "net2"} else "relative"
+
+            # net 公式的可调缩放（用于稀疏正样本时增强 good_rate 信号）
+            try:
+                self.penalty_net_good_scale = float(os.environ.get("LOH_PENALTY_NET_GOOD_SCALE", DEFAULT_LOH_PENALTY_NET_GOOD_SCALE))
+            except Exception:
+                self.penalty_net_good_scale = float(DEFAULT_LOH_PENALTY_NET_GOOD_SCALE)
+            try:
+                self.penalty_net_penalty_scale = float(os.environ.get("LOH_PENALTY_NET_PENALTY_SCALE", DEFAULT_LOH_PENALTY_NET_PENALTY_SCALE))
+            except Exception:
+                self.penalty_net_penalty_scale = float(DEFAULT_LOH_PENALTY_NET_PENALTY_SCALE)
+
+            # 可选：只对较短的 eviction_to_access 施加 penalty（聚焦“很快又被访问”的错误驱逐）
+            try:
+                cutoff_env = os.environ.get("LOH_PENALTY_CUTOFF", DEFAULT_LOH_PENALTY_CUTOFF)
+                self.penalty_cutoff = int(cutoff_env) if cutoff_env is not None and str(cutoff_env).strip() != "" else int(DEFAULT_LOH_PENALTY_CUTOFF)
+            except Exception:
+                self.penalty_cutoff = int(DEFAULT_LOH_PENALTY_CUTOFF)
+            if self.penalty_cutoff < 0:
+                self.penalty_cutoff = 0
 
             # penalty dmax 参数（用于 log 和 survival 模式）
             try:
@@ -1011,6 +1081,18 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             except Exception:
                 self.penalty_dmax = int(DEFAULT_LOH_PENALTY_DMAX)
             self.penalty_dmax = max(1, self.penalty_dmax)
+
+            # 是否将“无 penalty 事件（raw_penalty_count==0）”视为正样本
+            self.penalty_empty_as_good = _env_flag(
+                "LOH_PENALTY_EMPTY_AS_GOOD",
+                DEFAULT_LOH_PENALTY_EMPTY_AS_GOOD == "1",
+            )
+
+            # late penalty 到达时是否触发单点重新 finalize（避免错把延迟惩罚当作正样本）
+            self.penalty_refine_on_late = _env_flag(
+                "LOH_PENALTY_REFINE_ON_LATE",
+                DEFAULT_LOH_PENALTY_REFINE_ON_LATE == "1",
+            )
 
             # survival 模式特有参数
             if self.penalty_scale_mode == "survival":
@@ -1044,26 +1126,34 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
             if LOH_DEBUG_BASIC():
                 print(f"[ReplayBuffer] LOH_ENABLE_PENALTY=1, penalty mechanism enabled")
+                print(f"  penalty_reward_formula={getattr(self, 'penalty_reward_formula', 'relative')}")
+                if getattr(self, 'penalty_reward_formula', 'relative') == 'net':
+                    print(f"  net scales: good={getattr(self, 'penalty_net_good_scale', 1.0):.3f}, penalty={getattr(self, 'penalty_net_penalty_scale', 1.0):.3f}")
                 if self.penalty_scale_mode == "survival":
                     print(f"  penalty_scale=survival, bins={self._hist_bins_n}, q={self._survival_q:.3f}, min_count={self._hist_min_count}, dmax={self.penalty_dmax}")
                 elif self.penalty_scale_mode == "log":
                     print(f"  penalty_scale=log_compressed, dmax={self.penalty_dmax}")
                 else:
                     print(f"  penalty_scale=reciprocal (1/max(d,1))")
+                if getattr(self, 'penalty_cutoff', 0) > 0:
+                    print(f"  penalty_cutoff={self.penalty_cutoff} (only count eviction_to_access <= cutoff)")
         else:
             # Penalty 禁用时，初始化占位字段
             self.penalty_scale_mode = "reciprocal"
             self.penalty_dmax = 400000
             self._log_denom = 1.0
+            self.penalty_reward_formula = "relative"
+            self.penalty_empty_as_good = False
+            self.penalty_refine_on_late = False
             if LOH_DEBUG_BASIC():
                 print(f"[ReplayBuffer] LOH_ENABLE_PENALTY=0, penalty mechanism disabled")
 
 
         # 存储每个位置对应的权重向量（若env在infos中传入weights）
         try:
-            self.weights_at_pos = np.zeros((self.buffer_size, FEATURE_DIM), dtype=np.float32)
+            self.weights_at_pos = np.zeros((self.buffer_size, SHM_WEIGHT_DIM), dtype=np.float32)
         except Exception:
-            # 若 FEATURE_DIM 未定义或其他问题，退化为None
+            # 若维度常量未定义或其他问题，退化为None
             self.weights_at_pos = None
 
         # 【新增】存储每个位置对应的命中率（用于与 reward 同窗口统计到 TB）
@@ -1074,10 +1164,52 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.obj_hit_ratio_at_pos = None
             self.byte_hit_ratio_at_pos = None
 
-        # --- 奖励组合配置（通过环境变量控制，默认保持 penalty-only 行为） ---
-        self.reward_use_penalty = _env_flag("LOH_REWARD_USE_PENALTY", DEFAULT_LOH_REWARD_USE_PENALTY == "1")
+        # --- 奖励组合配置（语义A）：enable_penalty=1 等价于进入 finalize+映射流程 ---
+        # 为避免“机制开了但 reward 侧没进 finalize”的语义分裂，这里强制：
+        #   - enable_penalty=1 -> reward_use_penalty=True（会处理 penalty 条目，并执行 finalize 覆写/映射）
+        #   - enable_penalty=0 -> reward_use_penalty=False（不会进入 penalty finalize 流程）
+        # 兼容：若用户显式设置 LOH_REWARD_USE_PENALTY 与 enable_penalty 冲突，仅提示一次并忽略该值。
+        raw_rup = os.environ.get("LOH_REWARD_USE_PENALTY")
+        if raw_rup is not None:
+            try:
+                _v = str(raw_rup).strip().lower()
+                _want = _v in {"1", "true", "yes", "y", "on"}
+                if bool(self.enable_penalty) != bool(_want) and LOH_DEBUG_BASIC():
+                    print(
+                        "[ReplayBuffer] LOH_REWARD_USE_PENALTY is ignored under semantic-A; "
+                        f"using LOH_ENABLE_PENALTY={int(self.enable_penalty)}"
+                    )
+            except Exception:
+                pass
+        self.reward_use_penalty = bool(self.enable_penalty)
         self.reward_use_missratio = _env_flag("LOH_REWARD_USE_MISSRATIO", DEFAULT_LOH_REWARD_USE_MISSRATIO == "1")
         self.reward_use_missratiotrend = _env_flag("LOH_REWARD_USE_MISSRATIOTREND", DEFAULT_LOH_REWARD_USE_MISSRATIOTREND == "1")
+
+        # 原始即时 reward 组件：
+        # - 只有 penalty 开启时才有意义（否则 reward 已经是最终值）
+        # - 默认行为：penalty 开启时自动启用（除非显式设置 LOH_REWARD_USE_ORIGINAL=0）
+        raw_use_orig = os.environ.get("LOH_REWARD_USE_ORIGINAL", DEFAULT_LOH_REWARD_USE_ORIGINAL)
+        if raw_use_orig is None:
+            raw_use_orig = ""
+        raw_use_orig = str(raw_use_orig).strip().lower()
+        raw_use_orig_mode = "auto"
+        if raw_use_orig in ("1", "true", "yes", "y"):
+            self.reward_use_original = True
+            raw_use_orig_mode = "explicit"
+        elif raw_use_orig in ("0", "false", "no", "n"):
+            self.reward_use_original = False
+            raw_use_orig_mode = "explicit"
+        else:
+            # auto
+            self.reward_use_original = bool(self.enable_penalty)
+
+        # 当一个周期没有发生驱逐时，penalty 本身没有定义。
+        # 旧行为：直接把该样本最终 reward 置 0（会导致大量 reward 常数，学习信号极弱）。
+        # 新默认：保留该样本在 env.step() 时写入 replay buffer 的原始 reward（通常是即时 hit_ratio）。
+        # 可通过 LOH_PENALTY_NO_EVICT_REWARD=zero 恢复旧行为。
+        self.no_evict_reward_policy = os.environ.get("LOH_PENALTY_NO_EVICT_REWARD", DEFAULT_LOH_PENALTY_NO_EVICT_REWARD).strip().lower()
+        if self.no_evict_reward_policy not in {"keep", "zero"}:
+            self.no_evict_reward_policy = "keep"
         # 权重
         try:
             self.reward_w_penalty = float(os.environ.get("LOH_REWARD_W_PENALTY", DEFAULT_LOH_REWARD_W_PENALTY))
@@ -1091,6 +1223,26 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.reward_w_trend = float(os.environ.get("LOH_REWARD_W_TREND", DEFAULT_LOH_REWARD_W_TREND))
         except Exception:
             self.reward_w_trend = float(DEFAULT_LOH_REWARD_W_TREND)
+        try:
+            self.reward_w_original = float(os.environ.get("LOH_REWARD_W_ORIGINAL", DEFAULT_LOH_REWARD_W_ORIGINAL))
+        except Exception:
+            self.reward_w_original = float(DEFAULT_LOH_REWARD_W_ORIGINAL)
+
+        raw_orig_map = os.environ.get("LOH_REWARD_ORIGINAL_MAP", DEFAULT_LOH_REWARD_ORIGINAL_MAP)
+        if raw_orig_map is None:
+            raw_orig_map = ""
+        raw_orig_map = str(raw_orig_map).strip().lower()
+        raw_orig_map_mode = "auto"
+        if raw_orig_map == "":
+            # auto
+            self.reward_original_map = "center01" if self.enable_penalty else "raw"
+        elif raw_orig_map in {"raw", "clip01", "center01"}:
+            self.reward_original_map = raw_orig_map
+            raw_orig_map_mode = "explicit"
+        else:
+            self.reward_original_map = "center01" if self.enable_penalty else "raw"
+
+        # 语义A下：enable_penalty=1 必进入 finalize+映射流程，不再提供 keep_immediate_reward 旁路。
         # 罚项模式（与 LOH_PENALTY_SCALE 对齐）
         self.penalty_mode = os.environ.get(
             "LOH_PENALTY_MODE",
@@ -1115,6 +1267,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         # 存储最近一次 finalize 的各组件，便于TB读取
         self._last_reward_components = {
             'penalty': 0.0,
+            'orig': 0.0,
             'miss': 0.0,
             'trend': 0.0,
             'final': 0.0,
@@ -1312,6 +1465,15 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             # 这表示我们正在修正一个已经被 compute_final_rewards 标记为最终化的位置
             self.corrections_on_finalized += 1
 
+            # 允许 late penalty 触发单点重算，避免把“尚未到达的惩罚”当作正样本
+            if getattr(self, "penalty_refine_on_late", False):
+                try:
+                    self.reward_finalized[pos] = False
+                    self.compute_final_rewards(pos, pos + 1)
+                except Exception:
+                    # 失败时不影响主流程（仅丢失该条 late 修正）
+                    self.reward_finalized[pos] = True
+
         # 【新增】详细打印
         if LOH_DEBUG_BASIC():
             print(f"[Buffer→Modify] Accumulated penalty at pos {pos}:")
@@ -1346,6 +1508,12 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         if self.penalty_scale_mode == "reciprocal":
             # 倒数缩放: 1 / max(d, 1)
             return 1.0 / max(d, 1.0)
+
+        elif self.penalty_scale_mode == "binary":
+            # 二值缩放（距离信息由 penalty_cutoff 过滤提供）：
+            # - 保留“是否在 cutoff 内被再次访问”这一个信号
+            # - 使 penalty 近似等于“错误驱逐率”（归一化到 evicted_count）
+            return 1.0
 
         elif self.penalty_scale_mode == "log":
             # 对数缩放: 1 - log1p(d)/log1p(dmax)
@@ -1454,26 +1622,112 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             evicted_count = self.evicted_count_at_pos[pos]
             evicted_bytes = self.evicted_bytes_at_pos[pos]
 
-            # 【关键】如果该周期没有驱逐，reward直接置为0
+            # 原始即时 reward（由 env.step 写入）。penalty 开启时，最终奖励可选择融合它。
+            try:
+                orig_reward = float(self.rewards[pos, 0])
+            except Exception:
+                orig_reward = 0.0
+            # 组件统一映射到可控范围，避免与 penalty 混合后频繁 clip 导致学习信号饱和。
+            # - raw: 直接 clip 到 [-1, 1]
+            # - clip01: clip 到 [0, 1]
+            # - center01: clip 到 [0, 1] 后映射到 [-1, 1]（推荐用于 hit_ratio 型即时 reward）
+            _omap = getattr(self, 'reward_original_map', 'raw')
+            if _omap == 'clip01':
+                orig_comp = max(0.0, min(1.0, orig_reward))
+            elif _omap == 'center01':
+                _x = max(0.0, min(1.0, orig_reward))
+                orig_comp = 2.0 * _x - 1.0
+            else:
+                orig_comp = max(-1.0, min(1.0, orig_reward))
+
+            # --- 非 penalty 组件（miss/trend/original）可在所有情况下使用 ---
+            miss_comp = 0.0
+            trend_comp = 0.0
+            if getattr(self, 'reward_use_missratio', False) and self.obj_hit_ratio_at_pos is not None:
+                try:
+                    obj_hit = float(self.obj_hit_ratio_at_pos[pos])
+                    miss_ratio = max(0.0, min(1.0, 1.0 - obj_hit))
+                    if getattr(self, 'miss_component_mode', 'neg') == 'improve':
+                        idxs_for_miss = self._get_window_indices(pos, getattr(self, 'missratiotrend_window', 100))
+                        if idxs_for_miss:
+                            baseline_miss = 1.0 - float(np.mean([self.obj_hit_ratio_at_pos[i] for i in idxs_for_miss]))
+                            miss_comp = float(baseline_miss - miss_ratio)
+                        else:
+                            miss_comp = -miss_ratio
+                    else:
+                        miss_comp = -miss_ratio
+                    miss_comp = max(-1.0, min(1.0, miss_comp))
+                except Exception:
+                    miss_comp = 0.0
+            if getattr(self, 'reward_use_missratiotrend', False):
+                try:
+                    trend_comp = float(self._compute_trend_component(pos))
+                except Exception:
+                    trend_comp = 0.0
+
+            # 如果该周期没有驱逐：penalty 无意义。
+            # - no_evict_reward_policy=zero: 强制给 0（旧行为）
+            # - 否则：用 original/miss/trend 作为最终 reward，避免把学习信号抹平
             if evicted_count == 0:
-                final_reward = 0.0
-                self.rewards[pos, 0] = final_reward
+                mixed = 0.0
+                if getattr(self, 'no_evict_reward_policy', 'keep') == 'zero':
+                    mixed = 0.0
+                else:
+                    if getattr(self, 'reward_use_original', False):
+                        mixed += self.reward_w_original * float(orig_comp)
+                    if getattr(self, 'reward_use_missratio', False):
+                        mixed += self.reward_w_miss * float(miss_comp)
+                    if getattr(self, 'reward_use_missratiotrend', False):
+                        mixed += self.reward_w_trend * float(trend_comp)
+                    # 如果三项都没启用，退化为保留原始 reward
+                    if (not getattr(self, 'reward_use_original', False) and
+                            not getattr(self, 'reward_use_missratio', False) and
+                            not getattr(self, 'reward_use_missratiotrend', False)):
+                        mixed = float(orig_comp)
+
+                final_mixed_pre_clip = float(mixed)
+                final_mixed = max(-1.0, min(1.0, final_mixed_pre_clip))
+                self.rewards[pos, 0] = final_mixed
                 self.reward_finalized[pos] = True
                 count_computed += 1
-
                 if LOH_DEBUG_BASIC() and count_computed <= 5:
                     print(f"[Reward→Final] 🎯 pos {pos}:")
                     print(f"  📊 No evictions (evicted_count=0)")
-                    print(f"  🎁 final_reward: 0.0 (neutral)")
+                    print(f"  🎁 final_reward: {final_mixed:.6f} (no-evict finalize)")
                 continue
 
-            # 计算加权penalty（对象惩罚 + 字节惩罚）
+            # 计算加权 penalty（对象惩罚 + 字节惩罚）
             obj_penalty = 0.0
             byte_penalty = 0.0
-            raw_penalty_count = len(self.penalty_data[pos])
+            penalties = self.penalty_data[pos]
+            if getattr(self, 'penalty_cutoff', 0) > 0:
+                try:
+                    cutoff = float(self.penalty_cutoff)
+                    # cutoff 只过滤“错误驱逐事件”(d>=0)。
+                    # 正样本事件使用 d<0 sentinel，不应被 cutoff 过滤。
+                    penalties = [(d, s) for (d, s) in penalties if (float(d) < 0.0) or (float(d) <= cutoff)]
+                except Exception:
+                    pass
 
-            for (eviction_to_access, obj_size) in self.penalty_data[pos]:
-                pd = self._penalty_scale(eviction_to_access)
+            raw_penalty_count = len(penalties)
+
+            # 统计正样本（d<0）与负样本（d>=0）
+            pos_events = 0
+            neg_events = 0
+
+            for (eviction_to_access, obj_size) in penalties:
+                try:
+                    d = float(eviction_to_access)
+                except Exception:
+                    d = 0.0
+
+                # eviction_to_access<0: 正样本事件（ghost 淘汰，期间未被再次访问）
+                if d < 0.0:
+                    pos_events += 1
+                    continue
+
+                neg_events += 1
+                pd = self._penalty_scale(d)
 
                 # 对象惩罚：1/evicted_count * pd
                 obj_penalty += (1.0 / evicted_count) * pd
@@ -1482,9 +1736,16 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 if evicted_bytes > 0:
                     byte_penalty += (obj_size / evicted_bytes) * pd
 
-            # 加权求和 -> penalty
+            # 加权求和 -> penalty（badness）
             penalty = (self.obj_penalty_weight * obj_penalty +
                        self.byte_penalty_weight * byte_penalty)
+
+            # net 公式需要“goodness”项：正样本事件比例
+            # 注意：pos_events 是 ghost-aged-out 的“正样本事件”，不一定与 evicted_count（真实驱逐数）同量级，
+            # 直接用 pos_events/evicted_count 可能 >1，导致 reward 被 clip 饱和，学习信号失真。
+            # 因此用 (pos_events + neg_events) 作为分母，将 good_rate 归一化到 [0,1]。
+            total_events = int(pos_events) + int(neg_events)
+            good_rate = float(pos_events) / float(total_events) if total_events > 0 else 0.0
 
             # 记录本次 finalize 实际应用的 penalty
             try:
@@ -1493,24 +1754,49 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 pass
             penalty_sum_this_call += float(penalty)
 
-            # 【Reward公式】Reward = (baseline - current) / baseline
-            # - 相对于baseline的改进
-            # - 范围：[-∞, 1]，clip到[-1, 1]
-            #
-            # 为什么用 1e-6 作为边界？
-            # - 避免除零错误：如果 baseline=0，除法会崩溃
-            # - 判断baseline有效性：baseline < 1e-6 认为是"接近零"（实际上无意义）
-            # - 浮点数精度：1e-6 是合理的"非零"阈值（比机器精度1e-15大得多）
-            if self.penalty_baseline > 1e-6:
-                # 有效baseline：计算相对变化
-                reward = (self.penalty_baseline - penalty) / self.penalty_baseline
+            # --- penalty -> reward ---
+            # relative  : (baseline - penalty) / baseline （旧默认）
+            # centered  : 1 - 2*penalty  （penalty∈[0,1] -> reward∈[-1,1]）
+            # one_minus : 1 - penalty    （reward∈[0,1]）
+            # neg       : -penalty       （reward∈[-1,0]）
+            # net       : good_rate - penalty （reward∈[-1,1]，更强调正负样本对比；good_rate∈[0,1]）
+            # net2      : (2*good_rate-1) - penalty （将 good_rate 拉伸到 [-1,1]，动态范围更大）
+            formula = getattr(self, 'penalty_reward_formula', 'relative')
+            if formula == "centered":
+                reward = 1.0 - 2.0 * float(penalty)
+            elif formula == "one_minus":
+                reward = 1.0 - float(penalty)
+            elif formula == "neg":
+                reward = -float(penalty)
+            elif formula == "net":
+                good_scale = float(getattr(self, 'penalty_net_good_scale', 1.0))
+                pen_scale = float(getattr(self, 'penalty_net_penalty_scale', 1.0))
+                reward = good_scale * float(good_rate) - pen_scale * float(penalty)
+            elif formula == "net2":
+                good_scale = float(getattr(self, 'penalty_net_good_scale', 1.0))
+                pen_scale = float(getattr(self, 'penalty_net_penalty_scale', 1.0))
+                goodness = 2.0 * float(good_rate) - 1.0
+                reward = good_scale * float(goodness) - pen_scale * float(penalty)
             else:
-                # 无有效baseline（初期或baseline接近0）：直接用负penalty
-                reward = -penalty if penalty > 0 else 0.0
+                # 【Reward公式】Reward = (baseline - current) / baseline
+                # - 相对于baseline的改进
+                # - 范围：[-∞, 1]，clip到[-1, 1]
+                #
+                # 为什么用 1e-6 作为边界？
+                # - 避免除零错误：如果 baseline=0，除法会崩溃
+                # - 判断baseline有效性：baseline < 1e-6 认为是"接近零"（实际上无意义）
+                # - 浮点数精度：1e-6 是合理的"非零"阈值（比机器精度1e-15大得多）
+                if self.penalty_baseline > 1e-6:
+                    reward = (self.penalty_baseline - penalty) / self.penalty_baseline
+                else:
+                    reward = -penalty if penalty > 0 else 0.0
 
-            # 更新baseline（指数移动平均）
-            self.penalty_baseline = (self.baseline_decay * self.penalty_baseline +
-                                     (1 - self.baseline_decay) * penalty)
+            # 更新 baseline（指数移动平均）
+            # - 只有 relative 公式使用 baseline，其它公式不更新以避免不必要的漂移
+            if formula == "relative":
+                if raw_penalty_count > 0 or penalty > 0:
+                    self.penalty_baseline = (self.baseline_decay * self.penalty_baseline +
+                                             (1 - self.baseline_decay) * penalty)
 
             # Clip到[-1, 1]
             final_reward = max(-1.0, min(1.0, reward))
@@ -1522,53 +1808,41 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.total_obj_penalty += obj_penalty
             self.total_byte_penalty += byte_penalty
 
-            # 写入buffer
-            # 组合奖励（可选）：penalty/miss/trend
+            # 写入 buffer：组合奖励（penalty / original / miss / trend）
             mixed = 0.0
             penalty_comp = final_reward  # penalty 映射后的奖励（已裁剪）
-            miss_comp = 0.0
-            trend_comp = 0.0
-            if getattr(self, 'reward_use_missratio', False) and self.obj_hit_ratio_at_pos is not None:
-                try:
-                    obj_hit = float(self.obj_hit_ratio_at_pos[pos])
-                    miss_ratio = max(0.0, min(1.0, 1.0 - obj_hit))
-                    if getattr(self, 'miss_component_mode', 'neg') == 'improve':
-                        # 使用 miss 改善量：相对窗口均值的改进（越小越好）
-                        idxs_for_miss = self._get_window_indices(pos, getattr(self, 'missratiotrend_window', 100))
-                        if idxs_for_miss:
-                            baseline_miss = 1.0 - float(np.mean([self.obj_hit_ratio_at_pos[i] for i in idxs_for_miss]))
-                            miss_comp = float(baseline_miss - miss_ratio)
-                        else:
-                            miss_comp = -miss_ratio
-                    else:
-                        # 直接用 -miss_ratio（命中越高越好）
-                        miss_comp = -miss_ratio
-                    # 限幅
-                    miss_comp = max(-1.0, min(1.0, miss_comp))
-                except Exception:
-                    miss_comp = 0.0
-            if getattr(self, 'reward_use_missratiotrend', False):
-                try:
-                    trend_comp = float(self._compute_trend_component(pos))
-                except Exception:
-                    trend_comp = 0.0
-            # 聚合：默认 penalty-only（当 miss/trend 均未启用时，保持原行为）
             mixed_terms = []
-            if getattr(self, 'reward_use_penalty', True):
+
+            # penalty 项：
+            # - raw_penalty_count>0: 典型负样本（错误驱逐）
+            # - raw_penalty_count==0 且 evicted_count>0: 视为正样本（安全驱逐），可选计入
+            _pen_ok = (raw_penalty_count > 0) or bool(getattr(self, "penalty_empty_as_good", False))
+            if getattr(self, 'reward_use_penalty', True) and _pen_ok:
                 mixed += self.reward_w_penalty * float(penalty_comp)
                 mixed_terms.append(('pen', self.reward_w_penalty, float(penalty_comp)))
+
+            if getattr(self, 'reward_use_original', False):
+                mixed += self.reward_w_original * float(orig_comp)
+                mixed_terms.append(('orig', self.reward_w_original, float(orig_comp)))
+
             if getattr(self, 'reward_use_missratio', False):
                 mixed += self.reward_w_miss * float(miss_comp)
                 mixed_terms.append(('miss', self.reward_w_miss, float(miss_comp)))
+
             if getattr(self, 'reward_use_missratiotrend', False):
                 mixed += self.reward_w_trend * float(trend_comp)
                 mixed_terms.append(('trend', self.reward_w_trend, float(trend_comp)))
+
+            # 如果 penalty 也没加（例如 raw_penalty_count=0），且其他项都没启用，则回退为 original
+            if not mixed_terms:
+                mixed = float(orig_comp)
             final_mixed_pre_clip = float(mixed)
             final_mixed = max(-1.0, min(1.0, final_mixed_pre_clip))
             # 保存组件供诊断
             try:
                 self._last_reward_components = {
                     'penalty': float(penalty_comp),
+                    'orig': float(orig_comp),
                     'miss': float(miss_comp),
                     'trend': float(trend_comp),
                     'final': float(final_mixed),
@@ -1604,6 +1878,8 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 print(f"[Reward→Final] 🎯 pos {pos}:")
                 print(f"  📊 penalty_data: {raw_penalty_count} items")
                 print(f"  📊 evicted_count: {evicted_count}, evicted_bytes: {evicted_bytes}")
+                print(f"  ✅ pos_events(d<0): {pos_events}, neg_events(d>=0): {neg_events}, total_events: {pos_events + neg_events}")
+                print(f"  ✅ good_rate: {good_rate:.6f}")
                 print(f"  📐 obj_penalty: {obj_penalty:.8f}")
                 print(f"  📐 byte_penalty: {byte_penalty:.8f}")
                 print(f"  📐 penalty (weighted): {penalty:.8f}")
@@ -1826,6 +2102,30 @@ class LohEnv(gym.Env):
         except Exception:
             self._action_scale = float(DEFAULT_LOH_ACTION_SCALE)
 
+        # 兼容历史参数：LOH_SOFTMAX_TEMP
+        # 旧实现：softmax(logits) 的 logits = (action * action_scale) / softmax_temp
+        # 现在去掉 temp 作为独立开关，仅保留 scale；若仍设置 temp，则折算进 scale。
+        _deprecated_temp_raw = os.environ.get("LOH_SOFTMAX_TEMP")
+        if _deprecated_temp_raw is not None and _deprecated_temp_raw.strip() != "":
+            try:
+                _deprecated_temp = float(_deprecated_temp_raw)
+                if _deprecated_temp > 0.0:
+                    if LOH_USE_SOFTMAX:
+                        _scale_before = float(self._action_scale)
+                        self._action_scale = float(self._action_scale) / float(_deprecated_temp)
+                        loh_print_config(
+                            "[LOH CONFIG][DEPRECATED] LOH_SOFTMAX_TEMP is deprecated; "
+                            f"fold into LOH_ACTION_SCALE: raw_scale={_scale_before}, temp={_deprecated_temp}, "
+                            f"effective_scale={self._action_scale}"
+                        )
+                    else:
+                        loh_print_config(
+                            "[LOH CONFIG][DEPRECATED] LOH_SOFTMAX_TEMP is deprecated and ignored when LOH_USE_SOFTMAX=0: "
+                            f"temp={_deprecated_temp_raw}"
+                        )
+            except Exception:
+                pass
+
         try:
             self._weight_ema = float(os.environ.get("LOH_WEIGHT_EMA", DEFAULT_LOH_WEIGHT_EMA))
             if not (0.0 <= self._weight_ema < 1.0):
@@ -1865,13 +2165,7 @@ class LohEnv(gym.Env):
             self._reward_norm_clip = 5.0
         self._reward_norm_mean = 0.0
         self._reward_norm_var = 1.0
-        # softmax 温度（用于将 logits 映射为权重时的锐化/平滑），可用环境变量 LOH_SOFTMAX_TEMP 配置
-        try:
-            self._softmax_temp = float(os.environ.get("LOH_SOFTMAX_TEMP", DEFAULT_LOH_SOFTMAX_TEMP))
-            if not (self._softmax_temp > 0):
-                self._softmax_temp = float(DEFAULT_LOH_SOFTMAX_TEMP)
-        except Exception:
-            self._softmax_temp = float(DEFAULT_LOH_SOFTMAX_TEMP)
+        # softmax 温度已移除（仅保留 action_scale 控制分布尖锐度）
 
         # 观测空间：根据 RL_STATE_USE_MISSRATIO 决定是否包含前两维
         # 共享内存数组固定为 CONTEXT_DIM，但仅前 STATE_DIM 维含有效值
@@ -1978,6 +2272,51 @@ class LohEnv(gym.Env):
 
         # 【新增】Penalty 机制开关（环境端的读取，与 ReplayBuffer 保持一致）
         self._enable_penalty = _env_flag("LOH_ENABLE_PENALTY", False)
+        # 语义A：enable_penalty=1 等价于进入 penalty 处理 + finalize+映射流程
+        # 因此这里强制 _reward_use_penalty 跟随 _enable_penalty（兼容旧变量但忽略其值）
+        raw_rup = os.environ.get("LOH_REWARD_USE_PENALTY")
+        if raw_rup is not None:
+            try:
+                _v = str(raw_rup).strip().lower()
+                _want = _v in {"1", "true", "yes", "y", "on"}
+                if bool(self._enable_penalty) != bool(_want) and LOH_DEBUG_BASIC():
+                    print(
+                        "[LohEnv] LOH_REWARD_USE_PENALTY is ignored under semantic-A; "
+                        f"using LOH_ENABLE_PENALTY={int(self._enable_penalty)}"
+                    )
+            except Exception:
+                pass
+        self._reward_use_penalty = bool(self._enable_penalty)
+
+        # reward 组件开关（用于 enable_penalty=0 时的 miss / trend 即时奖励，或 enable_penalty=1 时的复合配置）
+        self._reward_use_missratio = _env_flag("LOH_REWARD_USE_MISSRATIO", DEFAULT_LOH_REWARD_USE_MISSRATIO == "1")
+        self._reward_use_missratiotrend = _env_flag("LOH_REWARD_USE_MISSRATIOTREND", DEFAULT_LOH_REWARD_USE_MISSRATIOTREND == "1")
+        try:
+            self._reward_w_miss = float(os.environ.get("LOH_REWARD_W_MISS", DEFAULT_LOH_REWARD_W_MISS))
+        except Exception:
+            self._reward_w_miss = float(DEFAULT_LOH_REWARD_W_MISS)
+        try:
+            self._reward_w_trend = float(os.environ.get("LOH_REWARD_W_TREND", DEFAULT_LOH_REWARD_W_TREND))
+        except Exception:
+            self._reward_w_trend = float(DEFAULT_LOH_REWARD_W_TREND)
+        self._miss_component_mode = os.environ.get("LOH_MISS_COMPONENT", DEFAULT_LOH_MISS_COMPONENT).strip().lower()
+        try:
+            self._missratiotrend_window = int(
+                os.environ.get(
+                    "LOH_MISSRATIOTREND_WINDOW",
+                    os.environ.get("LOH_TREND_WINDOW", DEFAULT_LOH_MISSRATIOTREND_WINDOW),
+                )
+            )
+        except Exception:
+            self._missratiotrend_window = int(DEFAULT_LOH_MISSRATIOTREND_WINDOW)
+        self._missratiotrend_mode = os.environ.get(
+            "LOH_MISSRATIOTREND_MODE",
+            os.environ.get("LOH_TREND_MODE", DEFAULT_LOH_MISSRATIOTREND_MODE),
+        ).strip().lower()
+
+        # reward 趋势历史（独立于 state trend features，避免观测开关影响 reward）
+        self._reward_obj_hit_history = []
+        self._reward_byte_hit_history = []
 
     # 仅使用 obs_keep_indices 控制观测维度，不再支持隐藏命中率两维的开关
         self.max_episode_steps = 512
@@ -1989,7 +2328,7 @@ class LohEnv(gym.Env):
         # 训练/推理状态管理
         self._last_step_ack_time = 0.0
         # 存储上次使用的权重，用于reset时快速响应
-        self._last_weights = np.ones(FEATURE_DIM, dtype=np.float32) / FEATURE_DIM  # 初始均匀分布（固定6维，映射自 SCORE_FEATURE_DIM）
+        self._last_weights = np.ones(SHM_WEIGHT_DIM, dtype=np.float32) / SHM_WEIGHT_DIM  # 初始均匀分布（与共享内存 weights[] 对齐）
 
         # 【新增】用于事后惩罚的 model 引用
         self.model = None
@@ -2419,6 +2758,14 @@ class LohEnv(gym.Env):
         except Exception:
             pass
 
+        # 初始化 reward 趋势历史（与观测趋势解耦）
+        try:
+            self._reward_obj_hit_history.clear(); self._reward_byte_hit_history.clear()
+            self._reward_obj_hit_history.append(float(initial_observation_raw[0]))
+            self._reward_byte_hit_history.append(float(initial_observation_raw[1]))
+        except Exception:
+            pass
+
         # 清空 EMA reward history
         if self._reward_ema_history is not None:
             self._reward_ema_history = []
@@ -2493,8 +2840,8 @@ class LohEnv(gym.Env):
         try:
             N_TOPK_SAMPLES = 32  # 与C端一致
             SAMPLES_PER_EVICTION = 4  # 与C端一致
-            feature_dim = max(1, STATE_FEATURE_DIM)
-            candidate_source_dim = FEATURE_DIM if feature_dim >= FEATURE_DIM else feature_dim
+            feature_dim = max(1, STATE_OBJ_FEATURE_DIM)
+            candidate_source_dim = STATE_OBJ_FEATURE_CAP_DIM if feature_dim >= STATE_OBJ_FEATURE_CAP_DIM else feature_dim
 
             state = np.asarray(raw_state[:STATE_DIM])
             total_len = len(state)
@@ -2610,7 +2957,7 @@ class LohEnv(gym.Env):
         始终基于原始 raw_state 打印，避免 obs_keep 的省略影响诊断。
         """
         try:
-            # 与上方状态解析逻辑保持一致（根据 STATE_FEATURE_DIM 决定基础维度）
+            # 与上方状态解析逻辑保持一致（根据 STATE_OBJ_FEATURE_DIM 决定基础维度）
             cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "").strip().lower()
             base_dim = 26 if cache_flag in {"0", "false", "no", "off"} else 38
             cand_dim = max(STATE_DIM - base_dim, 0)
@@ -2694,7 +3041,7 @@ class LohEnv(gym.Env):
             _dur_finalize_rewards = 0.0
 
             # ========== 步骤1: 将RL动作转换为缓存权重 ==========
-            # 新方案：动作向量为 2*FEATURE_DIM 维，对其做 softmax 得到概率 p，
+            # 新方案：动作向量为 2*SCORE_FEATURE_DIM 维，对其做 softmax 得到概率 p，
             # 每个特征 i 对应 (p[2*i] - p[2*i+1]) 形成有符号权重 w_i。
             with GLOBAL_TIMER.time_function("env.step_softmax"):
                 action_start = get_monotonic_time()
@@ -2730,20 +3077,15 @@ class LohEnv(gym.Env):
 
                     # 兼容旧日志/接口：weights 仍然写入 6 维，但在 mlp 模式下 C 端会忽略
                     probs = None
-                    weights = np.zeros(FEATURE_DIM, dtype=np.float32)
+                    weights = np.zeros(SHM_WEIGHT_DIM, dtype=np.float32)
                 else:
                     # 先将策略输出转换为“有效评分特征维度”的权重向量 weights_eff，
-                    # 长度为 SCORE_FEATURE_DIM，再根据评分模式映射到完整的 6 维
-                    # shared-memory 权重向量 weights（FEATURE_DIM=6）。
+                    # 长度为 SCORE_FEATURE_DIM，再根据评分模式映射到共享内存权重向量 weights。
 
                     if LOH_DUAL_CHANNEL:
                         # 双通道模式：12维 -> (softmax) -> 差分
                         action_tensor = torch.from_numpy(action_np_scaled)
-                        # 引入 softmax 温度，temp>1 更平滑，temp<1 更尖锐
-                        try:
-                            logits = action_tensor / float(self._softmax_temp)
-                        except Exception:
-                            logits = action_tensor
+                        logits = action_tensor
 
                         if LOH_USE_SOFTMAX:
                             probs = torch.nn.functional.softmax(logits, dim=-1).numpy()
@@ -2761,10 +3103,7 @@ class LohEnv(gym.Env):
                         # 单通道模式：6维 -> (softmax) -> 直接映射
                         if LOH_USE_SOFTMAX:
                             action_tensor = torch.from_numpy(action_np_scaled)
-                            try:
-                                logits = action_tensor / float(self._softmax_temp)
-                            except Exception:
-                                logits = action_tensor
+                            logits = action_tensor
                             probs = torch.nn.functional.softmax(logits, dim=-1).numpy()
                             weights_eff = np.array(probs, dtype=np.float32)
                         else:
@@ -2780,15 +3119,15 @@ class LohEnv(gym.Env):
                             w_tmp[:len(weights_eff)] = weights_eff
                             weights_eff = w_tmp
 
-                    # 将有效评分维度的权重映射到完整的 6 维权重向量
+                    # 将有效评分维度的权重映射到共享内存权重向量（SHM_WEIGHT_DIM=7；旧模式只用前 6 或 3）
                     # C 端解释：
                     #   - 默认/IRT 模式：w[0..5] → recency, freq, size, irt1, irt2, irt3
                     #   - IRT 关闭：      仅使用 w[0..2] 参与评分
                     #   - compound 模式：w[0..5] → rec, freq, size, freq_recency, freq_size, recency_size
-                    weights = np.zeros(FEATURE_DIM, dtype=np.float32)
+                    #   - compound v2：  w[0..6] → 在 compound 基础上新增 triple-term
+                    weights = np.zeros(SHM_WEIGHT_DIM, dtype=np.float32)
                     if LOH_SCORE_USE_COMPOUND:
-                        # compound 模式下，SCORE_FEATURE_DIM 一定为 6
-                        n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
+                        n = min(SCORE_FEATURE_DIM, SHM_WEIGHT_DIM)
                         weights[:n] = weights_eff[:n]
                     elif LOH_SCORE_USE_IRT == 0:
                         # 仅使用 recency/freq/size 三个基础特征，其余维度留给 IRT（在 C 端被忽略）
@@ -2796,7 +3135,7 @@ class LohEnv(gym.Env):
                         weights[:n] = weights_eff[:n]
                     else:
                         # 默认 6 维基础特征模式
-                        n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
+                        n = min(SCORE_FEATURE_DIM, STATE_OBJ_FEATURE_CAP_DIM)
                         weights[:n] = weights_eff[:n]
 
                     # 可选：写回权重平滑/裁剪（默认关闭，保持旧行为）
@@ -2835,7 +3174,7 @@ class LohEnv(gym.Env):
                             p_max = float(np.max(p))
                             self.model.logger.record("action/entropy", ent)
                             self.model.logger.record("action/max_prob", p_max)
-                        self.model.logger.record("action/softmax_temp", float(self._softmax_temp))
+                        self.model.logger.record("action/action_scale", float(self._action_scale))
                         self.model.logger.record("action/scale", float(self._action_scale))
                         self.model.logger.record("action/bound", float(self._action_bound))
                         self.model.logger.record("weights/min", float(np.min(weights)))
@@ -2891,8 +3230,8 @@ class LohEnv(gym.Env):
                         # 找到了C端的ready状态，现在写入权重并清除ready标志
                         with GLOBAL_TIMER.time_function("env.step_write_weights"):
                             weight_write_start = get_monotonic_time()
-                            for i in range(FEATURE_DIM):
-                                current.weights[i] = float(weights[i])
+                            for i in range(SHM_WEIGHT_DIM):
+                                current.weights[i] = float(weights[i]) if i < len(weights) else 0.0
 
                             # 可选：写入 MLP 参数（仅在 LOH_SCORE_MODEL=mlp 时启用）
                             if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
@@ -2945,7 +3284,7 @@ class LohEnv(gym.Env):
                             _dur_write_weights = float(total_write_duration)
 
                             # 打印实际写入的权重（C/Python 统一格式，便于日志解析）
-                            active_dim = max(0, min(SCORE_FEATURE_DIM, FEATURE_DIM))
+                            active_dim = max(0, min(SCORE_FEATURE_DIM, SHM_WEIGHT_DIM))
                             ack_active_fmt = (
                                 ", ".join([f"{float(weights[i]):.6f}" for i in range(active_dim)])
                                 if active_dim > 0
@@ -2961,7 +3300,7 @@ class LohEnv(gym.Env):
                                 else:
                                     print(
                                         f"[WEIGHTS_UPDATED] [seq {acked_version}] "
-                                        f"dim={active_dim}/{FEATURE_DIM} [{ack_active_fmt}]"
+                                        f"dim={active_dim}/{SHM_WEIGHT_DIM} [{ack_active_fmt}]"
                                     )
                             self._last_step_ack_time = get_monotonic_time()
                             data = current
@@ -3243,11 +3582,72 @@ class LohEnv(gym.Env):
         # if LOH_DEBUG_BASIC():
         #     self._print_state_segments(new_observation_raw)
 
-        # 7. 计算即时奖励（基于global_features的加权命中率）
-        # reward = alpha * obj_hit_ratio + beta * byte_hit_ratio
-        # 最终奖励将在 ReplayBuffer 中通过惩罚延迟修正
+        # 7. 计算即时奖励
+        # 默认：基于 hit_ratio 的加权和（历史行为）
         immediate_reward = self.reward_alpha * obj_hit_ratio + self.reward_beta * byte_hit_ratio
-        reward = immediate_reward  # 默认使用即时奖励
+        reward = immediate_reward
+
+        # 语义A：enable_penalty=0 时 reward 支持：miss 或 miss+trend（即时计算，不走 finalize）
+        if not self._enable_penalty:
+            miss_terms = []
+            try:
+                # 维护 reward 趋势历史（仅在需要时保留窗口长度）
+                if self._reward_use_missratio or self._reward_use_missratiotrend:
+                    self._reward_obj_hit_history.append(float(obj_hit_ratio))
+                    self._reward_byte_hit_history.append(float(byte_hit_ratio))
+                    w = max(2, int(self._missratiotrend_window))
+                    if len(self._reward_obj_hit_history) > w + 1:
+                        self._reward_obj_hit_history = self._reward_obj_hit_history[-(w + 1):]
+                    if len(self._reward_byte_hit_history) > w + 1:
+                        self._reward_byte_hit_history = self._reward_byte_hit_history[-(w + 1):]
+            except Exception:
+                pass
+
+            miss_comp = 0.0
+            if getattr(self, '_reward_use_missratio', False):
+                try:
+                    obj_miss = max(0.0, min(1.0, 1.0 - float(obj_hit_ratio)))
+                    byte_miss = max(0.0, min(1.0, 1.0 - float(byte_hit_ratio)))
+                    # 与 ReplayBuffer 一致：neg 模式为 -miss；improve 为 baseline_miss - current_miss
+                    if getattr(self, '_miss_component_mode', 'neg') == 'improve' and self._reward_obj_hit_history:
+                        prev_hits = self._reward_obj_hit_history[:-1]
+                        if prev_hits:
+                            baseline_miss = 1.0 - float(np.mean(np.asarray(prev_hits, dtype=np.float64)))
+                            miss_comp = float(baseline_miss - obj_miss)
+                        else:
+                            miss_comp = -float(obj_miss)
+                    else:
+                        # 支持 byte_miss 的加权（与 hit_ratio_weight 对齐）
+                        miss_mix = float(self.reward_alpha) * float(obj_miss) + float(self.reward_beta) * float(byte_miss)
+                        miss_comp = -float(miss_mix)
+                    miss_comp = max(-1.0, min(1.0, float(miss_comp)))
+                    miss_terms.append(('miss', float(getattr(self, '_reward_w_miss', 1.0)), float(miss_comp)))
+                except Exception:
+                    miss_comp = 0.0
+
+            trend_comp = 0.0
+            if getattr(self, '_reward_use_missratiotrend', False):
+                try:
+                    prev_hits = self._reward_obj_hit_history[:-1]
+                    if len(prev_hits) >= 2:
+                        vals = np.asarray(prev_hits, dtype=np.float64)
+                        mode = getattr(self, '_missratiotrend_mode', 'slope')
+                        if mode == 'delta':
+                            trend_comp = float(obj_hit_ratio) - float(vals[0])
+                        else:
+                            x = np.arange(vals.size, dtype=np.float64)
+                            slope = float(np.polyfit(x, vals, 1)[0])
+                            trend_comp = float(slope * float(vals.size))
+                    trend_comp = max(-1.0, min(1.0, float(trend_comp)))
+                    miss_terms.append(('trend', float(getattr(self, '_reward_w_trend', 0.5)), float(trend_comp)))
+                except Exception:
+                    trend_comp = 0.0
+
+            if miss_terms:
+                mixed = 0.0
+                for _, w, v in miss_terms:
+                    mixed += float(w) * float(v)
+                reward = float(max(-1.0, min(1.0, mixed)))
 
         # 可选：delta reward（抵消 warmup/非平稳基线，默认关闭）
         if self._reward_mode == "delta":
@@ -3294,7 +3694,7 @@ class LohEnv(gym.Env):
                   f"{self.reward_beta:.3f} * {byte_hit_ratio:.6f} = {immediate_reward:.6f}")
 
         # 【优化】从扩展共享内存文件读取 penalty 数据（传入 data 避免重复读取）
-        # 只有在 LOH_ENABLE_PENALTY=1 时才处理 penalty 数据
+        # 语义A：只要 enable_penalty=1 就处理 penalty 条目（finalize+映射必走）
         penalties = []
         if self._enable_penalty and data.pending_penalty_count > 0:
             _t_rp0 = get_monotonic_time()
@@ -3347,7 +3747,7 @@ class LohEnv(gym.Env):
             if LOH_DEBUG_BASIC():
                 print(f"[PENALTY] All penalties processed and queue cleared\n")
 
-        # 【新增】计算旧数据的最终奖励（仅在启用 penalty 机制时执行）
+        # 【新增】计算旧数据的最终奖励（语义A：enable_penalty=1 时始终执行 finalize+映射）
         # 对于超过 exclude_recent_steps 的数据，计算最终奖励
         if self._enable_penalty and hasattr(self, 'model') and self.model is not None:
             replay_buffer = getattr(self.model, 'replay_buffer', None)
@@ -3362,9 +3762,6 @@ class LohEnv(gym.Env):
                 if buffer_size > exclude_steps:
                     _t_fr0 = get_monotonic_time()
                     with GLOBAL_TIMER.time_function("env.step_finalize_rewards"):
-                        # 计算应该被最终化的范围
-                        # 例如：buffer_size=500, exclude_steps=200
-                        # 则应该最终化 [0, 300) 的数据
                         current_pos = replay_buffer.pos
 
                         # Buffer未满的情况：简单计算
@@ -3373,17 +3770,7 @@ class LohEnv(gym.Env):
                             if finalize_end > 0:
                                 replay_buffer.compute_final_rewards(0, finalize_end)
                         else:
-                            # Buffer已满的情况：需要考虑环形
-                            # 当前写入位置是 current_pos
-                            # 排除区域是 [current_pos - exclude_steps, current_pos)
-                            # 安全区域是其他所有位置
-
-                            # 为简化，我们计算所有"老"数据
-                            # 从 (current_pos) 到 (current_pos - exclude_steps - 1)
-                            # 即环形buffer中不在排除窗口的部分
-
-                            # 实际上，每次step只需要finalize刚刚离开排除窗口的那一个位置
-                            # 即 current_pos - exclude_steps (mod buffer_size)
+                            # Buffer已满的情况：每次只 finalize 刚离开排除窗口的那一个位置
                             pos_to_finalize = (current_pos - exclude_steps) % replay_buffer.buffer_size
                             if not replay_buffer.reward_finalized[pos_to_finalize]:
                                 replay_buffer.compute_final_rewards(pos_to_finalize, pos_to_finalize + 1)
@@ -3586,7 +3973,7 @@ class LOHTrainingCallback(BaseCallback):
             # 记录当前 weights
             if hasattr(env, '_current_weights') and env._current_weights is not None:
                 weights = env._current_weights
-                for wi in range(min(len(weights), FEATURE_DIM)):
+                for wi in range(min(len(weights), SHM_WEIGHT_DIM)):
                     self.logger.record(f"weight/weight_{wi}", float(weights[wi]))
                 try:
                     self.logger.record("weight/weights_norm", float(np.linalg.norm(weights)))
@@ -3598,7 +3985,7 @@ class LOHTrainingCallback(BaseCallback):
                     self._recent_weights = self._recent_weights[-100:]
                 if len(self._recent_weights) >= 10:
                     mean_weights = np.mean(self._recent_weights, axis=0)
-                    for wi in range(min(len(mean_weights), FEATURE_DIM)):
+                    for wi in range(min(len(mean_weights), SHM_WEIGHT_DIM)):
                         self.logger.record(f"weight/buffer_weight_{wi}_mean", float(mean_weights[wi]))
                     try:
                         self.logger.record("weight/buffer_weights_mean_norm", float(np.linalg.norm(mean_weights)))
@@ -3706,7 +4093,7 @@ class LOHTrainingCallback(BaseCallback):
                             # 如果buffer保存了权重向量，也记录最近窗口的权重统计
                             if hasattr(buffer, 'weights_at_pos') and buffer.weights_at_pos is not None:
                                 try:
-                                    # recent_weights shape: (recent_size, FEATURE_DIM)
+                                    # recent_weights shape: (recent_size, SHM_WEIGHT_DIM)
                                     if buffer.full:
                                         wstart = (buffer.pos - recent_size) % buffer.buffer_size
                                         if wstart + recent_size <= buffer.buffer_size:
@@ -3721,7 +4108,7 @@ class LOHTrainingCallback(BaseCallback):
 
                                     # 记录每个维度的均值到TensorBoard: weight/buffer_weight_0_mean ...
                                     mean_weights = np.mean(recent_weights, axis=0)
-                                    for wi in range(min(len(mean_weights), FEATURE_DIM)):
+                                    for wi in range(min(len(mean_weights), SHM_WEIGHT_DIM)):
                                         self.logger.record(f"weight/buffer_weight_{wi}_mean", float(mean_weights[wi]))
 
                                     # 记录平均范数
@@ -3805,7 +4192,7 @@ class LOHTrainingCallback(BaseCallback):
                                 latest_weights = buffer.weights_at_pos[last_idx]
 
                             if latest_weights is not None:
-                                for wi in range(min(len(latest_weights), FEATURE_DIM)):
+                                for wi in range(min(len(latest_weights), SHM_WEIGHT_DIM)):
                                     self.logger.record(f"weight/weight_{wi}", float(latest_weights[wi]))
                                 try:
                                     wnorm = float(np.linalg.norm(latest_weights))
@@ -3927,13 +4314,32 @@ def _get_soft_prior_config() -> Optional[dict]:
     except Exception:
         prior_bias = float(DEFAULT_LOH_SOFT_PRIOR_BIAS)
 
-    use_signs_raw = os.environ.get(
-        "LOH_USE_HEURISTIC_SIGNS", DEFAULT_LOH_USE_HEURISTIC_SIGNS
-    )
+    # 是否对齐 C 端启发式符号（不影响 cachesim；仅影响 Python 的 soft-prior bias 方向）
+    use_signs_raw = os.environ.get("LOH_USE_HEURISTIC_SIGNS", DEFAULT_LOH_USE_HEURISTIC_SIGNS)
     use_signs = False if use_signs_raw is None else use_signs_raw.strip().lower() not in {"0", "false", "off"}
 
     # 以 LOG1P 模式的默认符号谱系作为软先验，后续按需裁剪到 SCORE_FEATURE_DIM
     intended_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0]
+
+    # 支持手动指定每个维度的 prior bias (例如 "1.0,0.5,2.0,...")
+    # 如果设置了此变量，则忽略 LOH_SOFT_PRIOR_BIAS 和 intended_signs 的计算，直接使用指定值
+    custom_values_str = os.environ.get("LOH_SOFT_PRIOR_VALUES", "").strip()
+    if custom_values_str:
+        try:
+            custom_vals = [float(x) for x in custom_values_str.split(",")]
+            # 补齐或截断
+            if len(custom_vals) < 6:
+                custom_vals += [0.0] * (6 - len(custom_vals))
+            return {
+                "prior_bias": 0.0, # 未使用，占位
+                "target_signs": [], # 未使用
+                "use_heuristic_signs": use_signs,
+                "custom_biases": custom_vals
+            }
+        except Exception:
+            pass
+
+    # C 端启发式符号谱系（与 LOH.c 非 compound 模式保持一致）
     c_side_signs = [-1.0, 1.0, -1.0, -1.0, -1.0, -1.0] if use_signs else [1.0] * len(intended_signs)
 
     target_signs: List[float] = []
@@ -3972,33 +4378,50 @@ def _apply_soft_prior_to_linear_layer(layer: Optional[torch.nn.Module], tag: str
 
     prior_bias = float(cfg["prior_bias"])
     target_signs = list(cfg["target_signs"])
+    custom_biases = cfg.get("custom_biases")
 
     with torch.no_grad():
         for i in range(SCORE_FEATURE_DIM):
-            if i >= len(target_signs):
-                break
-            sign = target_signs[i]
-            if LOH_DUAL_CHANNEL:
-                pos_idx = 2 * i
-                neg_idx = 2 * i + 1
-                if neg_idx >= ACTION_DIM:
-                    break
-                if sign > 0:
-                    layer.bias[pos_idx] += prior_bias
-                    layer.bias[neg_idx] -= prior_bias
-                elif sign < 0:
-                    layer.bias[pos_idx] -= prior_bias
-                    layer.bias[neg_idx] += prior_bias
+            if custom_biases:
+                 # 手动模式：直接使用 custom_biases[i] 作为 bias
+                 bias_val = custom_biases[i] if i < len(custom_biases) else 0.0
+                 if LOH_DUAL_CHANNEL:
+                     pos_idx = 2 * i
+                     neg_idx = 2 * i + 1
+                     if neg_idx >= ACTION_DIM:
+                         break
+                     # 双通道暂不支持精细控制，简单分配
+                     layer.bias[pos_idx] += bias_val
+                 else:
+                     if i >= ACTION_DIM:
+                         break
+                     layer.bias[i] += bias_val
             else:
-                if i >= ACTION_DIM:
+                if i >= len(target_signs):
                     break
-                if sign > 0:
-                    layer.bias[i] += prior_bias
-                elif sign < 0:
-                    layer.bias[i] -= prior_bias
+                sign = target_signs[i]
+                if LOH_DUAL_CHANNEL:
+                    pos_idx = 2 * i
+                    neg_idx = 2 * i + 1
+                    if neg_idx >= ACTION_DIM:
+                        break
+                    if sign > 0:
+                        layer.bias[pos_idx] += prior_bias
+                        layer.bias[neg_idx] -= prior_bias
+                    elif sign < 0:
+                        layer.bias[pos_idx] -= prior_bias
+                        layer.bias[neg_idx] += prior_bias
+                else:
+                    if i >= ACTION_DIM:
+                        break
+                    if sign > 0:
+                        layer.bias[i] += prior_bias
+                    elif sign < 0:
+                        layer.bias[i] -= prior_bias
 
     if LOH_DEBUG_BASIC():
-        print(f"[LOH {tag} soft prior] Heuristic signs enabled in C? {cfg['use_heuristic_signs']}")
+        if cfg is not None and isinstance(cfg, dict) and 'use_heuristic_signs' in cfg:
+            print(f"[LOH {tag} soft prior] LOH_USE_HEURISTIC_SIGNS={int(bool(cfg['use_heuristic_signs']))}")
         print(f"  Target signs: {target_signs[:SCORE_FEATURE_DIM]}")
         print(f"  Applied FULL PROFILE bias={prior_bias} (DualChannel={LOH_DUAL_CHANNEL})")
 
@@ -4071,7 +4494,7 @@ def main():
     print(f"  LOH_RL_ALGO: {algo_name}")
     print(f"  State dimension: active={STATE_DIM}, context={CONTEXT_DIM}")
     print(
-        f"  Action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, shared cap={FEATURE_DIM})"
+        f"  Action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, state cap={STATE_OBJ_FEATURE_CAP_DIM})"
     )
     print(f"  LOH_ENABLE_PROFILING: {'1 (enabled)' if LOH_ENABLE_PROFILING else '0 (disabled)'}")
 
@@ -4091,12 +4514,28 @@ def main():
     print(
         f"  Score toggles: LOH_SCORE_USE_IRT={LOH_SCORE_USE_IRT}  "
         f"LOH_SCORE_USE_COMPOUND={LOH_SCORE_USE_COMPOUND}  "
-        f"SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}  STATE_FEATURE_DIM={STATE_FEATURE_DIM}  FEATURE_DIM={FEATURE_DIM}"
+        f"SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}  STATE_OBJ_FEATURE_DIM={STATE_OBJ_FEATURE_DIM}  STATE_OBJ_FEATURE_CAP_DIM={STATE_OBJ_FEATURE_CAP_DIM}"
     )
     print(
         f"  Action space: LOH_DUAL_CHANNEL={int(LOH_DUAL_CHANNEL)} (ACTION_DIM={ACTION_DIM}), "
-        f"LOH_USE_SOFTMAX={int(LOH_USE_SOFTMAX)}  LOH_SOFTMAX_TEMP={_envb('LOH_SOFTMAX_TEMP', DEFAULT_LOH_SOFTMAX_TEMP)}"
+        f"LOH_USE_SOFTMAX={int(LOH_USE_SOFTMAX)}  LOH_ACTION_SCALE={_envb('LOH_ACTION_SCALE', DEFAULT_LOH_ACTION_SCALE)}"
     )
+    _deprecated_temp = _envb('LOH_SOFTMAX_TEMP', '')
+    if _deprecated_temp not in {'', '(unset)'}:
+        try:
+            _t = float(_deprecated_temp)
+        except Exception:
+            _t = None
+        if _t is not None and _t > 0:
+            print(
+                "  [DEPRECATED] LOH_SOFTMAX_TEMP is deprecated; folded into LOH_ACTION_SCALE "
+                f"(effective_scale = scale/temp = {_envb('LOH_ACTION_SCALE', DEFAULT_LOH_ACTION_SCALE)}/{_deprecated_temp})"
+            )
+        else:
+            print(
+                "  [DEPRECATED] LOH_SOFTMAX_TEMP is deprecated; ignored (invalid value) "
+                f"temp={_deprecated_temp}"
+            )
     print(
         f"  Soft prior: LOH_SOFT_PRIOR={_envb('LOH_SOFT_PRIOR', DEFAULT_LOH_SOFT_PRIOR)}  "
         f"LOH_SOFT_PRIOR_BIAS={_envb('LOH_SOFT_PRIOR_BIAS', DEFAULT_LOH_SOFT_PRIOR_BIAS)}  "
@@ -4113,15 +4552,37 @@ def main():
     print("=== Reward Config ===")
     enable_penalty = _envb('LOH_ENABLE_PENALTY', DEFAULT_LOH_ENABLE_PENALTY) == '1'
     if enable_penalty:
-        print(f"  LOH_PENALTY_MODE/LOH_PENALTY_SCALE: {_envb('LOH_PENALTY_MODE', _envb('LOH_PENALTY_SCALE', DEFAULT_LOH_PENALTY_SCALE))}")
-        print(f"  LOH_REWARD_USE_PENALTY: {_envb('LOH_REWARD_USE_PENALTY', DEFAULT_LOH_REWARD_USE_PENALTY)}  LOH_REWARD_W_PENALTY: {_envb('LOH_REWARD_W_PENALTY', DEFAULT_LOH_REWARD_W_PENALTY)}")
+        _pen_mode = _envb('LOH_PENALTY_MODE', _envb('LOH_PENALTY_SCALE', DEFAULT_LOH_PENALTY_SCALE))
+        _pen_formula = _envb('LOH_PENALTY_REWARD_FORMULA', DEFAULT_LOH_PENALTY_REWARD_FORMULA).strip().lower()
+        print(f"  LOH_PENALTY_MODE/LOH_PENALTY_SCALE: {_pen_mode}")
+        print(f"  LOH_PENALTY_DMAX: {_envb('LOH_PENALTY_DMAX', DEFAULT_LOH_PENALTY_DMAX)}")
+        print(f"  LOH_PENALTY_CUTOFF: {_envb('LOH_PENALTY_CUTOFF', DEFAULT_LOH_PENALTY_CUTOFF)}")
+        print(f"  LOH_PENALTY_REWARD_FORMULA: {_envb('LOH_PENALTY_REWARD_FORMULA', DEFAULT_LOH_PENALTY_REWARD_FORMULA)}")
+        if _pen_formula in {'net', 'net2'}:
+            print(f"  LOH_PENALTY_NET_GOOD_SCALE: {_envb('LOH_PENALTY_NET_GOOD_SCALE', DEFAULT_LOH_PENALTY_NET_GOOD_SCALE)}")
+            print(f"  LOH_PENALTY_NET_PENALTY_SCALE: {_envb('LOH_PENALTY_NET_PENALTY_SCALE', DEFAULT_LOH_PENALTY_NET_PENALTY_SCALE)}")
+        print(f"  LOH_PENALTY_EMPTY_AS_GOOD: {_envb('LOH_PENALTY_EMPTY_AS_GOOD', DEFAULT_LOH_PENALTY_EMPTY_AS_GOOD)}")
+        print(f"  LOH_PENALTY_REFINE_ON_LATE: {_envb('LOH_PENALTY_REFINE_ON_LATE', DEFAULT_LOH_PENALTY_REFINE_ON_LATE)}")
+        print(f"  LOH_PENALTY_BASELINE_DECAY: {_envb('LOH_PENALTY_BASELINE_DECAY', DEFAULT_LOH_PENALTY_BASELINE_DECAY)}")
+        print(f"  LOH_PENALTY_NO_EVICT_REWARD: {_envb('LOH_PENALTY_NO_EVICT_REWARD', DEFAULT_LOH_PENALTY_NO_EVICT_REWARD)}")
+        if str(_pen_mode).strip().lower() == 'survival':
+            print(f"  LOH_SURVIVAL_QUANTILE: {_envb('LOH_SURVIVAL_QUANTILE', DEFAULT_LOH_SURVIVAL_QUANTILE)}")
+            print(f"  LOH_SURVIVAL_BINS: {_envb('LOH_SURVIVAL_BINS', DEFAULT_LOH_SURVIVAL_BINS)}")
+            print(f"  LOH_SURVIVAL_MINCOUNT: {_envb('LOH_SURVIVAL_MINCOUNT', DEFAULT_LOH_SURVIVAL_MINCOUNT)}")
+
+        print(f"  LOH_REWARD_USE_PENALTY: {_envb('LOH_REWARD_USE_PENALTY', DEFAULT_LOH_REWARD_USE_PENALTY)}  (semantic-A: ignored; follow LOH_ENABLE_PENALTY)  LOH_REWARD_W_PENALTY: {_envb('LOH_REWARD_W_PENALTY', DEFAULT_LOH_REWARD_W_PENALTY)}")
     else:
         print("  Penalty mechanism disabled (LOH_ENABLE_PENALTY=0 or unset)")
+    print(
+        f"  LOH_REWARD_USE_ORIGINAL: {_envb('LOH_REWARD_USE_ORIGINAL', DEFAULT_LOH_REWARD_USE_ORIGINAL)}  "
+        f"LOH_REWARD_W_ORIGINAL: {_envb('LOH_REWARD_W_ORIGINAL', DEFAULT_LOH_REWARD_W_ORIGINAL)}  "
+        f"LOH_REWARD_ORIGINAL_MAP: {_envb('LOH_REWARD_ORIGINAL_MAP', DEFAULT_LOH_REWARD_ORIGINAL_MAP)}"
+    )
     print(f"  LOH_REWARD_USE_MISSRATIO: {_envb('LOH_REWARD_USE_MISSRATIO', DEFAULT_LOH_REWARD_USE_MISSRATIO)}  LOH_REWARD_W_MISS: {_envb('LOH_REWARD_W_MISS', DEFAULT_LOH_REWARD_W_MISS)}  LOH_MISS_COMPONENT: {_envb('LOH_MISS_COMPONENT', DEFAULT_LOH_MISS_COMPONENT)}")
     print(f"  LOH_REWARD_USE_MISSRATIOTREND: {_envb('LOH_REWARD_USE_MISSRATIOTREND', DEFAULT_LOH_REWARD_USE_MISSRATIOTREND)}  LOH_REWARD_W_TREND: {_envb('LOH_REWARD_W_TREND', DEFAULT_LOH_REWARD_W_TREND)}")
     print(f"  LOH_REWARD_EMA: {_envb('LOH_REWARD_EMA', DEFAULT_LOH_REWARD_EMA)}  LOH_REWARD_EMAWINDOW: {_envb('LOH_REWARD_EMAWINDOW', DEFAULT_LOH_REWARD_EMAWINDOW)}")
     try:
-        _w_pen = float(_envb('LOH_REWARD_W_PENALTY', DEFAULT_LOH_REWARD_W_PENALTY)) if enable_penalty and _envb('LOH_REWARD_USE_PENALTY', DEFAULT_LOH_REWARD_USE_PENALTY) in ('1','true','TRUE') else 0.0
+        _w_pen = float(_envb('LOH_REWARD_W_PENALTY', DEFAULT_LOH_REWARD_W_PENALTY)) if enable_penalty else 0.0
     except Exception:
         _w_pen = 0.0
     try:
@@ -4165,6 +4626,40 @@ def main():
     # TensorBoard目录
     tensorboard_log = os.path.join(run_dir, "tensorboard")
     os.makedirs(tensorboard_log, exist_ok=True)
+
+    # ------------------ Resume / Checkpoint（在线微调） ------------------
+    def _env_str(name: str, default: str = "") -> str:
+        raw = os.environ.get(name)
+        return raw.strip() if raw is not None else default
+
+    def _env_bool(name: str, default: bool = False) -> bool:
+        raw = os.environ.get(name)
+        if raw is None or raw.strip() == "":
+            return default
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+    # 说明：不要用 SB3 的 `.load()` 直接反序列化整模型来 resume。
+    # 对于以脚本形式运行（__main__）的自定义类/回放缓冲区，旧 checkpoint 可能携带
+    # cloudpickle 序列化的旧函数/旧全局对象，导致长跑训练阶段崩溃。
+    # 这里采用更稳健的策略：按当前代码创建新模型 + 仅加载网络参数 set_parameters().
+
+    # 约束：只有显式指定模型路径才允许 resume；否则始终 cold start
+    loh_resume_path = _env_str("LOH_RESUME_PATH", "")
+    loh_resume_dir = _env_str("LOH_RESUME_DIR", "./runs")
+    loh_resume_enabled = bool(loh_resume_path)
+    # 注意：此处位于 _env_int() 定义之前，不能直接调用 _env_int
+    try:
+        _ckpt_raw = os.environ.get("LOH_CHECKPOINT_FREQ", "0")
+        loh_ckpt_freq = int(_ckpt_raw) if _ckpt_raw is not None and _ckpt_raw.strip() != "" else 0
+    except Exception:
+        loh_ckpt_freq = 0
+
+    if LOH_DEBUG_CONFIG_ENABLED():
+        print("=== Resume/Checkpoint Config ===")
+        print(f"  LOH_RESUME: {int(loh_resume_enabled)} (path-required)")
+        print(f"  LOH_RESUME_PATH: {loh_resume_path if loh_resume_path else '(unset)'}")
+        print(f"  LOH_RESUME_DIR: {loh_resume_dir}")
+        print(f"  LOH_CHECKPOINT_FREQ: {loh_ckpt_freq}")
 
     # ------------------ 环境变量读取辅助函数 ------------------
     def _env_int(name, default):
@@ -4234,8 +4729,21 @@ def main():
         # 2. 跳过环境检查
         print("⚡ skip environment check, directly start training")
 
-        # ==================== 3. 根据 algo_name 配置超参数并创建模型 ====================
-        if algo_name == "SAC":
+        # ==================== 3. 根据 algo_name 配置超参数并创建/恢复模型 ====================
+        model = None
+        resumed_from: Optional[str] = None
+        resume_candidate = None
+        if loh_resume_enabled:
+            if not os.path.isfile(loh_resume_path):
+                if LOH_DEBUG_BASIC():
+                    print(f"⚠️  LOH_RESUME_PATH not found, cold start: {loh_resume_path}")
+                loh_resume_enabled = False
+            else:
+                resume_candidate = loh_resume_path
+                if LOH_DEBUG_BASIC():
+                    print(f"🔁 resume enabled: will load parameters from {resume_candidate}")
+
+        if algo_name == "SAC" and model is None:
             # ------------------ SAC 超参数 ------------------
             buffer_size = _env_int("SAC_BUFFER_SIZE", 10000)
             batch_size = _env_int("SAC_BATCH_SIZE", 256)
@@ -4303,7 +4811,7 @@ def main():
                     if LOH_DEBUG_BASIC():
                         print("[LOH SAC soft prior] failed to apply:", e)
 
-        elif algo_name == "PPO":
+        elif algo_name == "PPO" and model is None:
             # ------------------ PPO 超参数 ------------------
             gamma = _env_float_local("SAC_GAMMA", 0.99)  # gamma 是通用参数
             ppo_n_steps = _env_int("PPO_N_STEPS", 512)
@@ -4365,7 +4873,7 @@ def main():
                     if LOH_DEBUG_BASIC():
                         print("[LOH PPO soft prior] failed to apply:", e)
 
-        elif algo_name == "A2C":
+        elif algo_name == "A2C" and model is None:
             # ------------------ A2C 超参数（连续动作支持） ------------------
             a2c_n_steps = _env_int("A2C_N_STEPS", 128)
             a2c_learning_rate = _env_float_local("A2C_LEARNING_RATE", 3e-4)
@@ -4412,7 +4920,7 @@ def main():
                     if LOH_DEBUG_BASIC():
                         print("[LOH A2C soft prior] failed to apply:", e)
 
-        elif algo_name == "PPO_LSTM":
+        elif algo_name == "PPO_LSTM" and model is None:
             # ------------------ PPO-LSTM (RecurrentPPO) 超参数 ------------------
             if RecurrentPPO is None:
                 print("error: LOH_RL_ALGO=PPO_LSTM 需要安装 sb3-contrib (pip install sb3-contrib)")
@@ -4463,7 +4971,7 @@ def main():
                     if LOH_DEBUG_BASIC():
                         print("[LOH PPO-LSTM soft prior] failed to apply:", e)
 
-        elif algo_name == "TD3":
+        elif algo_name == "TD3" and model is None:
             # ------------------ TD3 超参数 ------------------
             td3_buffer_size = _env_int("TD3_BUFFER_SIZE", 10000)
             td3_batch_size = _env_int("TD3_BATCH_SIZE", 256)
@@ -4486,8 +4994,8 @@ def main():
                     from stable_baselines3.common.noise import NormalActionNoise
                     noise_sigma = float(td3_action_noise_env)
                     td3_action_noise = NormalActionNoise(
-                        mean=np.zeros(FEATURE_DIM),
-                        sigma=noise_sigma * np.ones(FEATURE_DIM)
+                        mean=np.zeros(ACTION_DIM),
+                        sigma=noise_sigma * np.ones(ACTION_DIM)
                     )
                 except Exception:
                     pass
@@ -4532,7 +5040,7 @@ def main():
                     if LOH_DEBUG_BASIC():
                         print("[LOH TD3 soft prior] failed to apply:", e)
 
-        elif algo_name == "DDPG":
+        elif algo_name == "DDPG" and model is None:
             # ------------------ DDPG 超参数 ------------------
             ddpg_buffer_size = _env_int("DDPG_BUFFER_SIZE", 10000)
             ddpg_batch_size = _env_int("DDPG_BATCH_SIZE", 256)
@@ -4554,8 +5062,8 @@ def main():
                     from stable_baselines3.common.noise import NormalActionNoise
                     noise_sigma = float(ddpg_action_noise_env)
                     ddpg_action_noise = NormalActionNoise(
-                        mean=np.zeros(FEATURE_DIM),
-                        sigma=noise_sigma * np.ones(FEATURE_DIM)
+                        mean=np.zeros(ACTION_DIM),
+                        sigma=noise_sigma * np.ones(ACTION_DIM)
                     )
                 except Exception:
                     pass
@@ -4599,7 +5107,7 @@ def main():
                     if LOH_DEBUG_BASIC():
                         print("[LOH DDPG soft prior] failed to apply:", e)
 
-        elif algo_name == "TQC":
+        elif algo_name == "TQC" and model is None:
             # ------------------ TQC（sb3-contrib）超参数 ------------------
             if TQC is None:
                 print("error: LOH_RL_ALGO=TQC 需要安装 sb3-contrib (pip install sb3-contrib)")
@@ -4690,7 +5198,23 @@ def main():
                 except Exception as e:
                     if LOH_DEBUG_BASIC():
                         print("[LOH TQC soft prior] failed to apply:", e)
-        # ==================== 模型创建完成 ====================
+        # ==================== 模型创建/恢复完成 ====================
+
+        # resume：仅加载参数（避免把旧 replay buffer / 旧函数对象带进来）
+        if resume_candidate:
+            try:
+                model.set_parameters(resume_candidate, exact_match=True)
+                resumed_from = resume_candidate
+                if LOH_DEBUG_BASIC():
+                    print(f"✅ resumed parameters loaded: {resumed_from}")
+            except Exception as e:
+                if LOH_DEBUG_BASIC():
+                    print(f"⚠️  resume set_parameters failed; continue cold start: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+        if model is None:
+            raise RuntimeError(f"failed to create/load model for algo={algo_name}")
 
         # 【新增】将model引用传递给env，使其能访问replay buffer
         env.set_model(model)
@@ -4753,7 +5277,7 @@ def main():
         print(f"   - algorithm: {algo_name}")
         print(f"   - state dimension: active={STATE_DIM}, context={CONTEXT_DIM}")
         print(
-            f"   - action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, shared cap={FEATURE_DIM})"
+            f"   - action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, state cap={STATE_OBJ_FEATURE_CAP_DIM})"
         )
         print(f"   - shm_key: {shm_key}")
 
@@ -4869,7 +5393,7 @@ def main():
                 _te = None
             if _te is None:
                 try:
-                    _ad = int(np.prod(getattr(model, 'action_space', None).shape)) if getattr(model, 'action_space', None) is not None else int(FEATURE_DIM)
+                    _ad = int(np.prod(getattr(model, 'action_space', None).shape)) if getattr(model, 'action_space', None) is not None else int(ACTION_DIM)
                     _te = -float(_ad)
                 except Exception:
                     _te = 'N/A'
@@ -4896,13 +5420,34 @@ def main():
         training_start_time = datetime.now()
         print(f"⏰ training start time: {training_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # 创建训练回调
+        # 创建训练回调（通信 + 可选 checkpoint）
         training_callback = LOHTrainingCallback(env_ref=env, verbose=1)
+
+        callback_obj = training_callback
+        if loh_ckpt_freq and loh_ckpt_freq > 0:
+            try:
+                from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
+
+                ckpt_dir = os.path.join(run_dir, "checkpoints")
+                os.makedirs(ckpt_dir, exist_ok=True)
+                ckpt_cb = CheckpointCallback(
+                    save_freq=int(loh_ckpt_freq),
+                    save_path=ckpt_dir,
+                    name_prefix=f"{algo_name.lower()}_loh_ckpt",
+                    save_replay_buffer=False,
+                    save_vecnormalize=False,
+                )
+                callback_obj = CallbackList([training_callback, ckpt_cb])
+                if LOH_DEBUG_BASIC():
+                    print(f"💾 checkpoint enabled: save_freq={loh_ckpt_freq} -> {ckpt_dir}")
+            except Exception as e:
+                if LOH_DEBUG_BASIC():
+                    print(f"⚠️  checkpoint callback init failed: {e}")
 
         with GLOBAL_TIMER.time_function("learn.total"):
             model.learn(
                 total_timesteps=int(1e12),  # 无限训练，直到C端终止
-                callback=training_callback,
+                callback=callback_obj,
                 progress_bar=True,
                 log_interval=1,  # 每次训练更新都记录（从10改为1，获得更密集的train曲线）
             )

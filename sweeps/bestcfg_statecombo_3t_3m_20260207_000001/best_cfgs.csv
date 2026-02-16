@@ -1,0 +1,4 @@
+trace,mode,metric,metric_value,LOH_SCORE_USE_COMPOUND,LOH_SCORE_USE_IRT,LOH_USE_SOFTMAX,LOH_USE_HEURISTIC_SIGNS
+1063,"compound=0,irt=0",miss_ratio,0.365686,0,0,0,0
+meta_reag,compound=1,miss_ratio,0.368247,1,1,1,0
+wiki_2019t,"compound=0,irt=0",miss_ratio,0.59416,0,0,1,0

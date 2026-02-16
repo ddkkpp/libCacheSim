@@ -38,6 +38,11 @@ usage() {
     echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 1)"
     echo "  LOH_ENABLE_PROFILING:            Enable profiling timer stats (default: 0)"
     echo
+    echo "  === Online Finetune (Resume) ==="
+    echo "  LOH_RESUME_PATH:                 Explicit checkpoint .zip path; only when set, Python will load+finetune"
+    echo "  LOH_RESUME_DIR:                  (reserved) directory option; ignored unless you implement search"
+    echo "  LOH_CHECKPOINT_FREQ:             Save checkpoint every N timesteps (default: 50000)"
+    echo
     echo "Examples:"
     echo "  $0"
     echo "  $0 /path/to/trace.gz"
@@ -64,6 +69,9 @@ echo "[config] LOH_MLP_HIDDEN=${LOH_MLP_HIDDEN:-<unset>}"
 echo "[config] LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
 echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-0}"
 echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
+echo "[config] LOH_RESUME_DIR=${LOH_RESUME_DIR:-./runs}"
+echo "[config] LOH_RESUME_PATH=${LOH_RESUME_PATH:-<unset>}"
+echo "[config] LOH_CHECKPOINT_FREQ=${LOH_CHECKPOINT_FREQ:-50000}"
 
 # 预清理：避免上一轮残留影响本次运行
 if [ "${LOH_PARALLEL_SAFE:-0}" = "1" ]; then
@@ -85,8 +93,8 @@ fi
 # Python 脚本固定为统一脚本（已整合 PPO/SAC/TD3）
 PYTHON_SCRIPT="loh_actor_critic_sb3.py"
 
-# Eviction 算法固定为 LOH（C 端已整合）
-EVICTION_ALGO="LOH"
+# Eviction 算法默认 LOH，可通过环境变量覆盖（例如 loh-teacher）
+EVICTION_ALGO="${LOH_EVICTION_ALGO:-LOH}"
 
 # 状态维度由环境变量控制（不再通过命令行）
 echo "State dimension controlled by LOH_INCLUDE_* environment variables"
@@ -150,6 +158,10 @@ if [ -z "${RUN_TIMESTAMP:-}" ]; then
 fi
 export RUN_TIMESTAMP  # 导出供Python脚本使用
 
+# 默认冷启动：只有显式设置 LOH_RESUME_PATH 才会加载模型继续训练
+export LOH_RESUME_DIR="${LOH_RESUME_DIR:-./runs}"
+export LOH_CHECKPOINT_FREQ="${LOH_CHECKPOINT_FREQ:-50000}"
+
 # 为本次运行生成唯一的共享内存键（支持外部传入覆盖）
 # 优先使用已有的 LOH_SHM_KEY，否则用 时间戳+PID 组合成一个数值键
 if [ -z "${LOH_SHM_KEY:-}" ]; then
@@ -178,95 +190,10 @@ echo -e "${BLUE}开始测试LOH算法与stable-baselines3强化学习的集成..
 _CLEANUP_DONE=0
 
 write_terminate_flag() {
-    # best-effort: only needs the first few fields to line up
-    python3 - <<'PY'
-import ctypes
-import mmap
-import os
-
-FEATURE_DIM = 6
-MISSRATIO_DIM = 2
-N_TOPK_SAMPLES = 32
-SAMPLES_PER_EVICTION = 4
-
-
-def _env_flag(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    if raw is None or raw.strip() == "":
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _calc_context_dim() -> int:
-    dim = MISSRATIO_DIM
-    if _env_flag("LOH_INCLUDE_HIT_MISS_FEATURES", False):
-        dim += FEATURE_DIM * 4
-    if _env_flag("LOH_INCLUDE_CACHE_FEATURES", False):
-        dim += FEATURE_DIM * 2
-    if _env_flag("LOH_INCLUDE_CANDIDATE_FEATURES", False):
-        dim += 72
-    if _env_flag("LOH_INCLUDE_TOPK_CANDIDATE_FEATURES", False):
-        dim += N_TOPK_SAMPLES * FEATURE_DIM
-    if _env_flag("LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES", False):
-        dim += SAMPLES_PER_EVICTION * FEATURE_DIM
-    if _env_flag("LOH_INCLUDE_REQUEST", False):
-        dim += 200 * FEATURE_DIM
-    return dim
-
-
-def _create_shared_memory_class(context_dim: int):
-    class SharedMemoryData(ctypes.Structure):
-        _fields_ = [
-            ("ready_for_inference", ctypes.c_int),
-            ("weights_updated", ctypes.c_int),
-            ("terminate", ctypes.c_int),
-            ("is_training", ctypes.c_int),
-            ("state", ctypes.c_double * context_dim),
-            ("weights", ctypes.c_double * FEATURE_DIM),
-            ("total_evicted_bytes", ctypes.c_uint64),
-            ("total_evicted_count", ctypes.c_uint64),
-            ("state_version", ctypes.c_uint64),
-            ("ack_version", ctypes.c_uint64),
-            ("timestamp", ctypes.c_int64),
-            ("pending_penalty_count", ctypes.c_int),
-
-            # 与 scripts/loh_actor_critic_sb3.py / C 端 LOH.c 对齐（可选字段）
-            ("score_model", ctypes.c_int),
-            ("mlp_hidden", ctypes.c_int),
-            ("mlp_param_len", ctypes.c_int),
-            ("mlp_params", ctypes.c_double * (64 * (FEATURE_DIM + 2) + 1)),
-        ]
-
-    return SharedMemoryData
-
-
-def main():
-    shm_key = os.environ.get("LOH_SHM_KEY", "9876")
-    shm_path = f"/dev/shm/loh_ac_{shm_key}"
-    if not os.path.exists(shm_path):
-        return
-
-    context_dim = _calc_context_dim()
-    SharedMemoryData = _create_shared_memory_class(context_dim)
-    size = ctypes.sizeof(SharedMemoryData)
-
-    try:
-        with open(shm_path, "r+b", buffering=0) as f:
-            mm = mmap.mmap(f.fileno(), size)
-            raw = mm.read(size)
-            data = SharedMemoryData.from_buffer_copy(raw)
-            data.terminate = 1
-            mm.seek(0)
-            mm.write(ctypes.string_at(ctypes.byref(data), size))
-            mm.flush()
-            mm.close()
-    except Exception:
-        pass
-
-
-if __name__ == "__main__":
-    main()
-PY
+    # 使用统一工具脚本写 terminate，确保共享内存结构体字段/偏移与当前版本一致（weights[7]）
+    if [ -f scripts/loh_stop.py ]; then
+        python3 scripts/loh_stop.py "${LOH_SHM_KEY}" >/dev/null 2>&1 || true
+    fi
 }
 
 cleanup_on_exit() {
@@ -537,7 +464,8 @@ CACHESIM_CMD+=("--eviction-params=$EV_PARAMS")
 if [ -n "${CACHESIM_NUM_REQ_ARG:-}" ]; then
     CACHESIM_CMD+=("${CACHESIM_NUM_REQ_ARG}")
 fi
-CACHESIM_CMD+=("-v" "1")
+# 控制 cachesim 输出冗余度（默认=1，便于和历史日志一致；sweep 时可设为 0 大幅减少日志体积）
+CACHESIM_CMD+=("-v" "${CACHESIM_VERBOSE:-1}")
 
 # 打印并执行命令
 echo "Executing cachesim command:"

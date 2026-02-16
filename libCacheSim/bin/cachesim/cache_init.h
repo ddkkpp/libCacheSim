@@ -78,6 +78,9 @@ static inline cache_t *create_cache(const char *trace_path,
       {"adaptcache", LOH_init},  // 向后兼容，重定向到LOH
       {"loh",
        LOH_init},  // 默认LOH算法（unified版本，支持blocked/nonblocked/penalty模式）
+      {"loh-teacher", LOH_teacher_init},  // teacher variant based on LOH copy
+      {"loh_teacher", LOH_teacher_init},
+      {"LOH-teacher", LOH_teacher_init},
       {"LOH-penalty", LOH_penalty_init},  // penalty机制版本（独立实现）
       {"loh-penalty", LOH_penalty_init},  // penalty机制版本（小写别名）
       /* blocked MR variant: backward compatibility aliases */
