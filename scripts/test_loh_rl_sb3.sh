@@ -33,6 +33,7 @@ usage() {
     echo
     echo "  === Misc ==="
     echo "  RL_UPDATE_INTERVAL:              RL update interval (optional)"
+    echo "  LOH_RANDOM_CANDIDATES:         Additional random hash-table candidates (default: 0, recommended: 32)"
     echo "  CACHESIM_NUM_REQ:                Limit number of requests to simulate (default: all)"
     echo "  CACHESIM_NUM_THREAD:             cachesim worker threads (passed as --num-thread, default: cachesim built-in)"
     echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 1)"
@@ -58,16 +59,33 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     usage
 fi
 
+# Optional: apply a known-good LOH config string/file (feature toggles, penalty knobs, etc.)
+# This is intentionally sourced early so the printed [config] values reflect the run settings.
+if [ -n "${LOH_CONFIG_STR:-}" ]; then
+    # shellcheck disable=SC1090
+    source <(python3 scripts/config_str_to_exports.py --config "${LOH_CONFIG_STR}")
+elif [ -n "${LOH_CONFIG_FILE:-}" ]; then
+    # shellcheck disable=SC1090
+    source <(python3 scripts/config_str_to_exports.py --config-file "${LOH_CONFIG_FILE}")
+fi
+
 echo "=== LOH + stable-baselines3 RL Integration Test ==="
 echo
 
+# === 评分模式默认值 ===
+# COMPOUND 模式在多数 trace(1063/meta/wiki) 上表现最佳，默认启用
+# 仅当用户未显式设置时才生效
+export LOH_SCORE_USE_COMPOUND="${LOH_SCORE_USE_COMPOUND:-1}"
+export LOH_SCORE_USE_IRT="${LOH_SCORE_USE_IRT:-0}"
+
 # 打印与评分模式相关的核心环境变量，便于区分本次运行属于哪种模式
-echo "[config] LOH_SCORE_USE_IRT=${LOH_SCORE_USE_IRT:-<unset>}"
-echo "[config] LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND:-<unset>}"
+echo "[config] LOH_SCORE_USE_IRT=${LOH_SCORE_USE_IRT}"
+echo "[config] LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND}"
 echo "[config] LOH_SCORE_MODEL=${LOH_SCORE_MODEL:-<unset>}"
 echo "[config] LOH_MLP_HIDDEN=${LOH_MLP_HIDDEN:-<unset>}"
 echo "[config] LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
 echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-0}"
+echo "[config] LOH_RANDOM_CANDIDATES=${LOH_RANDOM_CANDIDATES:-0}"
 echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
 echo "[config] LOH_RESUME_DIR=${LOH_RESUME_DIR:-./runs}"
 echo "[config] LOH_RESUME_PATH=${LOH_RESUME_PATH:-<unset>}"
@@ -272,35 +290,92 @@ trap cleanup_on_exit INT TERM EXIT
         fi
     fi
 
-    if [ "${NEED_REBUILD}" = "1" ]; then
-        echo "[build] 检测到编译相关环境变量，将触发构建"
+    # 确定构建模式：release 或 debug
+    BUILD_FLAG=""
+    if [ "${LOH_BUILD_RELEASE:-0}" = "1" ]; then
+        BUILD_FLAG="-r"
+        BUILD_DIR="_build_rel"
+    else
+        BUILD_DIR="_build_dbg"
     fi
 
-    if [ ! -x "_build_dbg/bin/cachesim" ]; then
+    if [ "${NEED_REBUILD}" = "1" ]; then
+        echo "[build] 检测到编译相关环境变量，将触发构建 (mode=${BUILD_DIR})"
+    fi
+
+    if [ ! -x "${BUILD_DIR}/bin/cachesim" ] && [ -z "${LOH_CACHESIM_BIN:-}" ]; then
         if [ "${NEED_REBUILD}" = "1" ]; then
-            echo "[build] 未找到 _build_dbg/bin/cachesim，且检测到编译相关环境变量，执行一次增量构建..."
-            bash scripts/debug.sh
+            echo "[build] 未找到 ${BUILD_DIR}/bin/cachesim，且检测到编译相关环境变量，执行一次增量构建..."
+            bash scripts/debug.sh ${BUILD_FLAG}
             if [ $? -ne 0 ]; then
                 echo -e "${RED}Build failed. Please fix any compile errors.${NC}"
                 exit 1
             fi
             echo "✅ Rebuild completed successfully"
         else
-            echo -e "${RED}[build] 未找到 _build_dbg/bin/cachesim。请先手动运行 scripts/debug.sh 构建项目。${NC}"
+            echo -e "${RED}[build] 未找到 ${BUILD_DIR}/bin/cachesim。请先手动运行 scripts/debug.sh ${BUILD_FLAG} 构建项目。${NC}"
             exit 1
         fi
     elif [ "${NEED_REBUILD}" = "1" ]; then
-        echo "[build] 检测到编译相关环境变量，复用现有 _build_dbg 目录执行一次增量构建..."
-        bash scripts/debug.sh
+        echo "[build] 检测到编译相关环境变量，复用现有 ${BUILD_DIR} 目录执行一次增量构建..."
+        bash scripts/debug.sh ${BUILD_FLAG}
         if [ $? -ne 0 ]; then
             echo -e "${RED}Build failed. Please fix any compile errors.${NC}"
             exit 1
         fi
         echo "✅ Rebuild completed successfully"
     else
-        echo "[build] 未设置编译相关环境变量，直接复用已有 _build_dbg/bin/cachesim（不触发构建）"
+        echo "[build] 未设置编译相关环境变量，直接复用已有 ${BUILD_DIR}/bin/cachesim（不触发构建）"
     fi
 ) 9>/tmp/libcachesim_build.lock
+
+# ========================================================================
+# 【预检测】自动特征模式检测（解耦自 LOH.c，在仿真前完成）
+# ========================================================================
+# 仅在用户未显式设置 LOH_FEATURE_LOG1P 时自动检测。
+# 如果用户已设置，则跳过检测，直接使用用户的设置。
+# 检测结果通过 export 传递给后续的 Python 和 C 进程。
+#
+# 防止环境变量泄漏：如果 _LOH_DETECT_APPLIED 标记存在，说明当前 shell
+# 中的 LOG1P/RECIPROCAL 是上一次 detect 自动设置的（非用户显式），
+# 必须清除以允许本次重新检测（不同 trace 可能需要不同的特征模式）。
+if [ -n "${_LOH_DETECT_APPLIED:-}" ]; then
+    unset LOH_FEATURE_LOG1P LOH_FEATURE_LOG1P_RECIPROCAL _LOH_DETECT_APPLIED
+fi
+if [ -z "${LOH_FEATURE_LOG1P:-}" ] && [ -z "${LOH_FEATURE_LOG1P_RECIPROCAL:-}" ]; then
+    if [ -f "scripts/loh_detect.sh" ]; then
+        echo -e "${BLUE}[detect] 运行预检测以确定最优特征模式...${NC}"
+        DETECT_REQS="${LOH_DETECT_REQS:-500000}"
+        DETECT_OUTPUT=$(bash scripts/loh_detect.sh "$TRACE_FILE" "$CACHE_SIZE" "$DETECT_REQS" 2>&1) || {
+            echo -e "${YELLOW}[detect] 预检测失败，将回退到仿真内 auto-detect${NC}"
+            echo "$DETECT_OUTPUT" | tail -5
+            DETECT_OUTPUT=""
+        }
+        if [ -n "$DETECT_OUTPUT" ]; then
+            # 提取 export 语句并执行（过滤掉注释和 stderr 输出）
+            EXPORTS=$(echo "$DETECT_OUTPUT" | grep "^export ")
+            if [ -n "$EXPORTS" ]; then
+                eval "$EXPORTS"
+                export _LOH_DETECT_APPLIED=1  # 标记本次 LOG1P/RECIPROCAL 由 detect 设置
+                echo -e "${GREEN}[detect] 预检测完成:${NC}"
+                echo "$DETECT_OUTPUT" | grep "^#" | head -5
+                echo "  LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
+                echo "  LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND:-0}"
+                echo "  LOH_RANDOM_CANDIDATES=${LOH_RANDOM_CANDIDATES:-0}"
+            else
+                echo -e "${YELLOW}[detect] 无法解析预检测输出，将回退到仿真内 auto-detect${NC}"
+                export LOH_AUTO_FEATURE_MODE=1
+            fi
+        fi
+    else
+        echo "[detect] scripts/loh_detect.sh 不存在，将使用仿真内 auto-detect"
+        export LOH_AUTO_FEATURE_MODE=1
+    fi
+else
+    echo "[detect] 用户已显式设置特征模式: LOG1P=${LOH_FEATURE_LOG1P:-0}, RECIPROCAL=${LOH_FEATURE_LOG1P_RECIPROCAL:-0}"
+    echo "[detect] 跳过预检测"
+    export LOH_AUTO_FEATURE_MODE=0
+fi
 
 # 设置Python环境 (stable-baselines3 / gymnasium / torch)
 if [ "${LOH_SKIP_PIP_INSTALL:-0}" = "1" ]; then
@@ -327,6 +402,7 @@ echo -e "${YELLOW}Starting stable-baselines3 training script... (Log: ${PYTHON_L
 echo "Python script: scripts/$PYTHON_SCRIPT"
 echo "RL Algorithm: ${LOH_RL_ALGO:-SAC}"
 echo "Miss ratio weight: ${LOH_MISS_RATIO_WEIGHT}"
+
 python3 "scripts/$PYTHON_SCRIPT" \
     > "${PYTHON_LOG_FILE}" 2>&1 &
 PYTHON_PID=$!
@@ -380,6 +456,7 @@ fi
 echo "Using trace file: $TRACE_FILE (type: $TRACE_TYPE, cache size ratio: $CACHE_SIZE)"
 
 # 默认限制 MetaCDN/TencentCBS 运行请求数，避免误跑全量 trace
+# 设置 CACHESIM_NUM_REQ=ALL 或 CACHESIM_NUM_REQ=0 可显式跑全量
 if [ -z "${CACHESIM_NUM_REQ:-}" ]; then
     case "${TRACE_FILE}" in
         data/MetaCDN/*)
@@ -391,6 +468,9 @@ if [ -z "${CACHESIM_NUM_REQ:-}" ]; then
             echo "[config] CACHESIM_NUM_REQ not set; defaulting to ${CACHESIM_NUM_REQ} for TencentCBS trace"
             ;;
     esac
+elif [ "${CACHESIM_NUM_REQ}" = "ALL" ] || [ "${CACHESIM_NUM_REQ}" = "all" ] || [ "${CACHESIM_NUM_REQ}" = "0" ]; then
+    echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ} → running ALL requests"
+    unset CACHESIM_NUM_REQ
 fi
 
 # 执行缓存模拟器 - 输出到文件以便调试
@@ -406,6 +486,9 @@ else
 fi
 echo "  Python script: ${PYTHON_SCRIPT:-<unset>}"
 echo "  LOH_FIXED_WEIGHTS: ${LOH_FIXED_WEIGHTS:-<unset>}"
+
+# This script is an RL integration test; ensure RL is enabled even if the parent shell exported LOH_ENABLE_RL=0.
+export LOH_ENABLE_RL=1
 
 # 执行缓存模拟
 CACHESIM_LOG_FILE="cachesim_sb3_${RUN_TIMESTAMP}.log"
@@ -450,7 +533,16 @@ if [ "${TRACE_TYPE}" = "csv" ]; then
 fi
 
 # 使用数组构建命令以正确传递参数而不被 shell 重写或错误引用
-CACHESIM_CMD=("_build_dbg/bin/cachesim" "$TRACE_FILE" "$TRACE_TYPE" "$EVICTION_ALGO" "$CACHE_SIZE")
+# 支持通过环境变量指定 cachesim 二进制路径
+# 优先级：LOH_CACHESIM_BIN > LOH_BUILD_RELEASE 自动选择 > _build_dbg
+if [ -n "${LOH_CACHESIM_BIN:-}" ]; then
+    CACHESIM_BIN="${LOH_CACHESIM_BIN}"
+elif [ "${LOH_BUILD_RELEASE:-0}" = "1" ]; then
+    CACHESIM_BIN="_build_rel/bin/cachesim"
+else
+    CACHESIM_BIN="_build_dbg/bin/cachesim"
+fi
+CACHESIM_CMD=("$CACHESIM_BIN" "$TRACE_FILE" "$TRACE_TYPE" "$EVICTION_ALGO" "$CACHE_SIZE")
 if [ ${#TRACE_TYPE_PARAMS_ARG[@]} -ne 0 ]; then
     CACHESIM_CMD+=("${TRACE_TYPE_PARAMS_ARG[@]}")
 fi

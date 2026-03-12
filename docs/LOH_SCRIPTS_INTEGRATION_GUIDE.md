@@ -12,6 +12,145 @@
 6. **loh_actor_critic_sb3_pen_log_SAC.py** - SAC + penalty 对数缩放
 7. **loh_actor_critic_sb3_pen_survival_SAC.py** - SAC + penalty 生存函数缩放
 
+## Teacher 训练流程详解（当前使用模式，非 RL）
+
+本节描述你最近在做的 `train_loh_teacher_ranker.py` 路线，分为「样本收集 → 监督训练 → 固定权重评测」。
+
+### 结论先说
+
+- 这条流程不是 RL 训练。
+- 它是离线监督学习（imitation/ranking）：用 `loh-teacher` 导出的 Belady 标签样本训练 6 维线性权重。
+- 评测时也是固定权重推理，不与 Python Actor-Critic 交互。
+
+### 0) 为什么说不是 RL
+
+- 样本收集阶段设置 `LOH_ENABLE_RL=0`，且算法使用 `loh-teacher`。
+- 训练阶段执行的是 `scripts/train_loh_teacher_ranker.py`（PyTorch 监督训练），不是 `loh_actor_critic_sb3.py`。
+- 评测阶段设置 `LOH_ENABLE_RL=0` + `LOH_FIXED_WEIGHTS=...`，直接用 C 端线性打分。
+
+### 1) 样本收集（teacher label export）
+
+输入：某条 trace（例如 1063/wiki/meta）。
+
+执行方式（可参考 `scripts/run_loh_teacher_train_and_eval_fixed_3m.sh`）：
+
+- `LOH_ENABLE_RL=0`
+- `LOH_TEACHER_EXPORT_PATH=<run_dir>/teacher_samples.csv`
+- `LOH_TEACHER_EXPORT_MAX_ROWS` 控制导出上限
+- 运行：`_build_dbg/bin/cachesim <trace> oracleGeneral loh-teacher 0.1 --num-req=3000000 ...`
+
+输出：`teacher_samples.csv`（按 eviction group 组织，含 `feature0..5`、`is_teacher`、可选 `belady_key`）。
+
+### 2) 训练前特征对齐（关键）
+
+`scripts/train_loh_teacher_ranker.py` 不直接用 raw `feature0..5`，而是先映射到和 C 端一致的 score-space：
+
+- 读取模式开关：`LOH_SCORE_USE_COMPOUND`、`LOH_SCORE_USE_IRT`、`LOH_FEATURE_LOG1P`、`LOH_USE_HEURISTIC_SIGNS`
+- 在 compound=1 时构造 `[rec, freq, size, freq/rec(或乘), freq/size(或乘), rec*size]`
+- 按部署语义应用符号（`apply_sign_to_features`）
+
+这一步用于避免“离线训练空间”和“线上打分空间”不一致导致的失真。
+
+### 3) 监督目标与优化
+
+每个 eviction group 是一个候选集合，设：
+
+- 候选特征矩阵为 $X \in \mathbb{R}^{K \times 6}$（$K$ 为该组候选数）
+- 可训练参数为 $w \in \mathbb{R}^{6}$
+- 组标签分布为 $y \in [0,1]^K$，且 $\sum_i y_i=1$
+
+具体执行步骤如下：
+
+1. **打分（group 内）**
+  - 计算 `logits = X @ w`，得到该组每个候选的分数。
+
+2. **主损失（group cross-entropy）**
+  - 主项是组内交叉熵：$L_{ce}=CE(logits, y)$。
+  - `y` 的构造优先使用 `belady_key` 最大值（并列时为 soft label），没有 `belady_key` 时回退到 `is_teacher` one-hot。
+
+3. **可选 pairwise 排序项（--pairwise-lambda）**
+  - 从正样本集合与负样本集合采样，优化正样本分数高于负样本。
+  - 形式是 `softplus(neg_logit - pos_logit)` 的平均，记为 $L_{pw}$。
+  - 组损失变为：$L = L_{ce} + \lambda_{pw}L_{pw}$。
+
+4. **可选 L1 正则（--l1-lambda）**
+  - 增加参数稀疏约束：$\lambda_{l1}\|w\|_1$。
+
+5. **可选防塌缩项（--entropy-lambda）**
+  - 对 $p=softmax(w)$ 增加：$\lambda_{ent}\sum_i p_i\log(p_i)$。
+  - 该项越小代表分布越“均匀”，用于抑制单维独占（权重塌缩）。
+
+6. **批训练与更新**
+  - 以 group 为 batch 单位求平均损失，`Adam` 反向传播更新。
+  - 若启用 `--nonnegative`，每个优化步后执行投影：`w = max(w, 0)`。
+
+7. **训练后归一化（--l1-normalize）**
+  - 若启用，则输出前执行：$w \leftarrow w / \sum_i |w_i|$。
+
+最终目标可写为：
+
+$$
+L_{total}=L_{ce}+\lambda_{pw}L_{pw}+\lambda_{l1}\|w\|_1+\lambda_{ent}\sum_i p_i\log(p_i),\quad p=softmax(w)
+$$
+
+### 4) 单 trace 与多 trace 两种训练模式
+
+- 单 trace：`--csv <one_csv>`
+  - 只用一条 trace 的样本训练一个权重。
+- 多 trace 平衡：`--csv-list a.csv,b.csv,c.csv`
+  - 先分别读每条 trace 的 group；
+  - 每条取相同数量（受最小可用组数与 `--max-groups` 均分限制）；
+  - 合并后打乱训练，得到通用权重。
+
+### 5) 线上评测（固定权重）
+
+训练完写出 6 维权重文本后，评测流程为：
+
+- `LOH_ENABLE_RL=0`
+- `LOH_FIXED_WEIGHTS=<w1..w6>`
+- 保持与训练一致的特征开关（尤其 `compound/log1p/sign/normalize`）
+- 运行：`_build_dbg/bin/cachesim <trace> oracleGeneral LOH 0.1 --num-req=3000000 --eviction-params=miss-ratio-weight=1.0`
+
+输出关注：最终 `miss ratio` 与 `byte miss ratio`。
+
+### 6) 你最近遇到的 1063 异常（对应现象）
+
+- 某次单 trace 1063 训练出现权重塌缩到近单维，导致线上 miss ratio 显著变差。
+- wiki/meta 没有同等程度塌缩，因此看起来“正常”。
+- 增加 `--entropy-lambda` 后，1063 权重分布恢复为多维组合，线上结果有明显回升。
+
+## Teacher 的 RL 训练路径（新增，监督版保留）
+
+为满足“Teacher 使用强化学习训练（且保留原监督版本）”，已新增脚本：
+
+- `scripts/train_loh_teacher_ranker_rl.py`
+
+说明：
+
+1. 该脚本复用 `train_loh_teacher_ranker.py` 的样本读取与 score-space 特征对齐逻辑。
+2. 优化方法为 REINFORCE（策略梯度）：
+   - 策略：对每个 eviction group 的候选分数做 `softmax` 形成离散分布；
+   - 动作：按分布采样一个候选；
+   - 奖励：`hard` 模式下选中 teacher 候选得 1 否则 0；`soft` 模式下用 soft-label 值作为奖励；
+   - 更新：最大化期望奖励，含 baseline（EMA）和熵正则（`--entropy-coef`）。
+3. 输出仍是 6 维固定权重，可直接用于 `LOH_FIXED_WEIGHTS` 线上评测。
+4. 原监督脚本 `scripts/train_loh_teacher_ranker.py` 保持不变，可继续并行使用。
+
+快速示例：
+
+```bash
+python3 scripts/train_loh_teacher_ranker_rl.py \
+  --csv runs/teacher_xxx/teacher_samples.csv \
+  --out runs/teacher_xxx/teacher_weights_rl.txt \
+  --episodes 3000 \
+  --batch-groups 512 \
+  --lr 3e-3 \
+  --entropy-coef 1e-2 \
+  --nonnegative \
+  --l1-normalize \
+  --eval-final-top1
+```
+
 ## C 端 LOH / LOH-mr-blocked 环境变量总览（运行时）
 
 > 下列环境变量由 C 端 `LOH.c` / `LOH_mr_blocked.c` 在运行时读取；

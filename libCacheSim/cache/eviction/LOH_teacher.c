@@ -856,6 +856,8 @@ typedef struct {
   FILE *teacher_export_fp;
   char *teacher_export_path;
   uint64_t teacher_export_seq;
+  uint64_t teacher_export_rows;
+  uint64_t teacher_export_max_rows;
   int teacher_export_enabled;
 
   // 38 维上下文状态向量
@@ -973,6 +975,13 @@ static inline int64_t loh_teacher_belady_key(cache_obj_t *obj) {
   return v;
 }
 
+static inline int64_t loh_sanitize_next_access_vtime(int64_t v) {
+  // request_t::next_access_vtime may be -2 when the trace doesn't provide it.
+  // For Belady/MIN teacher labeling, treat “unknown” as “no future access”.
+  if (v == -2) return INT64_MAX;
+  return v;
+}
+
 static int loh_teacher_belady_idx(LOH_params_t *params, int cand_n) {
   int best_idx = -1;
   int64_t best_key = INT64_MIN;
@@ -996,6 +1005,10 @@ static void loh_teacher_export_candidates(LOH_params_t *params,
     return;
   }
   if (cand_n <= 0) return;
+  if (params->teacher_export_max_rows > 0 &&
+      params->teacher_export_rows >= params->teacher_export_max_rows) {
+    return;
+  }
 
   int teacher_idx = loh_teacher_belady_idx(params, cand_n);
   int student_idx = -1;
@@ -1008,6 +1021,10 @@ static void loh_teacher_export_candidates(LOH_params_t *params,
 
   uint64_t seq = ++params->teacher_export_seq;
   for (int i = 0; i < cand_n; ++i) {
+    if (params->teacher_export_max_rows > 0 &&
+        params->teacher_export_rows >= params->teacher_export_max_rows) {
+      break;
+    }
     cache_obj_t *obj = params->candidates[i];
     int64_t next_vtime = obj ? obj->misc.next_access_vtime : INT64_MIN;
     int64_t belady_key = loh_teacher_belady_key(obj);
@@ -1020,10 +1037,20 @@ static void loh_teacher_export_candidates(LOH_params_t *params,
             (unsigned long long)seq, cand_n, i, (i == teacher_idx) ? 1 : 0,
             (i == student_idx) ? 1 : 0, (long long)next_vtime,
             (long long)belady_key, obj_id, f[0], f[1], f[2], f[3], f[4], f[5]);
+    params->teacher_export_rows++;
   }
 
   if ((seq & 0x3FULL) == 0) {
     fflush(params->teacher_export_fp);
+  }
+
+  if (params->teacher_export_max_rows > 0 &&
+      params->teacher_export_rows >= params->teacher_export_max_rows) {
+    fflush(params->teacher_export_fp);
+    params->teacher_export_enabled = 0;
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH TEACHER] export reached max rows=%llu, stop further export\n",
+        (unsigned long long)params->teacher_export_max_rows);
   }
 }
 
@@ -3767,10 +3794,17 @@ cache_t *LOH_teacher_init(const common_cache_params_t ccache_params,
   params->teacher_export_fp = NULL;
   params->teacher_export_path = NULL;
   params->teacher_export_seq = 0;
+  params->teacher_export_rows = 0;
+  params->teacher_export_max_rows = 0;
   params->teacher_export_enabled = 0;
 
   {
     const char *teacher_export_path = getenv("LOH_TEACHER_EXPORT_PATH");
+    const char *teacher_export_max_rows = getenv("LOH_TEACHER_EXPORT_MAX_ROWS");
+    if (teacher_export_max_rows && teacher_export_max_rows[0] != '\0') {
+      params->teacher_export_max_rows =
+          (uint64_t)g_ascii_strtoull(teacher_export_max_rows, NULL, 10);
+    }
     if (teacher_export_path && teacher_export_path[0] != '\0') {
       const char *append_env = getenv("LOH_TEACHER_EXPORT_APPEND");
       int append_mode = loh_parse_bool_env(append_env, 0);
@@ -3796,8 +3830,11 @@ cache_t *LOH_teacher_init(const common_cache_params_t ccache_params,
                   "feature2,feature3,feature4,feature5\n");
         }
         fflush(params->teacher_export_fp);
-        LOH_DEBUG_PRINT_CONFIG("[LOH INIT] teacher export enabled: %s\n",
-                               params->teacher_export_path);
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] teacher export enabled: %s (max_rows=%llu, "
+            "0=unlimited)\n",
+            params->teacher_export_path,
+            (unsigned long long)params->teacher_export_max_rows);
       } else {
         LOH_DEBUG_PRINT_ERROR(
             "[LOH INIT] failed to open LOH_TEACHER_EXPORT_PATH=%s\n",
@@ -4693,6 +4730,11 @@ static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
   PERF_NOW(ts_find);
   cache_obj_t *cache_obj = cache_find_base(cache, req, update_cache);
 
+  if (cache_obj) {
+    cache_obj->misc.next_access_vtime =
+        loh_sanitize_next_access_vtime(req->next_access_vtime);
+  }
+
   if (cache_obj && likely(update_cache)) {
     // 删除状态验证，直接更新对象
 
@@ -4773,6 +4815,11 @@ static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
 
   // Create new object with base cache function
   cache_obj_t *obj = cache_insert_base(cache, req);
+
+  if (obj) {
+    obj->misc.next_access_vtime =
+        loh_sanitize_next_access_vtime(req->next_access_vtime);
+  }
 
   // 【数据恢复阶段】尝试从 Ghost cache 恢复历史信息
   bool restored_from_ghost = restore_from_ghost_cache(params, obj);

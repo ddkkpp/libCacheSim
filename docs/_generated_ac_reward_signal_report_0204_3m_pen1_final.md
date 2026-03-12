@@ -1,0 +1,48 @@
+# AC Reward/Penalty Signal Detailed Report
+
+files: 2 (filtered from 19)
+filter: only penalty=1 and has [Reward→Final]
+
+## penalty_scale = log
+
+**Summary**
+- immediate_reward: n=29158, mean=0.78337, bins=[0,0.25):3.38% [0.25,0.5):15.28% [0.5,0.75):20.65% [0.75,1):60.69%
+- penalty_data: n=12494, zero=154 (1.23%), hist=distinct=198 top10=14:1.90% 20:1.90% 23:1.89% 21:1.88% 18:1.86% 12:1.82% 22:1.82% 25:1.78% 26:1.78% 28:1.74%
+- final_reward(after clip): n=12494, mean=-0.129157, min=-1, max=-0, clip_sat=2.43%
+- final_reward bins: [-1,-0.75):3.27% [-0.75,-0.5):1.54% [-0.5,-0.25):6.44% [-0.25,0):87.53% [0,0.25):1.23%
+- penalty(weighted) bins: [0,1e-06):1.23% [0.0001,0.001):0.12% [0.001,0.01):4.10% [0.01,0.1):59.08% [0.1,1):33.04% [1,10):2.31% [10,100):0.13%
+
+**Files**
+
+- **ac_sb3_0204_3m_1063_p1_pen_log_neg_w1_orig1_s124.log**
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=log<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=1.0<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_entry_size=32)<br>penalty_reward_formula=neg<br>penalty_scale=log_compressed<br>penalty_sum=1.103124
+  - penalty_data: n=12494, zero=154 (1.23%), hist=distinct=198 top10=14:1.90% 20:1.90% 23:1.89% 21:1.88% 18:1.86% 12:1.82% 22:1.82% 25:1.78% 26:1.78% 28:1.74%
+  - immediate_reward: n=29158, mean=0.78337, min=0.015, max=1, p50=0.99, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):3.38% [0.25,0.5):15.28% [0.5,0.75):20.65% [0.75,1):60.69%
+  - reward(before clip): n=12494, mean=-0.187936, min=-26.3366, max=-0, p50=-0.0681715, p90=-0.0169177, p99=-0
+  - final_reward(after clip): n=12494, mean=-0.129157, min=-1, max=-0, clip_sat=2.43%, p50=-0.0681715, p90=-0.0169177, p99=-0
+  - final_reward bins: [-1,-0.75):3.27% [-0.75,-0.5):1.54% [-0.5,-0.25):6.44% [-0.25,0):87.53% [0,0.25):1.23%
+  - penalty(weighted): n=12494, mean=0.187936, min=0, max=26.3366, p50=0.0681713, p90=0.271084, p99=2.47999
+  - penalty bins: [0,1e-06):1.23% [0.0001,0.001):0.12% [0.001,0.01):4.10% [0.01,0.1):59.08% [0.1,1):33.04% [1,10):2.31% [10,100):0.13%
+
+## penalty_scale = reciprocal
+
+**Summary**
+- immediate_reward: n=29158, mean=0.783985, bins=[0,0.25):3.30% [0.25,0.5):15.14% [0.5,0.75):20.90% [0.75,1):60.66%
+- penalty_data: n=12503, zero=12365 (98.90%), hist=distinct=6 0:98.90% 1:0.90% 2:0.15% 3:0.04% 5:0.01% 9:0.01%
+- final_reward(after clip): n=12503, mean=0.999891, min=0.789474, max=1, clip_sat=98.90%
+- final_reward bins: [0.75,1):100.00%
+- penalty(weighted) bins: [0,1e-06):98.90% [1e-05,0.0001):0.06% [0.0001,0.001):0.62% [0.001,0.01):0.22% [0.01,0.1):0.18% [0.1,1):0.01%
+
+**Files**
+
+- **ac_sb3_0204_3m_1063_p1_pen_w0p2_centered_s124.log**
+  - params: LOH_ENABLE_PENALTY=1<br>LOH_PENALTY_MODE/LOH_PENALTY_SCALE=reciprocal<br>LOH_REWARD_USE_PENALTY=1<br>LOH_REWARD_W_PENALTY=0.2<br>byte_penalty=0.000<br>obj_penalty=1.000<br>penalty_cutoff=100<br>penalty_entry_size=32)<br>penalty_reward_formula=centered<br>penalty_scale=reciprocal<br>penalty_sum=0.000000
+  - penalty_data: n=12503, zero=12365 (98.90%), hist=distinct=6 0:98.90% 1:0.90% 2:0.15% 3:0.04% 5:0.01% 9:0.01%
+  - immediate_reward: n=29158, mean=0.783985, min=0.015, max=1, p50=0.98, p90=1, p99=1
+  - immediate_reward bins: [0,0.25):3.30% [0.25,0.5):15.14% [0.5,0.75):20.90% [0.75,1):60.66%
+  - reward(before clip): n=12503, mean=0.999891, min=0.789474, max=1, p50=1, p90=1, p99=1
+  - final_reward(after clip): n=12503, mean=0.999891, min=0.789474, max=1, clip_sat=98.90%, p50=1, p90=1, p99=1
+  - final_reward bins: [0.75,1):100.00%
+  - penalty(weighted): n=12503, mean=5.44626e-05, min=0, max=0.105263, p50=0, p90=0, p99=0.000117908
+  - penalty bins: [0,1e-06):98.90% [1e-05,0.0001):0.06% [0.0001,0.001):0.62% [0.001,0.01):0.22% [0.01,0.1):0.18% [0.1,1):0.01%

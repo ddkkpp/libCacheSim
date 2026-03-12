@@ -20,3 +20,8 @@ data/WikiCDN/wiki_2016u.oracleGeneral.zst GLCache cache size        5GiB, 280349
 data/WikiCDN/wiki_2016u.oracleGeneral.zst GLCache cache size      538GiB, 2803498585 req, miss ratio 0.0259, byte miss ratio 0.2891
 data/WikiCDN/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size        5GiB, 2803498585 req, miss ratio 0.3178, byte miss ratio 0.7317
 data/WikiCDN/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size      538GiB, 2803498585 req, miss ratio 0.0460, byte miss ratio 0.1923
+data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-OMR cache size     7GiB,          3000000 req, miss ratio 0.349567, byte miss ratio 0.822716, throughput 0.01 MQPS
+data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-OMR cache size     7GiB,          3000000 req, miss ratio 0.374491, byte miss ratio 0.792119, throughput 0.01 MQPS
+data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-OMR cache size     7GiB,          3000000 req, miss ratio 0.354900, byte miss ratio 0.834167, throughput 0.01 MQPS
+data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-BMR cache size     7GiB,          3000000 req, miss ratio 0.349572, byte miss ratio 0.822682, throughput 0.02 MQPS
+data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-BMR cache size     7GiB,          3000000 req, miss ratio 0.354875, byte miss ratio 0.834181, throughput 0.01 MQPS

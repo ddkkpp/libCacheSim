@@ -139,6 +139,7 @@ typedef struct {
                            // (LOH_penalty.c/LOH_mr_noblocked.c legacy)
   int16_t loh_irt_pos[3];  // index in each IRT heap (-1 if not present)
   int16_t loh_size_pos;    // index in size heap (-1 if not present) for LOH.c
+  int32_t obj_array_idx;   // index in flat obj_array for O(1) random sampling
 } LOH_obj_metadata_t;
 
 typedef struct {

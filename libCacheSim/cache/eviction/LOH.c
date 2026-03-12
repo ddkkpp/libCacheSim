@@ -177,6 +177,11 @@ static int loh_score_use_compound = 0;  // 默认关闭 compound 评分模式
 static int loh_score_compound_v2 =
     0;  // 对应环境 LOH_SCORE_COMPOUND_V2：compound 升级版（7权重）
 
+// IRT 堆优化：compound 模式不使用 IRT 特征进行评分，
+// 因此可以跳过 IRT 堆的全部维护（insert/remove/update）以节省大量 CPU。
+// 在 LOH_init 中根据 loh_score_use_compound 自动设置。
+static int loh_irt_heap_enabled = 1;  // 默认启用，compound 模式下自动禁用
+
 // 特征归一化模式开关：运行期从环境读取一次后缓存
 //   - loh_feature_log1p=1 时：所有特征统一采用 log1p(raw)，并允许 Python 端直接
 //     使用原始连续动作作为权重（不再 softmax）。
@@ -190,6 +195,69 @@ static int loh_feature_log1p_reciprocal =
 // 运行时开关：是否在计算后进行基于 log1p(max) 的归一化与裁剪
 static int loh_feature_normalize =
     0;  // 对应环境 LOH_ENABLE_FEATURE_NORMALIZATION
+
+// =============================
+// 3.5) 自动特征模式检测
+// =============================
+//   - LOH_AUTO_FEATURE_MODE=1 启用自动检测（默认关闭）
+//   - 原理：在缓存预热后遍历所有缓存对象，计算 one_hit_ratio
+//     (只被访问一次的对象占比)，该指标跨不同 cache size 稳定。
+//     one_hit_ratio ≤ 0.6 → 热点集中 → LOG1P + compound
+//     one_hit_ratio > 0.6 → 频率均匀 → LOG1P_RECIPROCAL + compound
+//   - 同时自动启用 compound=1（在所有 trace 上统一最优）。
+//   - 这是 trace 本身的 "访问频率分布形态" 度量，不依赖任何算法结果。
+static int loh_auto_feature_mode = 0;          // LOH_AUTO_FEATURE_MODE
+static int64_t loh_auto_detect_reqs = 200000;  // LOH_AUTO_DETECT_REQS
+static double loh_auto_cv_threshold = 2.5;     // LOH_AUTO_CV_THRESHOLD
+static int loh_auto_detected = 0;              // 内部标志：是否已检测
+
+// =============================
+// 4) 随机采样候选配置
+// =============================
+//   - loh_random_candidates  ← LOH_RANDOM_CANDIDATES（默认 96）
+//     在结构化候选源之外额外从 hash table 随机采样 N 个候选。
+//     注意：这是 ADDITIVE 的，不减少原有结构化源的配额。
+static int loh_random_candidates = 96;  // 随机采样数量
+// 当 loh_structured_candidates == 0
+// 时，跳过结构化候选，仅使用随机采样（等效于旧 RANDOM_ONLY 模式）
+
+// =============================
+// 4b) 衰减采样配置 (替代确定性采样)
+// =============================
+//   - loh_tail_sample_enabled ← LOH_TAIL_SAMPLE（默认 0 = 关闭）
+//     设为 1 时，所有候选源（LRU 尾部、频率表、尺寸桶/堆、IRT 堆、随机采样）
+//     都改用几何衰减概率采样：p(i) = decay^i。
+//     从每个源的"最可能驱逐端"开始遍历，接受概率按位置递减。
+//     效果：保持偏向极端（LRU 尾、低频、大尺寸、高
+//     IRT），但在更广范围随机探索。
+//   - loh_tail_sample_decay ← LOH_TAIL_SAMPLE_DECAY（默认 0.99）
+//     衰减因子 ∈ (0, 1)。越接近 1 采样范围越广、衰减越慢；
+//     越小则集中在极端端附近。
+//     decay=0.99 且 wanted=32 时约扫描 52 个对象即可获得 32 个候选。
+static int loh_tail_sample_enabled = 0;
+static double loh_tail_sample_decay = 0.99;
+
+// =============================
+// 4c) 自适应候选预算（实验性）
+// =============================
+//   - loh_adaptive_budget ← LOH_ADAPTIVE_BUDGET（默认 0 = 关闭）
+//     当启用时，跟踪每个特征源对驱逐的贡献，周期性重新分配预算。
+//     贡献多的源获更多候选名额，贡献少的减少。
+//   - 重平衡周期：每 LOH_ADAPTIVE_REBALANCE_PERIOD 次驱逐执行一次
+#define LOH_MAX_SOURCES \
+  7  // recency=0, freq=1, size=2, irt1=3, irt2=4, irt3=5,
+     // random/tail=6
+#define LOH_ADAPTIVE_REBALANCE_PERIOD 10000
+static int loh_adaptive_budget = 0;
+static uint64_t loh_source_evict_count[LOH_MAX_SOURCES];  // 各源驱逐贡献计数
+static int loh_source_budget[LOH_MAX_SOURCES];  // 自适应预算（初始=均分）
+static uint64_t loh_adaptive_total_evict = 0;   // 自适应重平衡计数器
+// 候选→来源标签数组（每次 to_evict 重置；与 params->candidates 并行索引）
+static int loh_cand_source[2048 + 256];
+// per-source 获胜得分累加：O(1)/驱逐，仅在 winner 确定后记录一次
+static double loh_source_win_score_sum[LOH_MAX_SOURCES];
+// 是否启用 score-based rebalance（默认 0 = 仅用 win-count，即 §19 行为）
+static int loh_use_score_rebalance = 0;
 
 // 状态向量配置由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1 控制
 // 若未显式定义，则在此默认关闭缓存特征：
@@ -293,13 +361,14 @@ static int loh_feature_normalize =
 
 // 模块测试调试宏
 #define LOH_TEST_FEATURE_CALCULATION 1
+
 #define LOH_TEST_EVICTION_LOGIC 1
 #define LOH_TEST_DATA_CONSISTENCY 1
 #define LOH_TEST_PERFORMANCE_STATS 1
 
 // 轻量性能剖析（仅在调试下启用）：测量无RL路径的主要耗时
 #ifndef LOH_PERF_PROFILING
-#define LOH_PERF_PROFILING 1
+#define LOH_PERF_PROFILING 0
 #endif
 
 #if LOH_PERF_PROFILING
@@ -413,6 +482,7 @@ static int loh_parse_bool_env(const char *val, int default_value) {
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/ipc.h>
+#include <sys/mman.h>  // 用于 mmap 共享内存快速路径
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <sys/stat.h>  // 用于文件权限设置（chmod）
@@ -451,13 +521,19 @@ static void LOH_print_cache(const cache_t *cache);
 
 #define IRT_HISTORY_SIZE 3
 // 定义 IRT（请求间隔时间）的历史数据结构
-#define MAX_CANDIDATES 96  // 驱逐候选池的最大大小（保持96以稳定命中率）
-// 注意：seen 去重表（见 LOH_SEEN_CAP）容量与 MAX_CANDIDATES 直接相关。
-// 每轮驱逐会从 6 个特征各取 candidates_per_feature=MAX_CANDIDATES/6 的候选，
-// 去重前的插入尝试数量上界约为 MAX_CANDIDATES。为控制线性探测成本：
+#define MAX_CANDIDATES_LIMIT 2048  // 编译期候选池数组上限
+#define MAX_CANDIDATES_DEFAULT 96  // 默认运行时候选池大小
+// 运行时实际候选池大小（可通过环境变量 LOH_STRUCTURED_CANDIDATES 覆盖）
+static int loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
+// 向后兼容宏：编译期数组大小使用 MAX_CANDIDATES_LIMIT
+#define MAX_CANDIDATES MAX_CANDIDATES_LIMIT
+// 注意：seen 去重表（见 LOH_SEEN_CAP）容量与候选池大小直接相关。
+// 每轮驱逐会从 6 个特征各取 candidates_per_feature=loh_structured_candidates/6
+// 的候选， 去重前的插入尝试数量上界约为
+// loh_structured_candidates。为控制线性探测成本：
 //   1) LOH_SEEN_CAP 必须为 2 的幂（便于按位取模与代际清理）。
-//   2) 建议 LOH_SEEN_CAP 至少为 MAX_CANDIDATES 的 2–4 倍以保持低负载因子。
-// 当前配置：MAX_CANDIDATES=96，LOH_SEEN_CAP=256，负载约 <= 96/256 ≈ 0.375。
+//   2) 建议 LOH_SEEN_CAP 至少为 loh_structured_candidates 的 2–4
+//   倍以保持低负载因子。
 // 维度命名约定（与 Python RL 端保持一致）：
 //   FEATURE_DIM          → 共享内存 state[]
 //   的特征列上限（基础特征统计维度，当前为6）。 WEIGHT_DIM           →
@@ -841,8 +917,10 @@ typedef struct {
   double miss_feature_avg[FEATURE_DIM];  // 未命中对象的特征平均值
 
   // Actor-Critic RL 的共享内存结构（文件式实现）
-  FILE *shm_file;      // 共享内存文件指针
-  char *shm_filename;  // 共享内存文件名
+  FILE *shm_file;        // 共享内存文件指针（用于 blocked 模式和初始化）
+  char *shm_filename;    // 共享内存文件名
+  shm_data_t *shm_mmap;  // mmap 映射指针（nonblocked 快速路径）
+  int shm_fd;            // shm 文件的 fd（mmap 用）
   // POSIX 命名信号量
   sem_t *sem_ready;      // C -> Python “状态就绪” 信号
   sem_t *sem_ack;        // Python -> C “权重应答” 信号
@@ -922,6 +1000,11 @@ typedef struct {
   int penalty_queue_capacity;      // 队列容量
   int pending_penalty_count;       // 待处理的惩罚计数
 #endif
+
+  // Flat object array for O(1) random sampling (replaces hashtable_rand_obj)
+  cache_obj_t **obj_array;
+  int obj_array_size;
+  int obj_array_capacity;
 } LOH_params_t;
 
 static inline double loh_mlp_eval(const LOH_params_t *params,
@@ -952,6 +1035,230 @@ static inline double loh_mlp_eval(const LOH_params_t *params,
     y += W2[h] * z;
   }
   return y;
+}
+
+// === 自动特征模式检测 ===
+// 在缓存预热后，通过随机采样缓存对象的频率分布来判断 trace 类型，
+// 并自动设置所有相关配置（feature mode、compound 等）。
+// 使用变异系数 (CV = std/mean) 作为频率倾斜程度的度量。
+// CV 大 → bursty 热点 → recency-dominant → 用 LOG1P + compound
+// CV 小 → 稳定 popularity → frequency-dominant → 用 LOG1P_RECIPROCAL + compound
+static void loh_auto_detect_and_switch(cache_t *cache) {
+  LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+
+  if (cache->n_obj < 100) {
+    // 缓存对象太少，无法检测
+    printf("[LOH AUTO-DETECT] Skipped: too few objects (%ld)\n",
+           (long)cache->n_obj);
+    return;
+  }
+
+  // 遍历所有缓存对象，计算 log(1+freq) 的统计矩和各特征范围
+  typedef struct {
+    int64_t count;
+    double sum_freq;        // Σ freq
+    double sum_freq_sq;     // Σ freq²
+    int64_t one_hit_count;  // access_count == 1 的对象数
+    int64_t max_access_count;
+    int64_t max_recency;  // 最大 recency
+    int64_t min_recency;  // 最小 recency (> 0)
+    // log(1+freq) 的原始矩（用于计算峰度）
+    double sum_logf;   // Σ log(1+freq)
+    double sum_logf2;  // Σ log(1+freq)²
+    double sum_logf3;  // Σ log(1+freq)³
+    double sum_logf4;  // Σ log(1+freq)⁴
+  } detect_accum_t;
+  detect_accum_t accum = {0};
+  accum.min_recency = INT64_MAX;
+  int64_t current_ts = params->current_timestamp;
+
+  for (uint64_t bi = 0; bi < hashsize(cache->hashtable->hashpower); bi++) {
+    cache_obj_t *obj = cache->hashtable->ptr_table[bi];
+    while (obj != NULL) {
+      double f = (double)obj->LOH.access_count;
+      double lf = log(1.0 + f);  // log(1+freq): 这就是 LOG1P 变换后的值
+      accum.sum_freq += f;
+      accum.sum_freq_sq += f * f;
+      accum.sum_logf += lf;
+      accum.sum_logf2 += lf * lf;
+      accum.sum_logf3 += lf * lf * lf;
+      accum.sum_logf4 += lf * lf * lf * lf;
+      accum.count++;
+      if (obj->LOH.access_count == 1) accum.one_hit_count++;
+      if (obj->LOH.access_count > accum.max_access_count)
+        accum.max_access_count = obj->LOH.access_count;
+      int64_t recency = current_ts - obj->LOH.last_access_counter;
+      if (recency > accum.max_recency) accum.max_recency = recency;
+      if (recency > 0 && recency < accum.min_recency)
+        accum.min_recency = recency;
+      obj = obj->hash_next;
+    }
+  }
+  int actual_samples = (int)accum.count;
+  int max_ac = (int)accum.max_access_count;
+
+  if (actual_samples < 50) {
+    printf("[LOH AUTO-DETECT] Skipped: insufficient samples (%d)\n",
+           actual_samples);
+    return;
+  }
+
+  double n = (double)actual_samples;
+
+  // ---- 计算 log(1+freq) 的统计矩 ----
+  // M_k = E[X^k] (原始矩), X = log(1+freq)
+  double M1 = accum.sum_logf / n;
+  double M2 = accum.sum_logf2 / n;
+  double M3 = accum.sum_logf3 / n;
+  double M4 = accum.sum_logf4 / n;
+
+  // 中心矩
+  double mu2 = M2 - M1 * M1;  // 方差
+  double mu3 = M3 - 3 * M1 * M2 + 2 * M1 * M1 * M1;
+  double mu4 = M4 - 4 * M1 * M3 + 6 * M1 * M1 * M2 - 3 * M1 * M1 * M1 * M1;
+
+  double std_logf = (mu2 > 0) ? sqrt(mu2) : 0.0;
+  double skewness = (mu2 > 1e-12) ? mu3 / (mu2 * std_logf) : 0.0;
+  // 超额峰度: kurtosis - 3 (正态分布 = 0)
+  double excess_kurtosis = (mu2 > 1e-12) ? mu4 / (mu2 * mu2) - 3.0 : 0.0;
+
+  // 辅助统计量（诊断用）
+  double mean_freq = accum.sum_freq / n;
+  double var_freq = accum.sum_freq_sq / n - mean_freq * mean_freq;
+  double cv =
+      (mean_freq > 0 && var_freq > 0) ? sqrt(var_freq) / mean_freq : 0.0;
+  double one_hit_ratio = (double)accum.one_hit_count / n;
+
+  printf(
+      "[LOH AUTO-DETECT] n_req=%ld, n_obj=%ld, samples=%d, "
+      "mean_freq=%.2f, cv=%.3f, max_ac=%d\n",
+      (long)cache->n_req, (long)cache->n_obj, actual_samples, mean_freq, cv,
+      max_ac);
+  printf(
+      "[LOH AUTO-DETECT] LOG-FEATURE STATS: "
+      "mean_log=%.4f, std_log=%.4f, skewness=%.4f, "
+      "excess_kurtosis=%.4f, one_hit=%.4f\n",
+      M1, std_logf, skewness, excess_kurtosis, one_hit_ratio);
+
+  // ---- 决策：composite score (2D 线性分类器) ----
+  //
+  // 从 LOG1P 和 RECIPROCAL 的本质区别出发：
+  //   - LOG1P 特征无界 [0,∞)，保留幅度差异，但可能有特征尺度不匹配
+  //   - RECIPROCAL 特征有界 (0,1]，自带方向偏差（freq↑, recency/IRT↓）
+  //
+  // 何时 LOG1P 更好：缓存对象有丰富的频率多样性（大量对象被多次访问），
+  //   LOG1P 的幅度差异帮助 RL 从频率梯度中学习。
+  //   指标：low one_hit_ratio → 多数对象 freq>1 → 频率信息丰富
+  //
+  // 何时 RECIPROCAL 更好：缓存对象频率分布极度不均（少数极热+大量冷），
+  //   LOG1P 的极端值支配学习，RECIPROCAL 的压缩和方向偏差简化学习。
+  //   指标：high CV (极端离群值) + high one_hit (大量 freq=1)
+  //
+  // 综合评分：score = 3*(one_hit - 0.5) - 0.5*log10(CV)
+  //   - one_hit_ratio 贡献正方向（高 → RECIPROCAL）
+  //   - log10(CV) 贡献负方向（高 → LOG1P，因为极端离群值的信息量需要保留）
+  //   - 两个因子互相制衡，决策边界是 2D 特征空间中的一条线
+  //
+  // 验证数据（6/6 正确）：
+  //   1063 300K/3M: -0.63/-0.26 → LOG1P ✓
+  //   wiki  300K/3M: +0.11/+0.58 → RECIPROCAL ✓
+  //   meta  300K/3M: -0.23/-0.13 → LOG1P ✓
+  double log10_cv = (cv > 0.0) ? log10(cv) : 0.0;
+  double score = 3.0 * (one_hit_ratio - 0.5) - 0.5 * log10_cv;
+
+  printf("[LOH AUTO-DETECT] SCORE = 3*(%.4f - 0.5) - 0.5*log10(%.3f) = %.4f\n",
+         one_hit_ratio, cv, score);
+
+  if (score > 0.0) {
+    loh_feature_log1p = 0;
+    loh_feature_log1p_reciprocal = 1;
+    printf(
+        "[LOH AUTO-DETECT] DECISION: LOG1P_RECIPROCAL mode "
+        "(score=%.4f > 0)\n",
+        score);
+  } else {
+    loh_feature_log1p = 1;
+    loh_feature_log1p_reciprocal = 0;
+    printf(
+        "[LOH AUTO-DETECT] DECISION: LOG1P mode "
+        "(score=%.4f <= 0)\n",
+        score);
+  }
+
+  // === 自动设置其他配置 ===
+  if (!loh_score_use_compound) {
+    loh_score_use_compound = 1;
+    loh_score_use_irt = 0;
+    loh_irt_heap_enabled = 0;  // compound 模式下禁用 IRT 堆以提升吞吐量
+    printf("[LOH AUTO-DETECT] Auto-enabled: COMPOUND=1 (IRT heaps disabled)\n");
+  }
+
+  // === 分析各模式下的特征值分布 ===
+  double log_freq_min = log1p(1.0);  // 最小 freq=1 → log(2)=0.693
+  double log_freq_max = log1p((double)max_ac);
+  double log_rec_min =
+      (accum.min_recency < INT64_MAX) ? log1p((double)accum.min_recency) : 0.0;
+  double log_rec_max = log1p((double)accum.max_recency);
+
+  // 在三种模式下的特征范围：
+  printf("[LOH FEATURE RANGES] === 三种模式下 frequency 特征范围 ===\n");
+  printf("  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_freq_min,
+         log_freq_max);
+  printf("  RECIPROCAL:   [%.3f, %.3f] (log1p(f)/(log1p(f)+1), bounded)\n",
+         log_freq_min / (log_freq_min + 1.0),
+         log_freq_max / (log_freq_max + 1.0));
+  printf("  DEFAULT:      [%.3f, %.3f] (f/(f+1), bounded)\n",
+         1.0 / 2.0, /* f=1 → 1/2 */
+         (double)max_ac / ((double)max_ac + 1.0));
+  printf("[LOH FEATURE RANGES] === 三种模式下 recency 特征范围 ===\n");
+  printf("  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_rec_min,
+         log_rec_max);
+  printf("  RECIPROCAL:   [%.3f, %.3f] (1/(1+log1p(v)), bounded)\n",
+         (log_rec_max > 0) ? 1.0 / (1.0 + log_rec_max) : 0.0,
+         (log_rec_min > 0) ? 1.0 / (1.0 + log_rec_min) : 1.0);
+  printf(
+      "  DEFAULT:      [%.6f, %.3f] (1/(1+v), bounded)\n",
+      (accum.max_recency > 0) ? 1.0 / (1.0 + (double)accum.max_recency) : 0.0,
+      (accum.min_recency > 0 && accum.min_recency < INT64_MAX)
+          ? 1.0 / (1.0 + (double)accum.min_recency)
+          : 1.0);
+  printf(
+      "[LOH FEATURE RANGES] LOG1P scale ratio: freq_range=%.2f, "
+      "rec_range=%.2f, ratio=%.2f\n",
+      log_freq_max - log_freq_min, log_rec_max - log_rec_min,
+      (log_freq_max - log_freq_min > 0)
+          ? (log_rec_max - log_rec_min) / (log_freq_max - log_freq_min)
+          : 0.0);
+  // 硬编码 max 下的归一化结果
+  printf(
+      "[LOH FEATURE RANGES] 硬编码 max 归一化: freq=[%.4f, %.4f] (max=1e6), "
+      "rec=[%.4f, %.4f] (max=128e6)\n",
+      log_freq_min / log1p(1e6), log_freq_max / log1p(1e6),
+      log_rec_min / log1p(128e6), log_rec_max / log1p(128e6));
+  // 自适应 max 归一化结果
+  printf(
+      "[LOH FEATURE RANGES] 自适应 max 归一化: freq=[%.4f, %.4f] (max=%d), "
+      "rec=[%.4f, %.4f] (max=%ld)\n",
+      log_freq_min / log_freq_max, 1.0, max_ac,
+      (log_rec_max > 0) ? log_rec_min / log_rec_max : 0.0, 1.0,
+      (long)accum.max_recency);
+
+  // === 归一化：不自动启用 ===
+  // 实验表明 NORMALIZE=0 在所有 trace 上表现最佳（LOG1P 和 RECIPROCAL
+  // 均如此）。 仅在用户显式设置 LOH_ENABLE_FEATURE_NORMALIZATION=1 时才启用。
+  printf(
+      "[LOH AUTO-DETECT] NORMALIZE kept at %d (not auto-changed; "
+      "best results use NORMALIZE=0)\n",
+      loh_feature_normalize);
+
+  // === RSC（随机采样候选）：默认已设为 96 ===
+  // 实验表明随机候选在所有最佳配置中都被使用
+
+  printf(
+      "[LOH AUTO-DETECT] Final config: LOG1P=%d, RECIPROCAL=%d, "
+      "NORMALIZE=%d, COMPOUND=%d, COMPOUND_V2=%d, RSC=%d\n",
+      loh_feature_log1p, loh_feature_log1p_reciprocal, loh_feature_normalize,
+      loh_score_use_compound, loh_score_compound_v2, loh_random_candidates);
 }
 
 // === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
@@ -2406,11 +2713,97 @@ static void update_state_vector(LOH_params_t *params) {
   }
 }
 
+// ===== 非阻塞 mmap 快速同步路径 =====
+// 完全绕过 stdio 缓冲、fcntl 锁、clock_gettime，直接通过 mmap 指针读写。
+// 仅在 nonblocked 模式且 mmap 可用时使用。
+static void sync_with_actor_critic_fast(LOH_params_t *params) {
+  shm_data_t *m = params->shm_mmap;
+
+  PERF_TS ts_sync_total;
+  PERF_NOW(ts_sync_total);
+
+  PERF_TS ts_misc_start;
+  PERF_NOW(ts_misc_start);
+
+  // 读取上一轮 Python 写回的权重（无锁，直接内存读取）
+  if (__atomic_load_n(&m->weights_updated, __ATOMIC_ACQUIRE)) {
+    memcpy(params->weights, m->weights, sizeof(double) * WEIGHT_DIM);
+    if (params->score_model == LOH_SCORE_MODEL_MLP &&
+        m->score_model == LOH_SCORE_MODEL_MLP) {
+      int plen = m->mlp_param_len;
+      if (plen < 0) plen = 0;
+      if (plen > LOH_MLP_MAX_PARAMS) plen = LOH_MLP_MAX_PARAMS;
+      params->mlp_hidden = m->mlp_hidden;
+      if (params->mlp_hidden > LOH_MLP_MAX_HIDDEN)
+        params->mlp_hidden = LOH_MLP_MAX_HIDDEN;
+      params->mlp_param_len = plen;
+      if (plen > 0) {
+        memcpy(params->mlp_params, m->mlp_params,
+               sizeof(double) * (size_t)plen);
+      }
+    }
+    __atomic_store_n(&m->weights_updated, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&m->ready_for_inference, 0, __ATOMIC_RELEASE);
+    LOH_DEBUG_PRINT_BASIC(
+        "[NON-BLOCK-FAST] Applied pending weights (ack_version=%llu)\n",
+        (unsigned long long)m->ack_version);
+  }
+
+  // 跳过冗余 sync：如果 Python 尚未消费上一个 state，则不覆盖、不重算
+  if (__atomic_load_n(&m->ready_for_inference, __ATOMIC_RELAXED)) {
+    // Python 尚未读取上一个 state，跳过本次发送
+    PERF_ACCUM(params, sync_misc, ts_misc_start);
+    PERF_ACCUM(params, sync_total, ts_sync_total);
+    return;
+  }
+
+  // 计算状态向量（仅在需要发送时才计算）
+  PERF_TS ts_update_state;
+  PERF_NOW(ts_update_state);
+  update_state_vector(params);
+  PERF_ACCUM(params, sync_update_state, ts_update_state);
+
+  // 写入状态（直接 memcpy 到 mmap 页面）
+  memcpy(m->state, params->context_state, sizeof(double) * CONTEXT_DIM);
+  m->total_evicted_bytes = 0;
+  m->total_evicted_count = 0;
+  m->pending_penalty_count = 0;
+  m->score_model = params->score_model;
+  m->mlp_hidden = params->mlp_hidden;
+  m->mlp_param_len = params->mlp_param_len;
+  memcpy(m->mlp_params, params->mlp_params, sizeof(params->mlp_params));
+  m->state_version += 1;
+  m->timestamp = params->current_timestamp;
+
+  // 发布 ready 标志（memory fence 确保前面的写入对 Python 可见）
+  __atomic_store_n(&m->ready_for_inference, 1, __ATOMIC_RELEASE);
+
+  // 发送 ready 信号量通知 Python
+  if (params->sem_requested && params->sem_enabled &&
+      params->sem_ready != NULL) {
+    if (sem_post(params->sem_ready) != 0) {
+      LOH_DEBUG_PRINT_BASIC(
+          "[LOH] sem_post(ready) failed: %s, disable semaphore mode\n",
+          strerror(errno));
+      loh_sem_close(params, false);
+    }
+  }
+
+  PERF_ACCUM(params, sync_misc, ts_misc_start);
+  PERF_ACCUM(params, sync_total, ts_sync_total);
+}
+
 // 将状态发送到 Actor-Critic 网络并获取更新的权重
 // 【核心修复】：重构此函数以修复死锁问题，并优化等待时间
 static void sync_with_actor_critic(LOH_params_t *params) {
-  if (!loh_enable_rl) return;            // 关闭RL时直接返回，无需计时
-  if (params->shm_file == NULL) return;  // 无需计时
+  if (!loh_enable_rl) return;  // 关闭RL时直接返回，无需计时
+  if (params->shm_file == NULL && params->shm_mmap == NULL) return;
+
+  // 非阻塞模式 + mmap 可用时使用快速路径
+  if (!loh_wait_mode_blocked && params->shm_mmap != NULL) {
+    sync_with_actor_critic_fast(params);
+    return;
+  }
 
   // 开始sync总计时
   PERF_TS ts_sync_total;
@@ -2435,6 +2828,33 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   rewind(params->shm_file);
   if (fread(&shm_data, sizeof(shm_data_t), 1, params->shm_file) != 1) {
     // Handle error if needed, but for now just continue
+  }
+
+  // ===【非阻塞模式：读取上一轮 Python 写回的权重】===
+  // 在非阻塞模式下，上次 sync 发送状态后立即返回，Python 的权重回写
+  // 会在这次 sync 的读取中被发现并应用
+  if (!loh_wait_mode_blocked && shm_data.weights_updated) {
+    memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
+    if (params->score_model == LOH_SCORE_MODEL_MLP &&
+        shm_data.score_model == LOH_SCORE_MODEL_MLP) {
+      int plen = shm_data.mlp_param_len;
+      if (plen < 0) plen = 0;
+      if (plen > LOH_MLP_MAX_PARAMS) plen = LOH_MLP_MAX_PARAMS;
+      params->mlp_hidden = shm_data.mlp_hidden;
+      if (params->mlp_hidden > LOH_MLP_MAX_HIDDEN)
+        params->mlp_hidden = LOH_MLP_MAX_HIDDEN;
+      params->mlp_param_len = plen;
+      if (plen > 0) {
+        memcpy(params->mlp_params, shm_data.mlp_params,
+               sizeof(double) * (size_t)plen);
+      }
+    }
+    shm_data.weights_updated = 0;
+    shm_data.ready_for_inference = 0;
+    LOH_DEBUG_PRINT_BASIC(
+        "[NON-BLOCK] Applied pending weights from previous sync "
+        "(ack_version=%llu)\n",
+        (unsigned long long)shm_data.ack_version);
   }
 
   memcpy(shm_data.state, params->context_state, sizeof(double) * CONTEXT_DIM);
@@ -2751,11 +3171,13 @@ static void sync_with_actor_critic(LOH_params_t *params) {
                         start_time.tv_sec, start_time.tv_nsec);
 
   // ===【非阻塞模式检查】===
-  // 如果设置了非阻塞模式且 Python 正在训练，直接返回（使用缓存的权重）
-  if (!loh_wait_mode_blocked && python_training) {
+  // 非阻塞模式：发送状态后立即返回，不等待 Python 响应
+  // Python 写回的权重会在**下一次** sync_with_actor_critic 调用时被读取
+  // （在函数开头的 "读取上一轮权重" 逻辑中处理）
+  if (!loh_wait_mode_blocked) {
     LOH_DEBUG_PRINT_BASIC(
-        "[seq %llu] Non-blocking mode: Python is training, skip wait and use "
-        "cached weights\n",
+        "[seq %llu] Non-blocking mode: state sent, skip wait and continue "
+        "with current weights\n",
         seq_no);
     // misc计时结束 (非阻塞提前返回)
     PERF_ACCUM(params, sync_misc, ts_misc_start);
@@ -3183,7 +3605,7 @@ static void loh_debug_check_membership(LOH_params_t *params, cache_obj_t *obj,
 #endif
 
 // 轻量去重 seen 表：使用 generation-tag 避免每轮清零
-#define LOH_SEEN_CAP 256
+#define LOH_SEEN_CAP 8192  // 足以支持 MAX_CANDIDATES_LIMIT=2048 的 4x 负载因子
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert((LOH_SEEN_CAP & (LOH_SEEN_CAP - 1)) == 0,
                "LOH_SEEN_CAP must be a power of two");
@@ -3415,6 +3837,11 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       "TOPK=%d, AVGTOPK=%d, REQUEST=%d -> CONTEXT_DIM=%d\n",
       MISSRATIO_DIM, HIT_MISS_DIM, CACHE_DIM, CAND_FEATURE_DIM,
       TOPK_FEATURE_DIM, AVGTOPK_FEATURE_DIM, REQUEST_FEATURE_DIM, CONTEXT_DIM);
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOH_STRUCTURED_CANDIDATES=%s (default=%d, limit=%d)\n",
+      getenv("LOH_STRUCTURED_CANDIDATES") ? getenv("LOH_STRUCTURED_CANDIDATES")
+                                          : "(unset)",
+      MAX_CANDIDATES_DEFAULT, MAX_CANDIDATES_LIMIT);
 
   cache_t *cache =
       cache_struct_init("LOH", ccache_params, cache_specific_params);
@@ -3446,6 +3873,25 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->n_candidates = 0;
   params->is_warmed_up = false;               // 初始为未预热状态
   params->history_capacity_adjusted = false;  // 历史容量未调整
+  // ===【读取候选池大小环境变量（必须在所有数据结构初始化之前）】===
+  {
+    const char *mc_str = getenv("LOH_STRUCTURED_CANDIDATES");
+    if (mc_str != NULL) {
+      int mc_val = atoi(mc_str);
+      if ((mc_val == 0 || mc_val >= 6) && mc_val <= MAX_CANDIDATES_LIMIT) {
+        loh_structured_candidates = mc_val;
+      } else {
+        fprintf(stderr,
+                "LOH WARNING: LOH_STRUCTURED_CANDIDATES=%d out of range "
+                "{0} ∪ [6, %d], using default %d\n",
+                mc_val, MAX_CANDIDATES_LIMIT, MAX_CANDIDATES_DEFAULT);
+        loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
+      }
+    }
+    printf("LOH_STRUCTURED_CANDIDATES=%d (default=%d, limit=%d)\n",
+           loh_structured_candidates, MAX_CANDIDATES_DEFAULT,
+           MAX_CANDIDATES_LIMIT);
+  }
 
   // 初始化 frequency 表
   freq_table_init(params);
@@ -3464,6 +3910,12 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   // 初始化尺寸数据结构（根据 LOH_USE_SIZE_BUCKETS 选择 heap 或 buckets）
   size_ds_init(params);
 
+  // 初始化 flat object array（用于 O(1) 随机采样，替代 hashtable_rand_obj）
+  params->obj_array_capacity = 65536;  // 初始容量，按需扩容
+  params->obj_array_size = 0;
+  params->obj_array = (cache_obj_t **)malloc(params->obj_array_capacity *
+                                             sizeof(cache_obj_t *));
+
   // 初始化特征权重（默认的平衡初值）
   params->weights[0] = 1.0;  // recency
   params->weights[1] = 0.0;  // frequency
@@ -3471,6 +3923,26 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->weights[3] = 0.0;  // irt1
   params->weights[4] = 0.0;  // irt2
   params->weights[5] = 0.0;  // irt3
+
+  // 环境变量 LOH_INITIAL_WEIGHTS 覆盖初始权重（逗号分隔，如 "0,1,0,0,0,0"）
+  {
+    const char *iw_env = getenv("LOH_INITIAL_WEIGHTS");
+    if (iw_env && *iw_env) {
+      char buf[256];
+      strncpy(buf, iw_env, sizeof(buf) - 1);
+      buf[sizeof(buf) - 1] = '\0';
+      char *tok = strtok(buf, ",");
+      for (int i = 0; i < FEATURE_DIM && tok; i++) {
+        params->weights[i] = atof(tok);
+        tok = strtok(NULL, ",");
+      }
+      printf(
+          "LOH: initial weights overridden to [%.4f, %.4f, %.4f, %.4f, %.4f, "
+          "%.4f]\n",
+          params->weights[0], params->weights[1], params->weights[2],
+          params->weights[3], params->weights[4], params->weights[5]);
+    }
+  }
 
   // ===== 评分模型选择：默认 linear；可选 mlp（通过环境变量切换，不影响旧选项）
   // =====
@@ -3533,7 +4005,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
 
   // 初始化 Actor-Critic（行为者-评论者）强化学习参数
   params->rl_update_interval =
-      200;  // 每200个请求触发一次更新，与 Python 端更频繁通信
+      500;  // 每500个请求触发一次更新（旧值200，增大以减少sync开销）
   params->requests_since_rl_update = 0;
   params->epoch_start_time = time(NULL);
   params->epoch_obj_miss_count = 0;
@@ -3621,6 +4093,42 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     g_free(buf);
   }
 
+  // 如果设置了固定 MLP 参数环境变量，则覆盖默认 MLP 参数
+  // 参数格式："p0,p1,..."，长度需与 loh_mlp_param_len(LOH_MLP_HIDDEN) 一致
+  // 顺序与 loh_mlp_eval 对齐：W1(H*D), b1(H), W2(H), b2(1)
+  const char *fixed_mlp = getenv("LOH_FIXED_MLP_PARAMS");
+  if (fixed_mlp && fixed_mlp[0] != '\0') {
+    int expected = loh_mlp_param_len(params->mlp_hidden);
+    char *buf = g_strdup(fixed_mlp);
+    char *p = buf;
+    char *tok;
+    int idx = 0;
+    while ((tok = strsep(&p, ",; ")) != NULL) {
+      if (!*tok) continue;
+      char *endptr = NULL;
+      double v = strtod(tok, &endptr);
+      if (endptr == tok) continue;
+      if (idx < LOH_MLP_MAX_PARAMS) {
+        params->mlp_params[idx++] = v;
+      }
+    }
+
+    if (idx >= expected) {
+      params->score_model = LOH_SCORE_MODEL_MLP;
+      params->mlp_param_len = idx;
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] LOH_FIXED_MLP_PARAMS loaded: hidden=%d, expected=%d, "
+          "parsed=%d (score_model=mlp)\n",
+          params->mlp_hidden, expected, idx);
+    } else {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] LOH_FIXED_MLP_PARAMS parsed %d values (need >= %d), "
+          "keeping existing model/params\n",
+          idx, expected);
+    }
+    g_free(buf);
+  }
+
   // 初始化reward权重（默认只考虑miss ratio）
   loh_miss_ratio_weight = 1.0;       // 默认权重：只考虑对象miss ratio
   loh_byte_miss_ratio_weight = 0.0;  // 默认权重：不考虑字节miss ratio
@@ -3683,6 +4191,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
 
   params->shm_filename = NULL;
   params->shm_file = NULL;
+  params->shm_mmap = NULL;
+  params->shm_fd = -1;
   params->sem_ready = NULL;
   params->sem_ack = NULL;
   params->sem_ready_name = NULL;
@@ -3778,7 +4288,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
                  strcasecmp(wait_mode_str, "non-blocked") == 0) {
         loh_wait_mode_blocked = 0;
         LOH_DEBUG_PRINT_CONFIG(
-            "[LOH INIT] Wait mode: NON-BLOCKED (训练时使用缓存权重)\n");
+            "[LOH INIT] Wait mode: NON-BLOCKED "
+            "(发送状态后立即返回，不等待权重)\n");
       } else {
         LOH_DEBUG_PRINT_CONFIG(
             "[LOH INIT] WARNING: Invalid LOH_WAIT_MODE='%s', using default "
@@ -3787,6 +4298,21 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       }
     } else {
       LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Wait mode: default (BLOCKED)\n");
+    }
+  }
+
+  // ===【读取 RL 更新间隔环境变量（LOH_RL_UPDATE_INTERVAL）】===
+  {
+    const char *interval_str = getenv("LOH_RL_UPDATE_INTERVAL");
+    if (interval_str != NULL) {
+      long long val = atoll(interval_str);
+      if (val > 0) {
+        params->rl_update_interval = val;
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] rl_update_interval=%lld (from "
+            "LOH_RL_UPDATE_INTERVAL)\n",
+            val);
+      }
     }
   }
 
@@ -3819,6 +4345,31 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     LOH_DEBUG_PRINT_CONFIG(
         "[LOH INIT] feature mode: LOG1P=%d, RECIPROCAL=%d, NORMALIZE=%d\n",
         loh_feature_log1p, loh_feature_log1p_reciprocal, loh_feature_normalize);
+  }
+
+  // 3.1.5) 自动特征模式检测（LOH_AUTO_FEATURE_MODE）
+  {
+    const char *env_auto = getenv("LOH_AUTO_FEATURE_MODE");
+    if (env_auto) {
+      loh_auto_feature_mode = loh_parse_bool_env(env_auto, 0);
+    }
+    const char *env_detect_reqs = getenv("LOH_AUTO_DETECT_REQS");
+    if (env_detect_reqs && env_detect_reqs[0] != '\0') {
+      loh_auto_detect_reqs = atol(env_detect_reqs);
+    }
+    const char *env_cv_thresh = getenv("LOH_AUTO_CV_THRESHOLD");
+    if (env_cv_thresh && env_cv_thresh[0] != '\0') {
+      loh_auto_cv_threshold = atof(env_cv_thresh);
+    }
+    if (loh_auto_feature_mode) {
+      printf(
+          "[LOH INIT] AUTO_FEATURE_MODE enabled: detect after %ld reqs, "
+          "CV threshold=%.2f\n",
+          (long)loh_auto_detect_reqs, loh_auto_cv_threshold);
+      // auto 模式下，如果用户没有显式设 LOG1P 或 RECIPROCAL，
+      // 先用默认的 reciprocal 模式（LOH_FEATURE_LOG1P=0, RECIPROCAL=0），
+      // 等检测完后再切换
+    }
   }
 
   // 3.2) 特征归一化最大值（支持 LOH_FEATURE_NORM_MAX_* 覆盖）
@@ -3905,6 +4456,81 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         "[LOH INIT] Score feature mode: USE_IRT=%d, USE_COMPOUND=%d, "
         "COMPOUND_V2=%d\n",
         loh_score_use_irt, loh_score_use_compound, loh_score_compound_v2);
+
+    // compound 模式下不需要 IRT 堆来收集候选（评分不使用 IRT 特征），
+    // 跳过 IRT 堆维护可节省每次访问 3×O(log n) 的堆操作开销
+    loh_irt_heap_enabled = loh_score_use_irt;
+    if (!loh_irt_heap_enabled) {
+      printf("[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)\n");
+    }
+  }
+
+  // 3.5) 随机采样候选配置
+  {
+    const char *env_rsc = getenv("LOH_RANDOM_CANDIDATES");
+    if (env_rsc && env_rsc[0] != '\0') {
+      int rsc_val = atoi(env_rsc);
+      if (rsc_val >= 0 && rsc_val <= MAX_CANDIDATES_LIMIT)
+        loh_random_candidates = rsc_val;
+    }
+
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Random sampling: COUNT=%d\n",
+                           loh_random_candidates);
+    printf("LOH: structured candidates = %d, random candidates = %d\n",
+           loh_structured_candidates, loh_random_candidates);
+  }
+
+  // 3.6) 衰减尾部采样配置
+  {
+    const char *env_ts = getenv("LOH_TAIL_SAMPLE");
+    if (env_ts && env_ts[0] != '\0') {
+      loh_tail_sample_enabled = atoi(env_ts);
+    }
+    const char *env_td = getenv("LOH_TAIL_SAMPLE_DECAY");
+    if (env_td && env_td[0] != '\0') {
+      double td_val = atof(env_td);
+      if (td_val > 0.0 && td_val < 1.0) {
+        loh_tail_sample_decay = td_val;
+      } else {
+        fprintf(stderr,
+                "LOH WARNING: LOH_TAIL_SAMPLE_DECAY=%.4f out of range (0, 1), "
+                "using default %.4f\n",
+                td_val, loh_tail_sample_decay);
+      }
+    }
+    if (loh_tail_sample_enabled) {
+      printf(
+          "[LOH INIT] Decay sampling ENABLED for ALL structured sources: "
+          "decay=%.4f\n",
+          loh_tail_sample_decay);
+      printf(
+          "[LOH INIT]   Random sampling remains UNIFORM (not affected by "
+          "decay)\n");
+    }
+  }
+
+  // 3.7) 自适应候选预算配置
+  {
+    const char *env_ab = getenv("LOH_ADAPTIVE_BUDGET");
+    if (env_ab && env_ab[0] != '\0') {
+      loh_adaptive_budget = atoi(env_ab);
+    }
+    // 初始化自适应预算为均分
+    memset(loh_source_evict_count, 0, sizeof(loh_source_evict_count));
+    loh_adaptive_total_evict = 0;
+    // 预算初始化留到 to_evict 中根据 n_sources 动态确定
+    memset(loh_source_budget, 0, sizeof(loh_source_budget));
+    memset(loh_source_win_score_sum, 0, sizeof(loh_source_win_score_sum));
+    const char *env_sr = getenv("LOH_USE_SCORE_REBALANCE");
+    if (env_sr && env_sr[0] != '\0') {
+      loh_use_score_rebalance = atoi(env_sr);
+    }
+    if (loh_adaptive_budget) {
+      printf(
+          "[LOH INIT] Adaptive budget ENABLED: rebalance period=%d, "
+          "score_rebalance=%d\n",
+          LOH_ADAPTIVE_REBALANCE_PERIOD, loh_use_score_rebalance);
+    }
   }
 
   {
@@ -3963,8 +4589,34 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         "[LOH INIT] Successfully opened existing shared memory file\n");
   }
 
+  // 为非阻塞模式建立 mmap 映射（绕过 stdio 缓冲和 fcntl 锁）
+  if (loh_enable_rl && params->shm_file != NULL && !loh_wait_mode_blocked) {
+    params->shm_fd = fileno(params->shm_file);
+    // 确保文件至少有 sizeof(shm_data_t) 大小
+    if (ftruncate(params->shm_fd, sizeof(shm_data_t)) == 0) {
+      params->shm_mmap =
+          (shm_data_t *)mmap(NULL, sizeof(shm_data_t), PROT_READ | PROT_WRITE,
+                             MAP_SHARED, params->shm_fd, 0);
+      if (params->shm_mmap == MAP_FAILED) {
+        perror("[LOH] mmap failed, falling back to fread/fwrite");
+        params->shm_mmap = NULL;
+      } else {
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] mmap established for fast nonblocked sync "
+            "(size=%zu)\n",
+            sizeof(shm_data_t));
+      }
+    } else {
+      perror("[LOH] ftruncate for mmap failed");
+    }
+  }
+
   // 如果关闭了RL，确保不持有未使用的SHM资源
   if (!loh_enable_rl) {
+    if (params->shm_mmap != NULL) {
+      munmap(params->shm_mmap, sizeof(shm_data_t));
+      params->shm_mmap = NULL;
+    }
     if (params->shm_file) {
       fclose(params->shm_file);
       params->shm_file = NULL;
@@ -4035,6 +4687,12 @@ static void LOH_free(cache_t *cache) {
   // 释放 IRT 堆
   irt_heap_free(params);
 
+  // 清理 mmap 映射
+  if (params->shm_mmap != NULL) {
+    munmap(params->shm_mmap, sizeof(shm_data_t));
+    params->shm_mmap = NULL;
+  }
+
   // 清理共享内存文件
   if (params->shm_file) {
     fclose(params->shm_file);
@@ -4076,6 +4734,12 @@ static void LOH_free(cache_t *cache) {
   loh_print_perf_summary(params);
 #endif
 
+  // 释放 flat obj_array
+  if (params->obj_array) {
+    free(params->obj_array);
+    params->obj_array = NULL;
+  }
+
   // 最后一次性释放 params
   g_free(params);
 }
@@ -4101,6 +4765,16 @@ static void LOH_free(cache_t *cache) {
 static bool LOH_get(cache_t *cache, const request_t *req) {
   static int64_t request_count = 0;
   request_count++;
+
+  // 自动特征模式检测：在指定请求数后且 cache 至少 80% 满时触发一次
+  // 必须等 cache 填充充分，否则频率分布不具代表性
+  // 注意：cache_size 和 occupied_byte 都是字节单位，不能与 n_obj 混用
+  if (loh_auto_feature_mode && !loh_auto_detected &&
+      request_count >= loh_auto_detect_reqs &&
+      cache->occupied_byte >= (int64_t)(cache->cache_size * 0.8)) {
+    loh_auto_detect_and_switch(cache);
+    loh_auto_detected = 1;
+  }
 
   LOH_DEBUG_PRINT_DETAILED("[LOH_get]: request #%ld for obj_id %lu\n",
                            request_count, req->obj_id);
@@ -4337,17 +5011,8 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   // 现在执行实际的 get 操作
   bool hit = cache_get_base(cache, req);
 
-#if LOH_DEBUG_LEVEL >= LOH_DEBUG_ERROR
-  // 验证预测的准确性（调试用）
-  if (hit != will_hit) {
-    printf("[LOH ERROR] Hit prediction mismatch: predicted=%s, actual=%s\n",
-           will_hit ? "hit" : "miss", hit ? "hit" : "miss");
-  }
-#endif
-
-  // **更新特征统计（仅在 warmup 后更新命中/未命中特征）**
+  // **更新 epoch 统计（始终需要，用于 miss ratio 计算）**
   if (params->is_warmed_up) {
-    // 更新命中率
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
     double old_obj_count = params->epoch_obj_count;
     double old_obj_miss_count = params->epoch_obj_miss_count;
@@ -4566,6 +5231,7 @@ static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
   LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
   PERF_TS ts_find;
   PERF_NOW(ts_find);
+
   cache_obj_t *cache_obj = cache_find_base(cache, req, update_cache);
 
   if (cache_obj && likely(update_cache)) {
@@ -4676,6 +5342,7 @@ static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
   {
     PERF_TS ts_ai;
     PERF_NOW(ts_ai);
+
     bool ok = loh_atomic_insert_obj(params, obj);
     PERF_ACCUM(params, atomic_insert, ts_ai);
     if (!ok) {
@@ -4692,6 +5359,17 @@ static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
             (unsigned long long)obj->obj_id);
       }
     }
+
+    // 添加到 flat obj_array（O(1) 随机采样）
+    if (params->obj_array_size >= params->obj_array_capacity) {
+      params->obj_array_capacity *= 2;
+      params->obj_array = (cache_obj_t **)realloc(
+          params->obj_array,
+          params->obj_array_capacity * sizeof(cache_obj_t *));
+    }
+    obj->LOH.obj_array_idx = params->obj_array_size;
+    params->obj_array[params->obj_array_size++] = obj;
+
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
     // 详细验证：插入后，对象应出现在 LRU/FREQ/SIZE/IRT 中
     loh_debug_check_membership(params, obj, "after_insert");
@@ -4726,6 +5404,28 @@ static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
  * @param req 请求信息
  * @return 要被驱逐的对象
  */
+// ——— 快速 Lehmer64 RNG（用于 flat array 随机采样） ———
+static __uint128_t loh_rng_state = 0x12345678DEADBEEFULL;
+static inline uint64_t loh_fast_rand(void) {
+  loh_rng_state *= 0xda942042e4dd58b5ULL;
+  return (uint64_t)(loh_rng_state >> 64);
+}
+
+// ——— 快速 log1p 近似（IEEE 754 位操作，用于评分热路径） ———
+// 仅用于候选评分排序（相对比较），不影响发往 RL 的 state 精确值
+// 相对误差 < 8%，单次 ~3 CPU 周期 vs libm log1p ~50-100 周期
+static inline double fast_log1p_approx(double x) {
+  if (x <= 0.0) return 0.0;
+  union {
+    double d;
+    uint64_t u;
+  } v;
+  v.d = 1.0 + x;
+  int e = (int)((v.u >> 52) & 0x7FF) - 1023;
+  double m = (double)(v.u & 0x000FFFFFFFFFFFFFULL) * 2.220446049250313e-16;
+  return (e + m) * 0.6931471805599453;
+}
+
 static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
   PERF_TS ts_to_evict;
@@ -4736,17 +5436,37 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   // 避免每次都 memset 整个候选数组（写放大）；仅通过 n_candidates 控制有效范围
 
   // 从各个特征数据结构中选择候选对象，每个特征分别获取候选
-  int candidates_per_feature = MAX_CANDIDATES / 6;  // 6 种特征
+  // compound 模式下只使用 3 个源（recency/freq/size），每个源分到更多候选
+  int n_sources = loh_irt_heap_enabled ? 6 : 3;
+  int candidates_per_feature = loh_structured_candidates / n_sources;
+  // 自适应预算：每个源可有不同配额（默认均分）
+  int budget[LOH_MAX_SOURCES];
+  if (loh_adaptive_budget) {
+    for (int s = 0; s < n_sources; s++)
+      budget[s] = loh_source_budget[s] > 0 ? loh_source_budget[s]
+                                           : candidates_per_feature;
+  } else {
+    for (int s = 0; s < LOH_MAX_SOURCES; s++)
+      budget[s] = candidates_per_feature;
+  }
   LOH_DEBUG_PRINT_DETAILED(
       "[CANDIDATE COLLECTION] Normal mode: candidates_per_feature=%d "
-      "(MAX_CANDIDATES=%d)\n",
-      candidates_per_feature, MAX_CANDIDATES);
+      "(loh_structured_candidates=%d)\n",
+      candidates_per_feature, loh_structured_candidates);
 
   LOH_DEBUG_PRINT_DETAILED("[LOH DEBUG EVICT] Request obj_id=%llu\n",
                            (unsigned long long)req->obj_id);
 
   // 每轮去重表清空：所有来源（含 recency）统一纳入 seen 去重
   loh_seen_clear();
+
+  // === 结构化候选数=0 时，跳过所有结构化候选源，直接跳到随机采样 ===
+  // Level 1: Cache Size Guard — 缓存对象数过少时结构化候选冗余
+  if (loh_structured_candidates == 0 ||
+      cache->n_obj <
+          (int64_t)(loh_structured_candidates + loh_random_candidates) * 2) {
+    goto random_sampling_section;
+  }
 
   // 1. 从 LRU 队列尾部选择（最近性特征 - recency），并纳入 seen 去重
   // 1) recency 收集
@@ -4755,18 +5475,34 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   cache_obj_t *curr = params->q_tail;
   int lru_candidates = 0;
   int recency_start = params->n_candidates;
-  while (curr != NULL && lru_candidates < candidates_per_feature) {
+  double rec_accept_prob = 1.0;
+  int rec_max_scan = loh_tail_sample_enabled ? budget[0] * 10 : 0;
+  int rec_scanned = 0;
+  while (curr != NULL && lru_candidates < budget[0]) {
+    // 衰减采样：超过最大扫描深度则停止
+    if (loh_tail_sample_enabled && rec_scanned >= rec_max_scan) break;
     cache_obj_t *o = curr;
-    // recency 本身无重复，但与其他来源（freq/size/IRT）可能重复；统一用 seen
-    // 去重
-    if (o && loh_seen_add(params, o)) {
-      params->candidates[params->n_candidates++] = o;
-      lru_candidates++;
+    // 衰减采样：先检查概率，再加入 seen（避免 seen 集合被无用对象污染）
+    if (o) {
+      bool rec_pass_decay =
+          !loh_tail_sample_enabled ||
+          (double)(loh_fast_rand() % 10000u) / 10000.0 < rec_accept_prob;
+      if (rec_pass_decay && loh_seen_add(params, o)) {
+        params->candidates[params->n_candidates++] = o;
+        lru_candidates++;
+      }
+    }
+    if (loh_tail_sample_enabled) {
+      rec_accept_prob *= loh_tail_sample_decay;
+      rec_scanned++;
     }
     curr = curr->queue.prev;
   }
   PERF_ACCUM(params, cand_collect_recency, ts_collect_rec);
   // recency 阶段无单独压缩流程（天然无重复），dedup 计时保持 0
+  // 标记候选来源
+  for (int i = recency_start; i < params->n_candidates; i++)
+    loh_cand_source[i] = 0;
 
 #if LOH_INCLUDE_CANDIDATE_FEATURES
   for (int i = recency_start; i < params->n_candidates; i++) {
@@ -4801,10 +5537,11 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   int freq_start = params->n_candidates;
   PERF_TS ts_collect_freq;
   PERF_NOW(ts_collect_freq);
-  freq_table_get_candidates(params, candidates_per_feature,
-                            &params->n_candidates);
+  freq_table_get_candidates(params, budget[1], &params->n_candidates);
   PERF_ACCUM(params, cand_collect_freq, ts_collect_freq);
   // 频率候选已在收集阶段融合 seen 去重，省去单独dedup
+  for (int i = freq_start; i < params->n_candidates; i++)
+    loh_cand_source[i] = 1;
 
   // NOTE: 统计在 getter 内已完成
 
@@ -4828,9 +5565,11 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   int size_start = params->n_candidates;
   PERF_TS ts_collect_size;
   PERF_NOW(ts_collect_size);
-  size_ds_get_candidates(params, candidates_per_feature, &params->n_candidates);
+  size_ds_get_candidates(params, budget[2], &params->n_candidates);
   PERF_ACCUM(params, cand_collect_size, ts_collect_size);
   // 尺寸候选已在收集阶段融合 seen 去重，省去单独dedup
+  for (int i = size_start; i < params->n_candidates; i++)
+    loh_cand_source[i] = 2;
 
   // NOTE: 统计在 getter 内已完成
 
@@ -4850,90 +5589,142 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
 
   // 4. 从 IRT1 堆选择（IRT1 特征）
   // 4) IRT1 收集（预去重阶段已记录候选统计）
-  int irt1_start = params->n_candidates;
-  PERF_TS ts_collect_irt1;
-  PERF_NOW(ts_collect_irt1);
-  irt1_heap_get_candidates(params, candidates_per_feature,
-                           &params->n_candidates);
-  PERF_ACCUM(params, cand_collect_irt1, ts_collect_irt1);
-  // IRT1 候选已在收集阶段融合 seen 去重，省去单独dedup
+  if (loh_irt_heap_enabled) {
+    int irt1_start = params->n_candidates;
+    PERF_TS ts_collect_irt1;
+    PERF_NOW(ts_collect_irt1);
+    irt1_heap_get_candidates(params, budget[3], &params->n_candidates);
+    PERF_ACCUM(params, cand_collect_irt1, ts_collect_irt1);
+    // IRT1 候选已在收集阶段融合 seen 去重，省去单独dedup
+    for (int i = irt1_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 3;
 
-  // NOTE: 统计在 getter 内已完成
+    // NOTE: 统计在 getter 内已完成
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
-  {
-    // 立即打印 irt1 候选
-    LOH_DEBUG_PRINT_DETAILED("[irt1] candidates:\n");
-    for (int i = irt1_start; i < params->n_candidates; i++) {
-      cache_obj_t *o = params->candidates[i];
-      double feat[FEATURE_DIM] = {0};
-      calculate_object_features(params, o, feat);
-      LOH_DEBUG_PRINT_DETAILED("  obj_id=%llu, irt1=%.6f\n",
-                               (unsigned long long)o->obj_id, feat[3]);
+    {
+      // 立即打印 irt1 候选
+      LOH_DEBUG_PRINT_DETAILED("[irt1] candidates:\n");
+      for (int i = irt1_start; i < params->n_candidates; i++) {
+        cache_obj_t *o = params->candidates[i];
+        double feat[FEATURE_DIM] = {0};
+        calculate_object_features(params, o, feat);
+        LOH_DEBUG_PRINT_DETAILED("  obj_id=%llu, irt1=%.6f\n",
+                                 (unsigned long long)o->obj_id, feat[3]);
+      }
     }
-  }
 #endif
+  }  // end if (loh_irt_heap_enabled) - IRT1
 
   // 5. 从 IRT2 堆选择（IRT2 特征）
   // 5) IRT2 收集（预去重阶段已记录候选统计）
-  int irt2_start = params->n_candidates;
-  PERF_TS ts_collect_irt2;
-  PERF_NOW(ts_collect_irt2);
-  irt2_heap_get_candidates(params, candidates_per_feature,
-                           &params->n_candidates);
-  PERF_ACCUM(params, cand_collect_irt2, ts_collect_irt2);
-  // IRT2 候选已在收集阶段融合 seen 去重，省去单独dedup
+  if (loh_irt_heap_enabled) {
+    int irt2_start = params->n_candidates;
+    PERF_TS ts_collect_irt2;
+    PERF_NOW(ts_collect_irt2);
+    irt2_heap_get_candidates(params, budget[4], &params->n_candidates);
+    PERF_ACCUM(params, cand_collect_irt2, ts_collect_irt2);
+    // IRT2 候选已在收集阶段融合 seen 去重，省去单独dedup
+    for (int i = irt2_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 4;
 
-  // NOTE: 统计在 getter 内已完成
+    // NOTE: 统计在 getter 内已完成
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
-  {
-    // 立即打印 irt2 候选
-    LOH_DEBUG_PRINT_DETAILED("[irt2] candidates:\n");
-    for (int i = irt2_start; i < params->n_candidates; i++) {
-      cache_obj_t *o = params->candidates[i];
-      double feat[FEATURE_DIM] = {0};
-      calculate_object_features(params, o, feat);
-      LOH_DEBUG_PRINT_DETAILED("  obj_id=%llu, irt2=%.6f\n",
-                               (unsigned long long)o->obj_id, feat[4]);
+    {
+      // 立即打印 irt2 候选
+      LOH_DEBUG_PRINT_DETAILED("[irt2] candidates:\n");
+      for (int i = irt2_start; i < params->n_candidates; i++) {
+        cache_obj_t *o = params->candidates[i];
+        double feat[FEATURE_DIM] = {0};
+        calculate_object_features(params, o, feat);
+        LOH_DEBUG_PRINT_DETAILED("  obj_id=%llu, irt2=%.6f\n",
+                                 (unsigned long long)o->obj_id, feat[4]);
+      }
     }
-  }
 #endif
+  }  // end if (loh_irt_heap_enabled) - IRT2
 
   // 6. 从 IRT3 堆选择（IRT3 特征）
   // 6) IRT3 收集（预去重阶段已记录候选统计）
-  int irt3_start = params->n_candidates;
-  PERF_TS ts_collect_irt3;
-  PERF_NOW(ts_collect_irt3);
-  irt3_heap_get_candidates(params, candidates_per_feature,
-                           &params->n_candidates);
-  PERF_ACCUM(params, cand_collect_irt3, ts_collect_irt3);
-  // IRT3 候选已在收集阶段融合 seen 去重，省去单独dedup
+  if (loh_irt_heap_enabled) {
+    int irt3_start = params->n_candidates;
+    PERF_TS ts_collect_irt3;
+    PERF_NOW(ts_collect_irt3);
+    irt3_heap_get_candidates(params, budget[5], &params->n_candidates);
+    PERF_ACCUM(params, cand_collect_irt3, ts_collect_irt3);
+    // IRT3 候选已在收集阶段融合 seen 去重，省去单独dedup
+    for (int i = irt3_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 5;
 
-  // NOTE: 统计在 getter 内已完成
+    // NOTE: 统计在 getter 内已完成
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
-  {
-    // 立即打印 irt3 候选
-    LOH_DEBUG_PRINT_DETAILED("[irt3] candidates:\n");
-    for (int i = irt3_start; i < params->n_candidates; i++) {
-      cache_obj_t *o = params->candidates[i];
-      double feat[FEATURE_DIM] = {0};
-      calculate_object_features(params, o, feat);
-      LOH_DEBUG_PRINT_DETAILED("  obj_id=%llu, irt3=%.6f\n",
-                               (unsigned long long)o->obj_id, feat[5]);
+    {
+      // 立即打印 irt3 候选
+      LOH_DEBUG_PRINT_DETAILED("[irt3] candidates:\n");
+      for (int i = irt3_start; i < params->n_candidates; i++) {
+        cache_obj_t *o = params->candidates[i];
+        double feat[FEATURE_DIM] = {0};
+        calculate_object_features(params, o, feat);
+        LOH_DEBUG_PRINT_DETAILED("  obj_id=%llu, irt3=%.6f\n",
+                                 (unsigned long long)o->obj_id, feat[5]);
+      }
     }
-  }
 #endif
+  }  // end if (loh_irt_heap_enabled) - IRT3
+
+  // 7. 额外候选采样：从结构化源之外补充候选
+  //    - 始终使用均匀随机采样，从 flat obj_array 中 O(1) 随机采样
+  //    - LOH_TAIL_SAMPLE 只影响结构化候选源的 decay 采样深度
+  //    注意：这是在特征源之外 ADDITIVE 的额外候选，不减少原有源的配额
+
+random_sampling_section:
+  if (loh_random_candidates > 0 && params->obj_array_size > 0) {
+    // ── 均匀随机采样（带深度 prefetch 流水线优化）──
+    // 说明：obj_array (~96MB) 远超 L3 (~30MB)，每次随机访问是一次 DRAM miss
+    // (~100ns)。 每次迭代的计算量 (loh_seen_add + 随机数生成) 约 10-15ns，
+    // 因此需要提前 16 步 prefetch 才能覆盖 100ns 延迟。
+    int random_wanted = loh_random_candidates;
+    int room = MAX_CANDIDATES - params->n_candidates;
+    if (random_wanted > room) random_wanted = room;
+    int random_collected = 0;
+    int max_attempts = random_wanted * 3;
+    const uint64_t arr_sz = (uint64_t)params->obj_array_size;
+    for (int attempt = 0;
+         attempt < max_attempts && random_collected < random_wanted;
+         attempt++) {
+      int rand_idx = (int)(loh_fast_rand() % arr_sz);
+      cache_obj_t *rand_obj = params->obj_array[rand_idx];
+      if (rand_obj && loh_seen_add(params, rand_obj)) {
+        params->candidates[params->n_candidates++] = rand_obj;
+        random_collected++;
+      }
+    }
+    LOH_DEBUG_PRINT_DETAILED(
+        "[random_sample] collected %d/%d random candidates\n", random_collected,
+        loh_random_candidates);
+  }
 
   // 如果没有候选对象，使用 LRU 作为回退
   if (params->n_candidates == 0) {
     return params->q_tail;
   }
+  // 标记随机/尾部候选来源（位于结构化候选之后的所有候选）
+  {
+    int struct_end = loh_structured_candidates < params->n_candidates
+                         ? loh_structured_candidates
+                         : params->n_candidates;
+    // 如果 loh_structured_candidates == 0, 全部都是随机候选
+    int random_region_start = loh_structured_candidates == 0 ? 0 : struct_end;
+    for (int i = random_region_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 6;
+  }
 
   // 对候选对象评分，选择得分最低的
   double min_score = DBL_MAX;
   cache_obj_t *obj_to_evict = NULL;
+  int best_i = -1;  // 记录获胜候选的索引（用于自适应预算）
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
   // 打印候选ID简要列表
@@ -4946,42 +5737,26 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
 #endif
 
   // 先为所有候选预计算特征（calc_features 内部已单独计时）
+  // 注意：使用 MAX_CANDIDATES 而非 loh_structured_candidates 作为上限，
+  // 因为 additive random sampling 可能超出 loh_structured_candidates
   int cand_n = params->n_candidates;
   if (cand_n > MAX_CANDIDATES) cand_n = MAX_CANDIDATES;
-  double feat_buf[MAX_CANDIDATES][FEATURE_DIM];
-  // 批量计时以降低 clock_gettime 调用开销
-  PERF_TS ts_feat_loop;
-  PERF_NOW(ts_feat_loop);
-  for (int i = 0; i < cand_n; ++i) {
-    cache_obj_t *candidate = params->candidates[i];
-    calculate_object_features(params, candidate, feat_buf[i]);
-  }
-#if LOH_PERF_PROFILING
-  {
-    struct timespec _t1;
-    clock_gettime(CLOCK_MONOTONIC, &_t1);
-    double _dt = (_t1.tv_sec - ts_feat_loop.tv_sec) +
-                 (_t1.tv_nsec - ts_feat_loop.tv_nsec) / 1e9;
-    params->perf.calc_features.total += _dt;
-    // 计数按特征向量数量（候选数）累计，avg=每个候选的平均时间
-    params->perf.calc_features.count += cand_n;
-    if (_dt > params->perf.calc_features.max)
-      params->perf.calc_features.max = _dt;
-  }
-#endif
+  // Compound + 线性模式下只需 3 个基础特征（recency/freq/size），
+  // 跳过 IRT 特征计算可节省约 50% 特征计算时间
+  const int fast_compound =
+      (loh_score_use_compound && params->score_model != LOH_SCORE_MODEL_MLP);
+  // 超快速路径：fast_compound + (LOG1P 或 RECIPROCAL) + 线性模型 →
+  // 合并特征计算与评分为单循环
+  const int ultra_fast =
+      (fast_compound && (loh_feature_log1p || loh_feature_log1p_reciprocal) &&
+       !loh_feature_normalize);
 
-  // 仅对评分阶段计时，避免与特征计算重复计时导致的双计费
-  PERF_TS ts_score_loop;
-  PERF_NOW(ts_score_loop);
   // 将权重提升到寄存器，避免在循环中反复读取
   const double *w = params->weights;
   double sign[WEIGHT_DIM];
   for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
 
   if (loh_score_use_compound) {
-    // Compound 模式下，符号仅由 LOH_FEATURE_LOG1P 决定：
-    //   LOG1P=1  → [-1, 1, -1, 1, 1, -1]
-    //   LOG1P=0  → 全 1
     if (loh_feature_log1p) {
       sign[0] = -1.0;  // recency
       sign[1] = 1.0;   // frequency
@@ -4994,22 +5769,200 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
       for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
     }
   } else {
-    // 非 compound 模式：保持原有逻辑，允许通过 LOH_USE_HEURISTIC_SIGNS 控制
     if (loh_use_heuristic_signs) {
-      // 使用启发式符号：Recency/Size/IRT 越大越容易被驱逐（负号），Frequency
-      // 越大越保留（正号）
-      sign[0] = -1.0;  // Recency
-      sign[1] = 1.0;   // Frequency
-      sign[2] = -1.0;  // Size
-      sign[3] = -1.0;  // IRT1
-      sign[4] = -1.0;  // IRT2
-      sign[5] = -1.0;  // IRT3
-      sign[6] = 1.0;
+      if (loh_feature_log1p) {
+        // LOG1P 模式：feature 越大 = raw 越大 = 越"不好"的维度用 -1
+        sign[0] = -1.0;  // recency: 越老越该驱逐
+        sign[1] = 1.0;   // frequency: 越频繁越该保留
+        sign[2] = -1.0;  // size: 越大越该驱逐
+        sign[3] = -1.0;  // irt1: 越长越该驱逐
+        sign[4] = -1.0;  // irt2
+        sign[5] = -1.0;  // irt3
+        sign[6] = 1.0;
+      } else {
+        // RECIPROCAL / DEFAULT 模式：feature 已编码"好坏"方向
+        // （值越大 = 越应保留），所有 sign 用 +1
+        for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
+      }
     } else {
-      // 默认全 1.0，方向由 RL 权重决定
       for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
     }
   }
+  // 预乘 w*sign，避免内循环重复乘法
+  double ws[WEIGHT_DIM];
+  for (int k = 0; k < WEIGHT_DIM; ++k) ws[k] = w[k] * sign[k];
+
+  if (ultra_fast) {
+    // ---- 超快速合并路径：fast_log1p_approx + 单遍特征计算+评分 ----
+    // 直接在单循环中完成特征计算和评分，无需 feat_buf
+    PERF_TS ts_fused;
+    PERF_NOW(ts_fused);
+    const int64_t cur_ts = params->current_timestamp;
+    const int do_v2 = loh_score_compound_v2;
+
+    for (int i = 0; i < cand_n; ++i) {
+      cache_obj_t *candidate = params->candidates[i];
+      double rec, freq, sz, score;
+      const double eps = 1e-12;
+
+      if (loh_feature_log1p) {
+        // ── LOG1P 模式：fast_log1p_approx 直接做特征 ──
+        rec = fast_log1p_approx(
+            (double)(cur_ts - candidate->LOH.last_access_counter));
+        freq = fast_log1p_approx((double)candidate->LOH.access_count);
+        sz = fast_log1p_approx((double)candidate->obj_size);
+
+        const double inv_rec = 1.0 / ((rec > eps) ? rec : eps);
+        const double inv_sz = 1.0 / ((sz > eps) ? sz : eps);
+
+        score = rec * ws[0] + freq * ws[1] + sz * ws[2] +
+                (freq * inv_rec) * ws[3] + (freq * inv_sz) * ws[4] +
+                (rec * sz) * ws[5];
+        if (do_v2) {
+          score += (freq * inv_rec * inv_sz) * ws[6];
+        }
+      } else {
+        // ── RECIPROCAL 模式：1/(1+fast_log1p_approx(x)) ──
+        const double log_delta = fast_log1p_approx(
+            (double)(cur_ts - candidate->LOH.last_access_counter));
+        rec = 1.0 / (1.0 + log_delta);
+
+        const double log_count =
+            fast_log1p_approx((double)candidate->LOH.access_count);
+        freq = (log_count > 0.0) ? (log_count / (log_count + 1.0)) : 0.0;
+
+        const double size_mb = (double)candidate->obj_size / 1048576.0;
+        const double log_size = fast_log1p_approx(size_mb);
+        sz = 1.0 / (1.0 + log_size);
+
+        // compound 乘积形式（非比率）
+        score = rec * ws[0] + freq * ws[1] + sz * ws[2] + (freq * rec) * ws[3] +
+                (freq * sz) * ws[4] + (rec * sz) * ws[5];
+        if (do_v2) {
+          score += (freq * rec * sz) * ws[6];
+        }
+      }
+
+      if (score < min_score) {
+        min_score = score;
+        obj_to_evict = candidate;
+        best_i = i;
+      }
+
+#if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
+      // TOPK 维护内联
+      if (params->current_lowest_count < SAMPLES_PER_EVICTION) {
+        int insert_pos = params->current_lowest_count;
+        for (int k = params->current_lowest_count - 1; k >= 0; k--) {
+          if (score < params->current_lowest_scores[k]) {
+            params->current_lowest_4[k + 1] = params->current_lowest_4[k];
+            params->current_lowest_scores[k + 1] =
+                params->current_lowest_scores[k];
+            insert_pos = k;
+          } else
+            break;
+        }
+        params->current_lowest_4[insert_pos] = candidate;
+        params->current_lowest_scores[insert_pos] = score;
+        params->current_lowest_count++;
+      } else if (score <
+                 params->current_lowest_scores[SAMPLES_PER_EVICTION - 1]) {
+        int insert_pos = SAMPLES_PER_EVICTION - 1;
+        for (int k = SAMPLES_PER_EVICTION - 2; k >= 0; k--) {
+          if (score < params->current_lowest_scores[k]) {
+            params->current_lowest_4[k + 1] = params->current_lowest_4[k];
+            params->current_lowest_scores[k + 1] =
+                params->current_lowest_scores[k];
+            insert_pos = k;
+          } else
+            break;
+        }
+        params->current_lowest_4[insert_pos] = candidate;
+        params->current_lowest_scores[insert_pos] = score;
+      }
+#endif
+#if LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES
+      if (params->avgtopk_lowest_count < SAMPLES_PER_EVICTION) {
+        int insert_pos = params->avgtopk_lowest_count;
+        for (int k = params->avgtopk_lowest_count - 1; k >= 0; k--) {
+          if (score < params->avgtopk_lowest_scores[k]) {
+            params->avgtopk_lowest_4[k + 1] = params->avgtopk_lowest_4[k];
+            params->avgtopk_lowest_scores[k + 1] =
+                params->avgtopk_lowest_scores[k];
+            insert_pos = k;
+          } else
+            break;
+        }
+        params->avgtopk_lowest_4[insert_pos] = candidate;
+        params->avgtopk_lowest_scores[insert_pos] = score;
+        params->avgtopk_lowest_count++;
+      } else if (score <
+                 params->avgtopk_lowest_scores[SAMPLES_PER_EVICTION - 1]) {
+        int insert_pos = SAMPLES_PER_EVICTION - 1;
+        for (int k = SAMPLES_PER_EVICTION - 2; k >= 0; k--) {
+          if (score < params->avgtopk_lowest_scores[k]) {
+            params->avgtopk_lowest_4[k + 1] = params->avgtopk_lowest_4[k];
+            params->avgtopk_lowest_scores[k + 1] =
+                params->avgtopk_lowest_scores[k];
+            insert_pos = k;
+          } else
+            break;
+        }
+        params->avgtopk_lowest_4[insert_pos] = candidate;
+        params->avgtopk_lowest_scores[insert_pos] = score;
+      }
+#endif
+    }
+#if LOH_PERF_PROFILING
+    {
+      struct timespec _t1;
+      clock_gettime(CLOCK_MONOTONIC, &_t1);
+      double _dt = (_t1.tv_sec - ts_fused.tv_sec) +
+                   (_t1.tv_nsec - ts_fused.tv_nsec) / 1e9;
+      params->perf.calc_features.total += _dt * 0.6;
+      params->perf.calc_features.count += cand_n;
+      params->perf.calc_score.total += _dt * 0.4;
+      params->perf.calc_score.count++;
+      if (_dt > params->perf.calc_features.max)
+        params->perf.calc_features.max = _dt;
+    }
+#endif
+    // ultra_fast 路径完成，跳过下面的原始两遍循环
+    goto scoring_done;
+  }
+
+  // ---- 原始两遍路径（MLP / 非 compound / normalize 等场景） ----
+  double feat_buf[MAX_CANDIDATES][FEATURE_DIM];
+  PERF_TS ts_feat_loop;
+  PERF_NOW(ts_feat_loop);
+  for (int i = 0; i < cand_n; ++i) {
+    cache_obj_t *candidate = params->candidates[i];
+    if (fast_compound) {
+      int64_t delta =
+          params->current_timestamp - candidate->LOH.last_access_counter;
+      feat_buf[i][0] = calculate_recency(params, delta);
+      feat_buf[i][1] =
+          calculate_frequency(params, (int64_t)candidate->LOH.access_count);
+      feat_buf[i][2] = calculate_size(params, (int64_t)candidate->obj_size);
+    } else {
+      calculate_object_features(params, candidate, feat_buf[i]);
+    }
+  }
+#if LOH_PERF_PROFILING
+  {
+    struct timespec _t1;
+    clock_gettime(CLOCK_MONOTONIC, &_t1);
+    double _dt = (_t1.tv_sec - ts_feat_loop.tv_sec) +
+                 (_t1.tv_nsec - ts_feat_loop.tv_nsec) / 1e9;
+    params->perf.calc_features.total += _dt;
+    params->perf.calc_features.count += cand_n;
+    if (_dt > params->perf.calc_features.max)
+      params->perf.calc_features.max = _dt;
+  }
+#endif
+
+  PERF_TS ts_score_loop;
+  PERF_NOW(ts_score_loop);
 
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
   // 初始化临时存储：记录最低4个对象
@@ -5162,9 +6115,11 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
         }
       }
     }
+
     if (score < min_score) {
       min_score = score;
       obj_to_evict = candidate;
+      best_i = i;
     }
 
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
@@ -5241,8 +6196,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   }
   PERF_ACCUM(params, calc_score, ts_score_loop);
 
+scoring_done:  // ultra_fast 路径跳转到这里
+
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
-  // 输出最低4个对象的特征和分数
+               // 输出最低4个对象的特征和分数
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
   if (params->current_lowest_count > 0) {
     printf("Lowest %d objects:\n", params->current_lowest_count);
@@ -5325,7 +6282,130 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   }
 #endif
 
+  // ── 自适应候选预算跟踪 ──
+  if (loh_adaptive_budget && best_i >= 0 && best_i < params->n_candidates) {
+    int src = loh_cand_source[best_i];
+    if (src >= 0 && src < LOH_MAX_SOURCES) {
+      loh_source_evict_count[src]++;
+      // O(1)/驱逐：仅记录获胜者得分（不在 per-candidate 循环中累加）
+      if (loh_use_score_rebalance) {
+        loh_source_win_score_sum[src] += min_score;
+      }
+    }
+    loh_adaptive_total_evict++;
+
+    // 每 REBALANCE_PERIOD 次驱逐重新分配预算
+    if (loh_adaptive_total_evict % LOH_ADAPTIVE_REBALANCE_PERIOD == 0) {
+      int n_active = loh_irt_heap_enabled ? 6 : 3;
+      int score_rebalance_done = 0;
+
+      // ---- 基于 per-source 平均获胜得分分配预算 ----
+      // 原理：得分越低 → 候选越适合驱逐 → 源的效能越高
+      // 仅在 LOH_USE_SCORE_REBALANCE=1 时启用；默认走 win-count 分支（§19
+      // 行为）
+      if (loh_use_score_rebalance) {
+        double avg_score[LOH_MAX_SOURCES];
+        double global_min_avg = DBL_MAX;
+        double global_max_avg = -DBL_MAX;
+        int have_stats = 0;
+        for (int s = 0; s < n_active; s++) {
+          if (loh_source_evict_count[s] > 0) {
+            avg_score[s] =
+                loh_source_win_score_sum[s] / loh_source_evict_count[s];
+            if (avg_score[s] < global_min_avg) global_min_avg = avg_score[s];
+            if (avg_score[s] > global_max_avg) global_max_avg = avg_score[s];
+            have_stats = 1;
+          } else {
+            avg_score[s] = DBL_MAX;
+          }
+        }
+
+        if (have_stats && global_max_avg > global_min_avg) {
+          double range = global_max_avg - global_min_avg;
+          double effectiveness[LOH_MAX_SOURCES];
+          double total_eff = 0;
+          for (int s = 0; s < n_active; s++) {
+            if (avg_score[s] < DBL_MAX) {
+              effectiveness[s] = (global_max_avg - avg_score[s]) / range;
+            } else {
+              effectiveness[s] = 0.0;
+            }
+            total_eff += effectiveness[s];
+          }
+
+          if (total_eff > 0) {
+            int assigned = 0;
+            int max_eff_src = 0;
+            double max_eff_val = -1.0;
+            for (int s = 0; s < n_active; s++) {
+              loh_source_budget[s] = (int)(effectiveness[s] / total_eff *
+                                               loh_structured_candidates +
+                                           0.5);
+              if (loh_source_budget[s] < 1) loh_source_budget[s] = 1;
+              assigned += loh_source_budget[s];
+              if (effectiveness[s] > max_eff_val) {
+                max_eff_val = effectiveness[s];
+                max_eff_src = s;
+              }
+            }
+            int diff = loh_structured_candidates - assigned;
+            loh_source_budget[max_eff_src] += diff;
+            if (loh_source_budget[max_eff_src] < 1)
+              loh_source_budget[max_eff_src] = 1;
+            score_rebalance_done = 1;
+          }
+        }
+      }  // end score_rebalance
+
+      // win-count 分配（§19 行为）：默认路径或 score 路径未产出时的回退
+      if (!score_rebalance_done) {
+        uint64_t total_wins = 0;
+        for (int s = 0; s < n_active; s++)
+          total_wins += loh_source_evict_count[s];
+        if (total_wins > 0) {
+          int assigned = 0;
+          int max_src = 0;
+          uint64_t max_wins = 0;
+          for (int s = 0; s < n_active; s++) {
+            loh_source_budget[s] =
+                (int)((double)loh_source_evict_count[s] / total_wins *
+                          loh_structured_candidates +
+                      0.5);
+            if (loh_source_budget[s] < 1) loh_source_budget[s] = 1;
+            assigned += loh_source_budget[s];
+            if (loh_source_evict_count[s] > max_wins) {
+              max_wins = loh_source_evict_count[s];
+              max_src = s;
+            }
+          }
+          int diff = loh_structured_candidates - assigned;
+          loh_source_budget[max_src] += diff;
+          if (loh_source_budget[max_src] < 1) loh_source_budget[max_src] = 1;
+        }
+      }
+
+      LOH_DEBUG_PRINT_DETAILED(
+          "[ADAPTIVE] Rebalance @%llu (score-efficiency): ",
+          (unsigned long long)loh_adaptive_total_evict);
+      for (int s = 0; s < n_active; s++) {
+        LOH_DEBUG_PRINT_DETAILED(
+            "src%d: wins=%llu, avg_win=%.4f, budget=%d  ", s,
+            (unsigned long long)loh_source_evict_count[s],
+            (loh_source_evict_count[s] > 0
+                 ? loh_source_win_score_sum[s] / loh_source_evict_count[s]
+                 : 0.0),
+            loh_source_budget[s]);
+      }
+      LOH_DEBUG_PRINT_DETAILED("\n");
+
+      // 重置计数器
+      memset(loh_source_evict_count, 0, sizeof(loh_source_evict_count));
+      memset(loh_source_win_score_sum, 0, sizeof(loh_source_win_score_sum));
+    }
+  }
+
   PERF_ACCUM(params, to_evict, ts_to_evict);
+
   return obj_to_evict;
 }
 
@@ -5339,6 +6419,7 @@ static void LOH_evict(cache_t *cache, const request_t *req) {
   LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
   PERF_TS ts_evict;
   PERF_NOW(ts_evict);
+
   cache_obj_t *obj_to_evict = LOH_to_evict(cache, req);
 
   if (obj_to_evict == NULL) {
@@ -5825,12 +6906,17 @@ static void freq_table_get_candidates(LOH_params_t *params, int max_candidates,
 #endif
 
   // 从低frequency到高frequency遍历，同一frequencylevel内从尾部（更老ofobject）start选择
+  double accept_prob = 1.0;
+  int max_scan = loh_tail_sample_enabled ? max_candidates * 10 : 0;
+  int scanned = 0;
   for (int i = 1; i <= FREQ_MAX && added < max_candidates; i++) {
     loh_freq_node_t *curr =
         params->freq_table_tail[i];  // 从尾部start，选择更老ofobject
 
     while (curr != NULL && added < max_candidates) {
-      if (start_idx + added >= MAX_CANDIDATES) return;
+      if (start_idx + added >= loh_structured_candidates) return;
+      // 衰减采样：超过最大扫描深度则停止
+      if (loh_tail_sample_enabled && scanned >= max_scan) goto freq_done;
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_VERBOSE
       printf("[FREQ DEBUG] Checking curr=%p, curr->obj=%p\n", (void *)curr,
@@ -5863,13 +6949,24 @@ static void freq_table_get_candidates(LOH_params_t *params, int max_candidates,
           params->cand_feat_count[1]++;
         }
 #endif
-        if (loh_seen_add(params, curr->obj)) {
-          params->candidates[start_idx + added++] = curr->obj;
+        // 衰减采样：先检查概率，再加入 seen（避免 seen 集合被无用对象污染）
+        {
+          bool freq_pass_decay =
+              !loh_tail_sample_enabled ||
+              (double)(loh_fast_rand() % 10000u) / 10000.0 < accept_prob;
+          if (freq_pass_decay && loh_seen_add(params, curr->obj)) {
+            params->candidates[start_idx + added++] = curr->obj;
+          }
         }
+      }
+      if (loh_tail_sample_enabled) {
+        accept_prob *= loh_tail_sample_decay;
+        scanned++;
       }
       curr = curr->prev;  // 向前遍历（从尾部到头部），选择更老ofobject
     }
   }
+freq_done:
   *n_candidates = start_idx + added;
 }
 
@@ -5882,7 +6979,7 @@ static void freq_table_get_candidates(LOH_params_t *params, int max_candidates,
 static void irt_heap_init(LOH_params_t *params) {
   // 设置每个IRT堆的容量为总候选数的1/6，3个堆分别对应IRT1、IRT2、IRT3
   params->irt_heap_capacity =
-      MAX_CANDIDATES / 6;  // 每个IRT堆大小为总候选数的1/6
+      loh_structured_candidates / 6;  // 每个IRT堆大小为总候选数的1/6
 
   // 初始化3个IRT堆（对应IRT_HISTORY_SIZE=3）
   for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
@@ -6728,17 +7825,21 @@ static void irt1_heap_get_candidates(LOH_params_t *params, int max_candidates,
       "max_candidates=%d, start_idx=%d\n",
       params->irt_heap_size[heap_idx], max_candidates, start_idx);
 
-  // 【简化方案】直接遍历堆中所有元素作为候选
+  // 【简化方案】直接遍历堆中所有元素作为候选（含衰减采样）
   // 因为最小堆中存储的都是具有较大IRT值的对象，正是驱逐候选
+  double irt1_accept_prob = 1.0;
+  int irt1_max_scan = loh_tail_sample_enabled ? max_candidates * 10 : 0;
+  int irt1_scanned = 0;
   for (int i = 0; i < params->irt_heap_size[heap_idx] && added < max_candidates;
        i++) {
     // 检查全局候选数组边界
-    if (start_idx + added >= MAX_CANDIDATES) {
+    if (start_idx + added >= loh_structured_candidates) {
       LOH_DEBUG_PRINT_DETAILED(
-          "[IRT1 HEAP DEBUG] Reached MAX_CANDIDATES limit: %d\n",
-          MAX_CANDIDATES);
+          "[IRT1 HEAP DEBUG] Reached loh_structured_candidates limit: %d\n",
+          loh_structured_candidates);
       break;
     }
+    if (loh_tail_sample_enabled && irt1_scanned >= irt1_max_scan) break;
 
     cache_obj_t *candidate = params->irt_heap[heap_idx][i].obj;
 
@@ -6753,6 +7854,15 @@ static void irt1_heap_get_candidates(LOH_params_t *params, int max_candidates,
         continue;
       }
 #endif
+      // 衰减采样：按位置递减概率接受候选
+      if (loh_tail_sample_enabled) {
+        double r = (double)(loh_fast_rand() % 10000u) / 10000.0;
+        if (r >= irt1_accept_prob) {
+          irt1_accept_prob *= loh_tail_sample_decay;
+          irt1_scanned++;
+          continue;
+        }
+      }
       // 先记录候选统计（来源 index=3）
 #if LOH_INCLUDE_CANDIDATE_FEATURES
       {
@@ -6767,6 +7877,10 @@ static void irt1_heap_get_candidates(LOH_params_t *params, int max_candidates,
 #endif
       if (loh_seen_add(params, candidate)) {
         params->candidates[start_idx + added++] = candidate;
+      }
+      if (loh_tail_sample_enabled) {
+        irt1_accept_prob *= loh_tail_sample_decay;
+        irt1_scanned++;
       }
       LOH_DEBUG_PRINT_DETAILED(
           "[IRT1 HEAP DEBUG] Added valid candidate #%d: obj_id=%llu, "
@@ -6804,10 +7918,14 @@ static void irt2_heap_get_candidates(LOH_params_t *params, int max_candidates,
 
   cache_t *cache = (cache_t *)params->cache_ptr;  // 获取缓存指针
 
-  // 【简化方案】直接遍历堆中所有元素作为候选
+  // 【简化方案】直接遍历堆中所有元素作为候选（含衰减采样）
+  double irt2_accept_prob = 1.0;
+  int irt2_max_scan = loh_tail_sample_enabled ? max_candidates * 10 : 0;
+  int irt2_scanned = 0;
   for (int i = 0; i < params->irt_heap_size[heap_idx] && added < max_candidates;
        i++) {
-    if (start_idx + added >= MAX_CANDIDATES) break;
+    if (start_idx + added >= loh_structured_candidates) break;
+    if (loh_tail_sample_enabled && irt2_scanned >= irt2_max_scan) break;
 
     cache_obj_t *candidate = params->irt_heap[heap_idx][i].obj;
     if (candidate != NULL) {
@@ -6817,6 +7935,15 @@ static void irt2_heap_get_candidates(LOH_params_t *params, int max_candidates,
         continue;
       }
 #endif
+      // 衰减采样
+      if (loh_tail_sample_enabled) {
+        double r = (double)(loh_fast_rand() % 10000u) / 10000.0;
+        if (r >= irt2_accept_prob) {
+          irt2_accept_prob *= loh_tail_sample_decay;
+          irt2_scanned++;
+          continue;
+        }
+      }
       // 先记录候选统计（来源 index=4）
 #if LOH_INCLUDE_CANDIDATE_FEATURES
       {
@@ -6831,6 +7958,10 @@ static void irt2_heap_get_candidates(LOH_params_t *params, int max_candidates,
 #endif
       if (loh_seen_add(params, candidate)) {
         params->candidates[start_idx + added++] = candidate;
+      }
+      if (loh_tail_sample_enabled) {
+        irt2_accept_prob *= loh_tail_sample_decay;
+        irt2_scanned++;
       }
     }
   }
@@ -6853,10 +7984,14 @@ static void irt3_heap_get_candidates(LOH_params_t *params, int max_candidates,
     return;
   }
 
-  // 【简化方案】直接遍历堆中所有元素作为候选
+  // 【简化方案】直接遍历堆中所有元素作为候选（含衰减采样）
+  double irt3_accept_prob = 1.0;
+  int irt3_max_scan = loh_tail_sample_enabled ? max_candidates * 10 : 0;
+  int irt3_scanned = 0;
   for (int i = 0; i < params->irt_heap_size[heap_idx] && added < max_candidates;
        i++) {
-    if (start_idx + added >= MAX_CANDIDATES) break;
+    if (start_idx + added >= loh_structured_candidates) break;
+    if (loh_tail_sample_enabled && irt3_scanned >= irt3_max_scan) break;
 
     cache_obj_t *candidate = params->irt_heap[heap_idx][i].obj;
     if (candidate != NULL) {
@@ -6866,6 +8001,15 @@ static void irt3_heap_get_candidates(LOH_params_t *params, int max_candidates,
         continue;
       }
 #endif
+      // 衰减采样
+      if (loh_tail_sample_enabled) {
+        double r = (double)(loh_fast_rand() % 10000u) / 10000.0;
+        if (r >= irt3_accept_prob) {
+          irt3_accept_prob *= loh_tail_sample_decay;
+          irt3_scanned++;
+          continue;
+        }
+      }
       // 先记录候选统计（来源 index=5）
 #if LOH_INCLUDE_CANDIDATE_FEATURES
       {
@@ -6881,6 +8025,10 @@ static void irt3_heap_get_candidates(LOH_params_t *params, int max_candidates,
       if (loh_seen_add(params, candidate)) {
         params->candidates[start_idx + added++] = candidate;
       }
+      if (loh_tail_sample_enabled) {
+        irt3_accept_prob *= loh_tail_sample_decay;
+        irt3_scanned++;
+      }
     }
   }
 
@@ -6893,7 +8041,7 @@ static void irt3_heap_get_candidates(LOH_params_t *params, int max_candidates,
 static void size_heap_init(LOH_params_t *params) {
   // 设置 Size 堆的容量为 MAX_CANDIDATES，确保有足够的大对象候选
   // （原来是 MAX_CANDIDATES / 6，但这会导致堆在 evict 后逐渐失效）
-  params->size_heap_capacity = MAX_CANDIDATES;
+  params->size_heap_capacity = loh_structured_candidates;
   params->size_heap_size = 0;
   params->size_heap = g_new0(size_heap_entry_t, params->size_heap_capacity);
 #if LOH_MAINTAIN_MAPS
@@ -7197,9 +8345,13 @@ static void size_heap_get_candidates(LOH_params_t *params, int max_candidates,
     }
   }
 
-  // 从排序后的数组中选择最大的 max_candidates 个对象
+  // 从排序后的数组中选择最大的 max_candidates 个对象（支持衰减采样）
+  double sz_accept_prob = 1.0;
+  int sz_max_scan = loh_tail_sample_enabled ? max_candidates * 10 : 0;
+  int sz_scanned = 0;
   for (int i = 0; i < valid_count && added < max_candidates; i++) {
-    if (start_idx + added >= MAX_CANDIDATES) break;
+    if (start_idx + added >= loh_structured_candidates) break;
+    if (loh_tail_sample_enabled && sz_scanned >= sz_max_scan) break;
 
     int heap_idx = sorted_indices[i];
     cache_obj_t *obj = params->size_heap[heap_idx].obj;
@@ -7216,12 +8368,22 @@ static void size_heap_get_candidates(LOH_params_t *params, int max_candidates,
     }
 #endif
 
-    if (loh_seen_add(params, obj)) {
-      params->candidates[start_idx + added++] = obj;
-      LOH_DEBUG_PRINT_DETAILED(
-          "[SIZE HEAP DEBUG] Added candidate #%d: obj_id=%llu, size=%ld\n",
-          added, (unsigned long long)obj->obj_id,
-          (long)params->size_heap[heap_idx].size_value);
+    // 衰减采样：先检查概率，再加入 seen
+    {
+      bool sz_pass_decay =
+          !loh_tail_sample_enabled ||
+          (double)(loh_fast_rand() % 10000u) / 10000.0 < sz_accept_prob;
+      if (sz_pass_decay && loh_seen_add(params, obj)) {
+        params->candidates[start_idx + added++] = obj;
+        LOH_DEBUG_PRINT_DETAILED(
+            "[SIZE HEAP DEBUG] Added candidate #%d: obj_id=%llu, size=%ld\n",
+            added, (unsigned long long)obj->obj_id,
+            (long)params->size_heap[heap_idx].size_value);
+      }
+    }
+    if (loh_tail_sample_enabled) {
+      sz_accept_prob *= loh_tail_sample_decay;
+      sz_scanned++;
     }
   }
 
@@ -7340,14 +8502,32 @@ static void size_buckets_remove(LOH_params_t *params, cache_obj_t *obj) {
 
 /**
  * @brief 从尺寸桶获取淘汰候选对象
+ *
+ * 【性能优化】：直接从最高桶向下遍历取对象，跳过全量收集+排序。
+ * 桶边界（512KB/1MB/10MB/100MB）已按大小分区，高桶对象天然较大。
+ * 评分函数会在候选集中选出最优，无需精确排序。
+ * 原实现：收集192个对象 + O(k×n)选择排序 → 每次驱逐~6000次比较
+ * 优化后：直接从高桶取 max_candidates 个 → O(max_candidates)
  */
 static void size_buckets_get_candidates(LOH_params_t *params,
                                         int max_candidates, int *n_candidates) {
   int added = 0;
   int start_idx = *n_candidates;
 
+  // [FIX] cap max_candidates to avoid scanning past loh_structured_candidates
+  // Without this, when start_idx + max_candidates > loh_structured_candidates,
+  // the inner condition (start_idx + added < loh_structured_candidates)
+  // prevents the last candidate from being added, but the while loop
+  // (added < max_candidates) keeps running, causing a full linked-list scan
+  // of potentially millions of nodes.
+  if (start_idx + max_candidates > loh_structured_candidates) {
+    max_candidates = loh_structured_candidates - start_idx;
+    if (max_candidates <= 0) {
+      return;
+    }
+  }
+
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
-  // 调试：打印每个桶的对象数量和最大对象大小
   LOH_DEBUG_PRINT_DETAILED("[SIZE_BUCKETS DEBUG] Bucket counts: ");
   for (int b = 0; b < SIZE_BUCKET_COUNT; b++) {
     int count = 0;
@@ -7364,82 +8544,58 @@ static void size_buckets_get_candidates(LOH_params_t *params,
   LOH_DEBUG_PRINT_DETAILED("\n");
 #endif
 
-  cache_t *cache = (cache_t *)params->cache_ptr;
-
-  // 收集所有桶中的对象到临时数组，然后按 size 排序选择
-  // 这样可以确保选择的是全局最大的对象，而不是按桶内 LRU 顺序
-  cache_obj_t *temp_objs[MAX_CANDIDATES * 2];  // 临时存储，预留足够空间
-  int temp_count = 0;
-
-  // 从所有桶收集对象
-  for (int i = SIZE_BUCKET_COUNT - 1; i >= 0 && temp_count < MAX_CANDIDATES * 2;
-       i--) {
-    size_node_t *curr = params->size_buckets[i];  // 从头开始遍历，收集所有
-    while (curr != NULL && temp_count < MAX_CANDIDATES * 2) {
-      if (curr->obj != NULL) {
+  // 从最高桶向下遍历，使用衰减采样
+  double sb_accept_prob = 1.0;
+  int sb_max_scan = loh_tail_sample_enabled ? max_candidates * 10 : 0;
+  int sb_scanned = 0;
+  for (int b = SIZE_BUCKET_COUNT - 1; b >= 0 && added < max_candidates; b--) {
+    size_node_t *curr = params->size_buckets[b];
+    while (curr != NULL && added < max_candidates) {
+      if (loh_tail_sample_enabled && sb_scanned >= sb_max_scan) goto sb_done;
+      if (curr->obj != NULL && start_idx + added < loh_structured_candidates) {
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_ERROR
-        if (hashtable_find_obj_id(cache->hashtable, curr->obj->obj_id) !=
-            curr->obj) {
-          LOH_DEBUG_PRINT_ERROR(
-              "[SIZE WARNING] Object obj_id=%llu found in size bucket but not "
-              "in cache, skipping\n",
-              (unsigned long long)curr->obj->obj_id);
-          curr = curr->next;
-          continue;
+        {
+          cache_t *cache = (cache_t *)params->cache_ptr;
+          if (hashtable_find_obj_id(cache->hashtable, curr->obj->obj_id) !=
+              curr->obj) {
+            LOH_DEBUG_PRINT_ERROR(
+                "[SIZE WARNING] Object obj_id=%llu found in size bucket but "
+                "not in cache, skipping\n",
+                (unsigned long long)curr->obj->obj_id);
+            curr = curr->next;
+            continue;
+          }
         }
 #endif
-        temp_objs[temp_count++] = curr->obj;
+#if LOH_INCLUDE_CANDIDATE_FEATURES
+        {
+          double f[FEATURE_DIM];
+          calculate_object_features(params, curr->obj, f);
+          for (int k = 0; k < FEATURE_DIM; ++k) {
+            params->cand_feat_sum[2][k] += f[k];
+            params->cand_feat_sumsq[2][k] += f[k] * f[k];
+          }
+          params->cand_feat_count[2]++;
+        }
+#endif
+        // 衰减采样：先检查概率，再加入 seen
+        {
+          bool sb_pass_decay =
+              !loh_tail_sample_enabled ||
+              (double)(loh_fast_rand() % 10000u) / 10000.0 < sb_accept_prob;
+          if (sb_pass_decay && loh_seen_add(params, curr->obj)) {
+            params->candidates[start_idx + added++] = curr->obj;
+          }
+        }
+      }
+      if (loh_tail_sample_enabled) {
+        sb_accept_prob *= loh_tail_sample_decay;
+        sb_scanned++;
       }
       curr = curr->next;
     }
   }
-
-  // 按 obj_size 从大到小排序（简单选择排序，因为数量小）
-  for (int i = 0; i < temp_count - 1 && i < max_candidates; i++) {
-    int max_idx = i;
-    for (int j = i + 1; j < temp_count; j++) {
-      if (temp_objs[j]->obj_size > temp_objs[max_idx]->obj_size) {
-        max_idx = j;
-      }
-    }
-    if (max_idx != i) {
-      cache_obj_t *tmp = temp_objs[i];
-      temp_objs[i] = temp_objs[max_idx];
-      temp_objs[max_idx] = tmp;
-    }
-  }
-
-  // 打印去重前的 size 候选（排序后）
-  LOH_DEBUG_PRINT_DETAILED(
-      "[SIZE_BEFORE_DEDUP] req=%ld count=%d: ", (long)params->current_timestamp,
-      temp_count > 16 ? 16 : temp_count);
-  for (int i = 0; i < temp_count && i < 16; i++) {
-    LOH_DEBUG_PRINT_DETAILED(
-        "%llu(%.2fMB) ", (unsigned long long)temp_objs[i]->obj_id,
-        (double)temp_objs[i]->obj_size / (1024.0 * 1024.0));
-  }
-  LOH_DEBUG_PRINT_DETAILED("\n");
-  // 从排序后的数组中选择最大的 max_candidates 个对象
-  for (int i = 0; i < temp_count && added < max_candidates; i++) {
-    if (start_idx + added >= MAX_CANDIDATES) break;
-
-    cache_obj_t *obj = temp_objs[i];
-
-#if LOH_INCLUDE_CANDIDATE_FEATURES
-    {
-      double f[FEATURE_DIM];
-      calculate_object_features(params, obj, f);
-      for (int k = 0; k < FEATURE_DIM; ++k) {
-        params->cand_feat_sum[2][k] += f[k];
-        params->cand_feat_sumsq[2][k] += f[k] * f[k];
-      }
-      params->cand_feat_count[2]++;
-    }
-#endif
-    if (loh_seen_add(params, obj)) {
-      params->candidates[start_idx + added++] = obj;
-    }
-  }
+sb_done:
   *n_candidates = start_idx + added;
 }
 
@@ -7587,8 +8743,10 @@ static bool loh_atomic_insert_obj(LOH_params_t *params, cache_obj_t *obj) {
   size_ds_add(params, obj);
 
   // 4. 插入IRT堆 - 使用专门的add函数，避免update函数中的无意义查找
-  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
-    irt_heap_add(params, obj, i);
+  if (loh_irt_heap_enabled) {
+    for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+      irt_heap_add(params, obj, i);
+    }
   }
 
   return true;
@@ -7609,8 +8767,10 @@ static bool loh_atomic_remove_obj(LOH_params_t *params, cache_obj_t *obj) {
   size_ds_remove(params, obj);
 
   // IRT 堆remove（remove所有堆inofobject）
-  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
-    irt_heap_remove(params, obj, i);
+  if (loh_irt_heap_enabled) {
+    for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+      irt_heap_remove(params, obj, i);
+    }
   }
 
   // 清理对象内缓存指针/索引
@@ -7618,6 +8778,21 @@ static bool loh_atomic_remove_obj(LOH_params_t *params, cache_obj_t *obj) {
   obj->LOH.loh_irt_pos[0] = obj->LOH.loh_irt_pos[1] = obj->LOH.loh_irt_pos[2] =
       -1;
   obj->LOH.loh_size_pos = -1;  // 单一尺寸堆位置
+
+  // 从 flat obj_array 中移除（swap-with-last, O(1)）
+  {
+    int idx = obj->LOH.obj_array_idx;
+    int last = params->obj_array_size - 1;
+    if (idx >= 0 && idx <= last) {
+      if (idx != last) {
+        cache_obj_t *last_obj = params->obj_array[last];
+        params->obj_array[idx] = last_obj;
+        last_obj->LOH.obj_array_idx = idx;
+      }
+      params->obj_array_size--;
+    }
+    obj->LOH.obj_array_idx = -1;
+  }
 
   return true;
 }
@@ -7645,17 +8820,19 @@ static bool loh_atomic_update_obj(LOH_params_t *params, cache_obj_t *obj) {
   }
 
   // 3. updateIRT堆 - 统一使用高效的哈希表查找方式
-  for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
-    PERF_TS ts_irt;
-    PERF_NOW(ts_irt);
-    irt_heap_update(params, obj, i);
-    PERF_ACCUM(params, atomic_update_irt, ts_irt);
-    if (i == 0)
-      PERF_ACCUM(params, atomic_update_irt1, ts_irt);
-    else if (i == 1)
-      PERF_ACCUM(params, atomic_update_irt2, ts_irt);
-    else if (i == 2)
-      PERF_ACCUM(params, atomic_update_irt3, ts_irt);
+  if (loh_irt_heap_enabled) {
+    for (int i = 0; i < IRT_HISTORY_SIZE; i++) {
+      PERF_TS ts_irt;
+      PERF_NOW(ts_irt);
+      irt_heap_update(params, obj, i);
+      PERF_ACCUM(params, atomic_update_irt, ts_irt);
+      if (i == 0)
+        PERF_ACCUM(params, atomic_update_irt1, ts_irt);
+      else if (i == 1)
+        PERF_ACCUM(params, atomic_update_irt2, ts_irt);
+      else if (i == 2)
+        PERF_ACCUM(params, atomic_update_irt3, ts_irt);
+    }
   }
 
   return true;

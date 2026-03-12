@@ -20,3 +20,8 @@
 ./data/Alibaba/4.oracleGeneral.zst ThreeLCache-BMR cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0480, throughput 0.76 MQPS
 ./data/Alibaba/4.oracleGeneral.zst LRB-BMR cache size    35GiB,       1576134095 req, miss ratio 0.0317, byte miss ratio 0.0480, throughput 0.02 MQPS
 ./data/Alibaba/4.oracleGeneral.zst LRB-BMR cache size     4GiB,       1576134095 req, miss ratio 0.0325, byte miss ratio 0.0497, throughput 0.01 MQPS
+data/Alibaba/4.oracleGeneral.zst LOH-OMR cache size   124MiB,          3000000 req, miss ratio 0.078376, byte miss ratio 0.106549, throughput 0.01 MQPS
+data/Alibaba/4.oracleGeneral.zst LOH-OMR cache size   124MiB,          3000000 req, miss ratio 0.240660, byte miss ratio 0.253150, throughput 0.01 MQPS
+data/Alibaba/4.oracleGeneral.zst LOH-OMR cache size   124MiB,          3000000 req, miss ratio 0.075504, byte miss ratio 0.096678, throughput 0.01 MQPS
+data/Alibaba/4.oracleGeneral.zst LOH-BMR cache size   124MiB,          3000000 req, miss ratio 0.078385, byte miss ratio 0.106589, throughput 0.03 MQPS
+data/Alibaba/4.oracleGeneral.zst LOH-BMR cache size   124MiB,          3000000 req, miss ratio 0.075593, byte miss ratio 0.097003, throughput 0.03 MQPS

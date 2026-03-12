@@ -142,7 +142,7 @@ import glob
 # ============================================================
 
 # 1) 调试 / Profiling
-DEFAULT_LOH_ENABLE_PROFILING = "1"   # 1=启用profiling, 0=关闭
+DEFAULT_LOH_ENABLE_PROFILING = "1"   # 1=启用profiling, 0=关闭（默认开启）
 
 # 2) IPC 与共享内存
 DEFAULT_LOH_SHM_KEY = "9876"
@@ -157,6 +157,7 @@ DEFAULT_LOH_INCLUDE_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_TOPK_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_REQUEST = "0"
+DEFAULT_LOH_INCLUDE_WEIGHTS_IN_OBS = "0"
 DEFAULT_RL_STATE_USE_MISSRATIO = "1"
 
 # 4) 观测 / 动作空间 与评分模式
@@ -567,6 +568,225 @@ class ProfiledSAC(SAC):
             return super().train(gradient_steps, batch_size)
 
 
+# ============================================================
+# 异步训练模式: LOH_ASYNC_TRAIN=1
+# ============================================================
+# 核心思路:
+#   - 主线程: 全速做 env.step() (读 C 端 state → 推理 → 写 weights → 加入 replay buffer)
+#   - 后台线程: 持续从 replay buffer 中采样并做梯度更新 (SAC.train)
+# 这样 Python 主线程不再被 SAC.train() 阻塞 (~82% 时间),
+# 可以消费更多 C 端 state, 预期 step 数提升 5-7 倍.
+# ============================================================
+
+LOH_ASYNC_TRAIN = os.environ.get("LOH_ASYNC_TRAIN", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+class AsyncProfiledSAC(ProfiledSAC):
+    """SAC 异步训练版本: train() 在后台线程中运行, 主线程全速推理.
+
+    当 SB3 的 learn() 调用 self.train() 时, 不阻塞主线程, 而是:
+    1. 如果后台线程空闲 → 启动一次后台 train
+    2. 如果后台线程忙   → 跳过本次 train (不丢数据, 下次会训练)
+
+    线程安全:
+    - replay buffer 的 add/sample 通过 _buffer_lock 互斥
+    - PyTorch 模型参数: 读(predict) 与 写(backward+optimizer) 可能有短暂不一致,
+      但在 SAC 的随机策略中影响可忽略
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._train_thread = None
+        self._stop_event = threading.Event()
+        self._async_train_count = 0
+        self._async_skip_count = 0
+        self._async_started = False
+        self._predict_actor = None  # 独立的推理用 actor 副本
+        self._sync_interval = 10   # 每 N 次 train 后同步 actor 权重
+
+    def train(self, gradient_steps: int, batch_size: int = 64):  # noqa: D401
+        """Non-blocking train: 在后台线程中执行, 立即返回."""
+        # 如果尚未启动后台训练循环, 启动之
+        if not self._async_started:
+            self._start_async_training()
+
+        # train() 被 SB3 learn loop 调用时, 什么都不做 (后台线程持续训练)
+        return
+
+    def predict(self, observation, state=None, episode_start=None, deterministic=False):
+        """Thread-safe predict: 使用独立的 actor 副本, 避免与训练线程竞争."""
+        if self._predict_actor is not None:
+            # 临时把 policy 的 actor 替换为推理副本
+            orig_actor = self.policy.actor
+            self.policy.actor = self._predict_actor
+            try:
+                result = super().predict(observation, state, episode_start, deterministic)
+            finally:
+                self.policy.actor = orig_actor
+            return result
+        return super().predict(observation, state, episode_start, deterministic)
+
+    def save(self, path, exclude=None, include=None):
+        """Thread-safe save: 临时隐藏不可 pickle 的属性,保存后恢复."""
+        # 收集需要临时隐藏的 model 属性
+        _hidden_model = {}
+        for attr in ('_train_thread', '_stop_event', '_predict_actor',
+                     '_original_buf_add', '_original_buf_sample'):
+            val = getattr(self, attr, None)
+            if val is not None:
+                _hidden_model[attr] = val
+                setattr(self, attr, None)
+
+        # 临时恢复 replay buffer 的原始方法,移除 lock
+        buf = self.replay_buffer
+        _hidden_buf = {}
+        if buf is not None and hasattr(buf, '_ts_lock'):
+            _hidden_buf['_ts_lock'] = buf._ts_lock
+            _hidden_buf['add'] = buf.add
+            _hidden_buf['sample'] = buf.sample
+            delattr(buf, '_ts_lock')
+            if '_original_buf_add' in _hidden_model:
+                buf.add = _hidden_model['_original_buf_add']
+                buf.sample = _hidden_model['_original_buf_sample']
+
+        try:
+            super().save(path, exclude=exclude, include=include)
+        finally:
+            # 恢复所有隐藏的属性
+            for attr, val in _hidden_model.items():
+                setattr(self, attr, val)
+            for attr, val in _hidden_buf.items():
+                setattr(buf, attr, val)
+
+    def _start_async_training(self):
+        """启动后台训练线程."""
+        if self._async_started:
+            return
+        self._async_started = True
+
+        # 创建推理用 actor 的独立副本 (深拷贝, 避免共享 action_dist 状态)
+        import copy
+        self._predict_actor = copy.deepcopy(self.actor)
+        self._predict_actor.eval()
+        print("[ASYNC] 📋 Created separate predict actor (deepcopy)")
+
+        # 将 replay buffer 包装为线程安全版本
+        if self.replay_buffer is not None and not hasattr(self.replay_buffer, '_ts_lock'):
+            self._wrap_replay_buffer_threadsafe()
+
+        self._stop_event.clear()
+        self._train_thread = threading.Thread(
+            target=self._async_train_loop, daemon=True, name="async-sac-train"
+        )
+        self._train_thread.start()
+        print("[ASYNC] 🚀 Background training thread started")
+
+    def _wrap_replay_buffer_threadsafe(self):
+        """给 replay buffer 的 add/sample 加上线程安全锁."""
+        buf = self.replay_buffer
+        lock = threading.Lock()
+        buf._ts_lock = lock
+
+        original_add = buf.add
+        original_sample = buf.sample
+
+        # 保存原始方法引用,用于 stop 时恢复 (避免 pickle 失败)
+        self._original_buf_add = original_add
+        self._original_buf_sample = original_sample
+
+        def threadsafe_add(*args, **kwargs):
+            with lock:
+                return original_add(*args, **kwargs)
+
+        def threadsafe_sample(*args, **kwargs):
+            with lock:
+                return original_sample(*args, **kwargs)
+
+        buf.add = threadsafe_add
+        buf.sample = threadsafe_sample
+        print("[ASYNC] 🔒 Replay buffer wrapped with thread-safe lock (add/sample only)")
+
+    def stop_async_training(self):
+        """停止后台训练线程 (在训练结束或中断时调用). 可安全多次调用."""
+        if self._stop_event is not None:
+            self._stop_event.set()
+        if self._train_thread is not None and self._train_thread.is_alive():
+            self._train_thread.join(timeout=10)
+
+        # 恢复 replay buffer 的原始 add/sample 方法,移除不可 pickle 的 lock
+        buf = self.replay_buffer
+        if buf is not None and hasattr(buf, '_ts_lock'):
+            if hasattr(self, '_original_buf_add'):
+                buf.add = self._original_buf_add
+                buf.sample = self._original_buf_sample
+            delattr(buf, '_ts_lock')
+
+        # 清理不可 pickle 的线程对象和闭包引用,使 model.save() 正常工作
+        self._train_thread = None
+        self._stop_event = None
+        self._predict_actor = None
+        # 移除可能包含 ctypes 引用的闭包方法引用
+        if hasattr(self, '_original_buf_add'):
+            del self._original_buf_add
+        if hasattr(self, '_original_buf_sample'):
+            del self._original_buf_sample
+
+        if LOH_DEBUG_BASIC():
+            print(
+                f"[ASYNC] 🛑 Background training stopped: "
+                f"train_count={self._async_train_count}, "
+                f"skip_count={self._async_skip_count}"
+            )
+
+    def _async_train_loop(self):
+        """后台线程: 持续从 replay buffer 采样并训练.
+
+        线程安全设计:
+        - replay_buffer.add/sample 已加锁 (threadsafe wrap)
+        - 训练线程使用 self.actor (原始 actor)
+        - 主线程使用 self._predict_actor (独立副本)
+        - 每 _sync_interval 次 train 后同步权重到 _predict_actor
+
+        NOTE: 用本地变量 stop_event 缓存 self._stop_event 引用,
+              因为 save() 方法会临时将 self._stop_event 设为 None,
+              如果训练线程恰好在那个窗口检查 self._stop_event.is_set()
+              就会触发 AttributeError: 'NoneType' object has no attribute 'is_set'
+        """
+        train_batch_size = self.batch_size
+        train_gradient_steps = self.gradient_steps
+        learning_starts = self.learning_starts
+        stop_event = self._stop_event  # 缓存本地引用, 避免 save() 竞态
+
+        while not stop_event.is_set():
+            # 检查 replay buffer 是否有足够数据
+            try:
+                buf_size = self.replay_buffer.size()
+            except Exception:
+                buf_size = 0
+
+            if buf_size >= learning_starts:
+                try:
+                    with GLOBAL_TIMER.time_function("SAC.train_total"):
+                        # 调用 SAC 父类的 train (绕过我们的 no-op override)
+                        SAC.train(self, train_gradient_steps, train_batch_size)
+                    self._async_train_count += 1
+
+                    # 定期同步训练后的 actor 权重到推理副本
+                    if (self._predict_actor is not None and
+                            self._async_train_count % self._sync_interval == 0):
+                        self._predict_actor.load_state_dict(
+                            self.actor.state_dict()
+                        )
+                except Exception as e:
+                    self._async_skip_count += 1
+                    if LOH_DEBUG_BASIC():
+                        print(f"[ASYNC] ⚠️ train error: {e}")
+                    time.sleep(0.01)
+            else:
+                # buffer 数据不足, 短暂等待
+                time.sleep(0.005)
+
+
 class ProfiledPPO(PPO):
     """PPO 带全局计时的子类"""
 
@@ -619,6 +839,11 @@ from stable_baselines3 import PPO  # 保留作参考
 # from stable_baselines3.common.logger import configure
 # from stable_baselines3.common.env_checker import check_env
 import torch
+
+# 限制 PyTorch CPU 线程数,减少 GIL 竞争（小 MLP 无需多线程）
+# 注释掉以恢复默认多线程，避免 async 模式下训练过快导致 over-training
+# torch.set_num_threads(1)
+# torch.set_num_interop_threads(1)
 
 # POSIX 信号量绑定（基于 libc）
 libc = ctypes.CDLL("libc.so.6", use_errno=True)
@@ -892,6 +1117,13 @@ def get_state_dim(feature_dim: int, scope: str = "STATE") -> int:
 
 CONTEXT_DIM = get_state_dim(STATE_OBJ_FEATURE_CAP_DIM, scope="context")
 STATE_DIM = get_state_dim(STATE_OBJ_FEATURE_DIM, scope="active")
+
+# 是否将当前权重追加到观测中（Python-only，不影响共享内存布局）
+_weights_in_obs_flag = os.environ.get("LOH_INCLUDE_WEIGHTS_IN_OBS", DEFAULT_LOH_INCLUDE_WEIGHTS_IN_OBS).strip().lower()
+LOH_INCLUDE_WEIGHTS_IN_OBS = _weights_in_obs_flag in {"1", "true", "yes", "on"}
+if LOH_INCLUDE_WEIGHTS_IN_OBS:
+    loh_print_config(f"[LOH CONFIG] WEIGHTS_IN_OBS: ENABLED (appending {ACTION_DIM} weight dims to observation)")
+
 loh_print_config(f"[LOH CONFIG] Shared state dims: CONTEXT_DIM={CONTEXT_DIM}, STATE_DIM={STATE_DIM}")
 
 # 【移除】惩罚队列常量 - 改为动态读取
@@ -2201,6 +2433,8 @@ class LohEnv(gym.Env):
         self._obj_hit_history = deque(maxlen=self._state_trend_window)
         self._byte_hit_history = deque(maxlen=self._state_trend_window)
         extra_dims = 2 if self._state_use_missratiotrend else 0
+        if LOH_INCLUDE_WEIGHTS_IN_OBS:
+            extra_dims += ACTION_DIM
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(int(self._obs_idx.shape[0] + extra_dims),), dtype=np.float32
         )
@@ -2777,6 +3011,9 @@ class LohEnv(gym.Env):
         if self._state_use_missratiotrend:
             # 初始时趋势为 0（历史数据不足）
             initial_observation = np.concatenate([initial_observation, np.zeros((2,), dtype=np.float32)])
+        if LOH_INCLUDE_WEIGHTS_IN_OBS:
+            # reset 时无上次权重，追加均匀分布初始权重
+            initial_observation = np.concatenate([initial_observation, np.ones(ACTION_DIM, dtype=np.float32) / ACTION_DIM])
         # 从 state[0] 和 state[1] 获取全局特征（obj_hit_ratio 和 byte_hit_ratio）
         # 注意：C 端存储的是 hit_ratio，miss_ratio = 1 - hit_ratio
         # 奖励基于原始命中率（不受观测选择影响）
@@ -3867,6 +4104,9 @@ class LohEnv(gym.Env):
         self._last_reward = reward
         self._current_weights = weights.copy()
 
+        if LOH_INCLUDE_WEIGHTS_IN_OBS:
+            new_observation = np.concatenate([new_observation, weights.astype(np.float32)])
+
         # 若启用固定观测模式，则将返回给RL的观测替换为常数向量
         if LOH_FIXED_OBS_MODE == 1:
             obs_out = np.zeros_like(new_observation, dtype=np.float32)
@@ -4020,7 +4260,8 @@ class LOHTrainingCallback(BaseCallback):
         """每个step后调用"""
         with GLOBAL_TIMER.time_function("callback._on_step"):
             self.step_count += 1
-            if self.step_count % 100 == 0:  # 每100步记录一次，避免日志过多
+            _cb_log_interval = 500 if LOH_ASYNC_TRAIN else 100
+            if self.step_count % _cb_log_interval == 0:  # async时每500步，否则每100步
                 self._log_with_timestamp(f"推理步骤: step #{self.step_count}", "STEP")
 
                 # 调试：检查是否能访问到model和logger
@@ -4497,6 +4738,7 @@ def main():
         f"  Action dimension: ACTION_DIM={ACTION_DIM} (score features={SCORE_FEATURE_DIM}, state cap={STATE_OBJ_FEATURE_CAP_DIM})"
     )
     print(f"  LOH_ENABLE_PROFILING: {'1 (enabled)' if LOH_ENABLE_PROFILING else '0 (disabled)'}")
+    print(f"  LOH_ASYNC_TRAIN: {'1 (enabled - background thread training)' if LOH_ASYNC_TRAIN else '0 (disabled - synchronous)'}")
 
     # IPC 相关环境变量
     print("=== IPC Config ===")
@@ -4791,13 +5033,23 @@ def main():
             if target_entropy_val is not None:
                 sac_config["target_entropy"] = target_entropy_val
 
-            model = ProfiledSAC(
+            model = AsyncProfiledSAC(
+                "MlpPolicy",
+                env,
+                verbose=1,
+                seed=seed,
+                **sac_config,
+            ) if LOH_ASYNC_TRAIN else ProfiledSAC(
                 "MlpPolicy",
                 env,
                 verbose=1,
                 seed=seed,
                 **sac_config,
             )
+            if LOH_ASYNC_TRAIN:
+                print(f"[ASYNC] ✅ AsyncProfiledSAC created (LOH_ASYNC_TRAIN=1)")
+                print(f"[ASYNC]    主线程: 全速 env.step(); 后台线程: 持续 SAC.train()")
+                print(f"[ASYNC]    预期 step 数提升 5-7 倍")
 
             soft_prior_cfg = _get_soft_prior_config()
             if soft_prior_cfg:
@@ -5203,7 +5455,35 @@ def main():
         # resume：仅加载参数（避免把旧 replay buffer / 旧函数对象带进来）
         if resume_candidate:
             try:
-                model.set_parameters(resume_candidate, exact_match=True)
+                try:
+                    model.set_parameters(resume_candidate, exact_match=True)
+                except Exception:
+                    # exact_match=True 可能因 ent_coef 模式不同（auto/fixed）而失败
+                    # 手动逐组件加载，跳过当前模型中不存在的组件
+                    import zipfile, io
+                    loaded_params = {}
+                    with zipfile.ZipFile(resume_candidate, "r") as archive:
+                        for name in archive.namelist():
+                            if name.endswith(".pth"):
+                                key = name.replace(".pth", "")
+                                with archive.open(name) as f:
+                                    loaded_params[key] = torch.load(io.BytesIO(f.read()), map_location="cpu")
+                    loaded_count = 0
+                    skipped = []
+                    for name, state_dict in loaded_params.items():
+                        try:
+                            attr = None
+                            for part in name.split("."):
+                                attr = getattr(attr or model, part, None)
+                            if attr is not None and hasattr(attr, "load_state_dict"):
+                                attr.load_state_dict(state_dict, strict=False)
+                                loaded_count += 1
+                            else:
+                                skipped.append(name)
+                        except Exception:
+                            skipped.append(name)
+                    if LOH_DEBUG_BASIC():
+                        print(f"⚠️  exact_match failed; manual load: {loaded_count} loaded, skipped: {skipped}")
                 resumed_from = resume_candidate
                 if LOH_DEBUG_BASIC():
                     print(f"✅ resumed parameters loaded: {resumed_from}")
@@ -5452,7 +5732,11 @@ def main():
                 log_interval=1,  # 每次训练更新都记录（从10改为1，获得更密集的train曲线）
             )
 
-        # 5. 保存最终模型（处理pickle错误）
+        # 5. 停止异步训练线程 (如果启用)
+        if LOH_ASYNC_TRAIN and hasattr(model, 'stop_async_training'):
+            model.stop_async_training()
+
+        # 6. 保存最终模型（处理pickle错误）
         training_end_time = datetime.now()
         training_duration = training_end_time - training_start_time
         if LOH_DEBUG_BASIC():
@@ -5481,6 +5765,10 @@ def main():
 
         if LOH_DEBUG_BASIC():
             print(f"⚠️  Training interrupted: {exc}")
+
+        # 停止异步训练线程 (如果启用)
+        if LOH_ASYNC_TRAIN and 'model' in locals() and model is not None and hasattr(model, 'stop_async_training'):
+            model.stop_async_training()
 
         if 'model' in locals() and model is not None:
             try:
@@ -5532,6 +5820,12 @@ def main():
 
         # 打印profiling报告
         GLOBAL_TIMER.report(top_n=30)
+
+        # 打印异步训练统计
+        if LOH_ASYNC_TRAIN and 'model' in locals() and model is not None and hasattr(model, '_async_train_count'):
+            print(f"\n[ASYNC] 异步训练统计:")
+            print(f"  后台训练次数: {model._async_train_count}")
+            print(f"  跳过次数: {model._async_skip_count}")
 
         if 'env' in locals() and env is not None:
             env.close()
