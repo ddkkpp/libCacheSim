@@ -262,6 +262,8 @@ trap cleanup_on_exit INT TERM EXIT
 #        * LOH_INCLUDE_TOPK_CANDIDATE_FEATURES  # 显式控制是否包含 TopK 候选特征 (192维)
 #        * LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES  # 显式控制是否包含 AvgTopK 平均特征 (24维)
 #        * LOH_DEBUG_LEVEL                  # 显式控制 C 端调试日志级别（0-4）
+#        * LOH_PERF_PROFILING               # 显式控制 C 端 profiling 宏（0/1）
+#        * LOH_ENABLE_PROFILING             # 兼容别名（会映射到 LOH_PERF_PROFILING）
 #    - 注：前2维(hit_ratio, byte_hit_ratio)始终传递，不再通过宏控制
 #    - 这些变量会在 scripts/debug.sh 中被转换为编译宏，通常意味着你希望修改 C 侧特征维度/候选特征布局或调试日志级别。
 #    - 一旦设置，我们假定你"需要重建"，因此不会再做额外比较，直接增量构建一次。
@@ -276,7 +278,7 @@ trap cleanup_on_exit INT TERM EXIT
         NEED_REBUILD=0
     else
 
-        # 是否存在编译相关环境变量（LOH_INCLUDE_* / LOH_DEBUG_LEVEL / LOH_ENABLE_PENALTY），决定是否需要构建
+        # 是否存在编译相关环境变量（LOH_INCLUDE_* / LOH_DEBUG_LEVEL / LOH_PERF_PROFILING 等），决定是否需要构建
         NEED_REBUILD=0
          if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ] || \
              [ -n "${LOH_INCLUDE_CANDIDATE_FEATURES:-}" ] || \
@@ -285,6 +287,8 @@ trap cleanup_on_exit INT TERM EXIT
              [ -n "${LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES:-}" ] || \
              [ -n "${LOH_INCLUDE_REQUEST:-}" ] || \
              [ -n "${LOH_DEBUG_LEVEL:-}" ] || \
+             [ -n "${LOH_PERF_PROFILING:-}" ] || \
+             [ -n "${LOH_ENABLE_PROFILING:-}" ] || \
              [ -n "${LOH_ENABLE_PENALTY:-}" ]; then
             NEED_REBUILD=1
         fi

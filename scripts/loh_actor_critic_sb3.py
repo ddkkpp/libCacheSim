@@ -104,9 +104,19 @@ import glob
 #   - LOH_REWARD_USE_PENALTY             : 奖励是否使用 penalty 分量
 #   - LOH_REWARD_USE_MISSRATIO           : 奖励是否使用 miss ratio 分量
 #   - LOH_REWARD_USE_MISSRATIOTREND      : 奖励是否使用 miss ratio 趋势分量
+#   - LOH_REWARD_MIX_MODE               : 奖励混合模式（legacy/gated_penalty_mix）
 #   - LOH_REWARD_W_PENALTY               : penalty 权重
 #   - LOH_REWARD_W_MISS                  : miss ratio 权重
 #   - LOH_REWARD_W_TREND                 : 趋势分量权重
+#   - LOH_REWARD_W_BASE_ORIG             : gated 模式下 original 基础项权重
+#   - LOH_REWARD_W_BASE_MISS             : gated 模式下 miss 基础项权重
+#   - LOH_REWARD_W_BASE_TREND            : gated 模式下 trend 基础项权重
+#   - LOH_REWARD_W_PENALTY_DELTA         : gated 模式下 penalty 增量权重
+#   - LOH_PENALTY_GATE_MINCOUNT          : gated 模式下 penalty 事件数门槛
+#   - LOH_PENALTY_GATE_GOODRATE          : gated 模式下 good_rate 门槛
+#   - LOH_PENALTY_GATE_PENALTYSCALE      : gated 模式下 penalty 量级门控缩放
+#   - LOH_PENALTY_GATE_NO_CUTOFF_SCALE   : gated 模式下未设置 cutoff 时的 gate 折扣
+#   - LOH_PENALTY_DELTA_SCALE            : gated 模式下 penalty delta 归一化缩放
 #   - LOH_MISSRATIOTREND_WINDOW / LOH_TREND_WINDOW: 趋势窗口长度
 #   - LOH_MISSRATIOTREND_MODE  / LOH_TREND_MODE   : 趋势模式（slope/delta）
 #   - LOH_MISS_COMPONENT                  : miss 组件模式（neg/improve）
@@ -191,11 +201,21 @@ DEFAULT_LOH_REWARD_USE_PENALTY = "1"
 DEFAULT_LOH_REWARD_USE_MISSRATIO = "0"
 DEFAULT_LOH_REWARD_USE_MISSRATIOTREND = "0"
 DEFAULT_LOH_REWARD_USE_ORIGINAL = ""  # ""=auto (penalty启用时默认开启), 0/1=强制
+DEFAULT_LOH_REWARD_MIX_MODE = "legacy"  # legacy | gated_penalty_mix
 DEFAULT_LOH_REWARD_W_PENALTY = "1.0"
 DEFAULT_LOH_REWARD_W_MISS = "1.0"
 DEFAULT_LOH_REWARD_W_TREND = "0.5"
 DEFAULT_LOH_REWARD_W_ORIGINAL = "0.5"
+DEFAULT_LOH_REWARD_W_BASE_ORIG = "0.7"
+DEFAULT_LOH_REWARD_W_BASE_MISS = "0.3"
+DEFAULT_LOH_REWARD_W_BASE_TREND = "0.0"
+DEFAULT_LOH_REWARD_W_PENALTY_DELTA = "0.35"
 DEFAULT_LOH_REWARD_ORIGINAL_MAP = ""  # ""=auto (penalty启用时center01，否则raw), raw|clip01|center01
+DEFAULT_LOH_PENALTY_GATE_MINCOUNT = "8"
+DEFAULT_LOH_PENALTY_GATE_GOODRATE = "0.15"
+DEFAULT_LOH_PENALTY_GATE_PENALTYSCALE = "1.0"
+DEFAULT_LOH_PENALTY_GATE_NO_CUTOFF_SCALE = "0.5"
+DEFAULT_LOH_PENALTY_DELTA_SCALE = "1.0"
 DEFAULT_LOH_MISSRATIOTREND_WINDOW = "100"
 DEFAULT_LOH_TREND_WINDOW = "100"
 DEFAULT_LOH_MISSRATIOTREND_MODE = "slope"
@@ -1119,6 +1139,7 @@ CONTEXT_DIM = get_state_dim(STATE_OBJ_FEATURE_CAP_DIM, scope="context")
 STATE_DIM = get_state_dim(STATE_OBJ_FEATURE_DIM, scope="active")
 
 # 是否将当前权重追加到观测中（Python-only，不影响共享内存布局）
+# Single source of truth follows other state flags: LOH_INCLUDE_*
 _weights_in_obs_flag = os.environ.get("LOH_INCLUDE_WEIGHTS_IN_OBS", DEFAULT_LOH_INCLUDE_WEIGHTS_IN_OBS).strip().lower()
 LOH_INCLUDE_WEIGHTS_IN_OBS = _weights_in_obs_flag in {"1", "true", "yes", "on"}
 if LOH_INCLUDE_WEIGHTS_IN_OBS:
@@ -1258,6 +1279,18 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         # 存储 compute_final_rewards 实际应用的 penalty（按位置记录）
         # 这些是 finalize 时计算并真正用于更新 final reward 的惩罚值
         self.applied_penalties = []
+
+        # 最近窗口的分布采样：用于打印 scale(d) / penalty / final reward 的值域与分位数
+        try:
+            self.penalty_dist_window = max(64, int(os.environ.get("LOH_PENALTY_DIST_WINDOW", "4096")))
+        except Exception:
+            self.penalty_dist_window = 4096
+        self.scale_samples = deque(maxlen=self.penalty_dist_window)
+        self.obj_penalty_samples = deque(maxlen=self.penalty_dist_window)
+        self.penalty_samples = deque(maxlen=self.penalty_dist_window)
+        self.reward_preclip_samples = deque(maxlen=self.penalty_dist_window)
+        self.reward_final_samples = deque(maxlen=self.penalty_dist_window)
+        self.penalty_trace_all = _env_flag("LOH_PENALTY_TRACE_ALL", False)
 
         # 【新增】Penalty baseline（滑动平均）
         self.penalty_baseline = 0.0  # 初始为0
@@ -1459,6 +1492,46 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.reward_w_original = float(os.environ.get("LOH_REWARD_W_ORIGINAL", DEFAULT_LOH_REWARD_W_ORIGINAL))
         except Exception:
             self.reward_w_original = float(DEFAULT_LOH_REWARD_W_ORIGINAL)
+        raw_mix_mode = os.environ.get("LOH_REWARD_MIX_MODE", DEFAULT_LOH_REWARD_MIX_MODE)
+        raw_mix_mode = "legacy" if raw_mix_mode is None else str(raw_mix_mode).strip().lower()
+        self.reward_mix_mode = raw_mix_mode if raw_mix_mode in {"legacy", "gated_penalty_mix"} else "legacy"
+        try:
+            self.reward_w_base_orig = float(os.environ.get("LOH_REWARD_W_BASE_ORIG", DEFAULT_LOH_REWARD_W_BASE_ORIG))
+        except Exception:
+            self.reward_w_base_orig = float(DEFAULT_LOH_REWARD_W_BASE_ORIG)
+        try:
+            self.reward_w_base_miss = float(os.environ.get("LOH_REWARD_W_BASE_MISS", DEFAULT_LOH_REWARD_W_BASE_MISS))
+        except Exception:
+            self.reward_w_base_miss = float(DEFAULT_LOH_REWARD_W_BASE_MISS)
+        try:
+            self.reward_w_base_trend = float(os.environ.get("LOH_REWARD_W_BASE_TREND", DEFAULT_LOH_REWARD_W_BASE_TREND))
+        except Exception:
+            self.reward_w_base_trend = float(DEFAULT_LOH_REWARD_W_BASE_TREND)
+        try:
+            self.reward_w_penalty_delta = float(os.environ.get("LOH_REWARD_W_PENALTY_DELTA", DEFAULT_LOH_REWARD_W_PENALTY_DELTA))
+        except Exception:
+            self.reward_w_penalty_delta = float(DEFAULT_LOH_REWARD_W_PENALTY_DELTA)
+        try:
+            self.penalty_gate_mincount = max(1, int(os.environ.get("LOH_PENALTY_GATE_MINCOUNT", DEFAULT_LOH_PENALTY_GATE_MINCOUNT)))
+        except Exception:
+            self.penalty_gate_mincount = int(DEFAULT_LOH_PENALTY_GATE_MINCOUNT)
+        try:
+            self.penalty_gate_goodrate = max(1e-6, float(os.environ.get("LOH_PENALTY_GATE_GOODRATE", DEFAULT_LOH_PENALTY_GATE_GOODRATE)))
+        except Exception:
+            self.penalty_gate_goodrate = float(DEFAULT_LOH_PENALTY_GATE_GOODRATE)
+        try:
+            self.penalty_gate_penaltyscale = max(1e-6, float(os.environ.get("LOH_PENALTY_GATE_PENALTYSCALE", DEFAULT_LOH_PENALTY_GATE_PENALTYSCALE)))
+        except Exception:
+            self.penalty_gate_penaltyscale = float(DEFAULT_LOH_PENALTY_GATE_PENALTYSCALE)
+        try:
+            self.penalty_gate_no_cutoff_scale = float(os.environ.get("LOH_PENALTY_GATE_NO_CUTOFF_SCALE", DEFAULT_LOH_PENALTY_GATE_NO_CUTOFF_SCALE))
+        except Exception:
+            self.penalty_gate_no_cutoff_scale = float(DEFAULT_LOH_PENALTY_GATE_NO_CUTOFF_SCALE)
+        self.penalty_gate_no_cutoff_scale = max(0.0, min(1.0, self.penalty_gate_no_cutoff_scale))
+        try:
+            self.penalty_delta_scale = max(1e-6, float(os.environ.get("LOH_PENALTY_DELTA_SCALE", DEFAULT_LOH_PENALTY_DELTA_SCALE)))
+        except Exception:
+            self.penalty_delta_scale = float(DEFAULT_LOH_PENALTY_DELTA_SCALE)
 
         raw_orig_map = os.environ.get("LOH_REWARD_ORIGINAL_MAP", DEFAULT_LOH_REWARD_ORIGINAL_MAP)
         if raw_orig_map is None:
@@ -1502,6 +1575,10 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             'orig': 0.0,
             'miss': 0.0,
             'trend': 0.0,
+            'base': 0.0,
+            'gate': 0.0,
+            'penalty_bonus': 0.0,
+            'penalty_delta': 0.0,
             'final': 0.0,
             'final_pre_clip': 0.0,
             'clip_delta': 0.0,
@@ -1527,6 +1604,25 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         self._reward_ema_history = [] if self.reward_ema_enabled else None
         if self.reward_ema_enabled and LOH_DEBUG_BASIC():
             print(f"[ReplayBuffer] Reward EMA smoothing: enabled, window={self.reward_ema_window}")
+
+    def _summarize_distribution(self, samples):
+        if samples is None or len(samples) == 0:
+            return {}
+        try:
+            arr = np.asarray(list(samples), dtype=np.float64)
+            if arr.size == 0:
+                return {}
+            return {
+                'count': int(arr.size),
+                'min': float(np.min(arr)),
+                'p10': float(np.percentile(arr, 10)),
+                'p50': float(np.percentile(arr, 50)),
+                'p90': float(np.percentile(arr, 90)),
+                'mean': float(np.mean(arr)),
+                'max': float(np.max(arr)),
+            }
+        except Exception:
+            return {}
 
     def _get_window_indices(self, center_pos: int, window: int):
         """获取以 center_pos 结尾的窗口索引（不含 center_pos），用于趋势计算。"""
@@ -1956,21 +2052,48 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 # eviction_to_access<0: 正样本事件（ghost 淘汰，期间未被再次访问）
                 if d < 0.0:
                     pos_events += 1
+                    if self.penalty_trace_all:
+                        print(
+                            f"[PenaltyTrace][event] pos={pos} type=positive distance={d:.6f} "
+                            f"obj_size={float(obj_size):.6f} evicted_count={int(evicted_count)} "
+                            f"evicted_bytes={float(evicted_bytes):.6f} scale=NA obj_contrib=0.000000 "
+                            f"byte_contrib=0.000000"
+                        )
                     continue
 
                 neg_events += 1
                 pd = self._penalty_scale(d)
+                try:
+                    self.scale_samples.append(float(pd))
+                except Exception:
+                    pass
 
                 # 对象惩罚：1/evicted_count * pd
-                obj_penalty += (1.0 / evicted_count) * pd
+                obj_contrib = (1.0 / evicted_count) * pd
+                obj_penalty += obj_contrib
 
                 # 字节惩罚：size/evicted_bytes * pd
+                byte_contrib = 0.0
                 if evicted_bytes > 0:
-                    byte_penalty += (obj_size / evicted_bytes) * pd
+                    byte_contrib = (obj_size / evicted_bytes) * pd
+                    byte_penalty += byte_contrib
+
+                if self.penalty_trace_all:
+                    print(
+                        f"[PenaltyTrace][event] pos={pos} type=negative distance={d:.6f} "
+                        f"obj_size={float(obj_size):.6f} evicted_count={int(evicted_count)} "
+                        f"evicted_bytes={float(evicted_bytes):.6f} scale={float(pd):.6f} "
+                        f"obj_contrib={float(obj_contrib):.6f} byte_contrib={float(byte_contrib):.6f}"
+                    )
 
             # 加权求和 -> penalty（badness）
             penalty = (self.obj_penalty_weight * obj_penalty +
                        self.byte_penalty_weight * byte_penalty)
+            try:
+                self.obj_penalty_samples.append(float(obj_penalty))
+                self.penalty_samples.append(float(penalty))
+            except Exception:
+                pass
 
             # net 公式需要“goodness”项：正样本事件比例
             # 注意：pos_events 是 ghost-aged-out 的“正样本事件”，不一定与 evicted_count（真实驱逐数）同量级，
@@ -1986,15 +2109,23 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 pass
             penalty_sum_this_call += float(penalty)
 
-            # --- penalty -> reward ---
+            # --- penalty -> reward / delta ---
             # relative  : (baseline - penalty) / baseline （旧默认）
             # centered  : 1 - 2*penalty  （penalty∈[0,1] -> reward∈[-1,1]）
             # one_minus : 1 - penalty    （reward∈[0,1]）
             # neg       : -penalty       （reward∈[-1,0]）
             # net       : good_rate - penalty （reward∈[-1,1]，更强调正负样本对比；good_rate∈[0,1]）
             # net2      : (2*good_rate-1) - penalty （将 good_rate 拉伸到 [-1,1]，动态范围更大）
+            # gated_penalty_mix: 不直接主导最终 reward，而是生成一个零中心 penalty delta，稍后按 gate 混入 base reward
             formula = getattr(self, 'penalty_reward_formula', 'relative')
-            if formula == "centered":
+            if getattr(self, 'reward_mix_mode', 'legacy') == 'gated_penalty_mix':
+                if self.penalty_baseline > 1e-6:
+                    scale_ref = max(0.05, float(self.penalty_delta_scale) * float(self.penalty_baseline))
+                    reward = math.tanh((float(self.penalty_baseline) - float(penalty)) / scale_ref)
+                else:
+                    scale_ref = max(0.05, float(self.penalty_delta_scale))
+                    reward = math.tanh(-float(penalty) / scale_ref)
+            elif formula == "centered":
                 reward = 1.0 - 2.0 * float(penalty)
             elif formula == "one_minus":
                 reward = 1.0 - float(penalty)
@@ -2024,14 +2155,28 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                     reward = -penalty if penalty > 0 else 0.0
 
             # 更新 baseline（指数移动平均）
-            # - 只有 relative 公式使用 baseline，其它公式不更新以避免不必要的漂移
-            if formula == "relative":
+            # - gated 模式使用 baseline 作为 penalty delta 的参考线
+            # - legacy 模式下仅 relative 使用 baseline，保持旧行为
+            if getattr(self, 'reward_mix_mode', 'legacy') == 'gated_penalty_mix' or formula == "relative":
                 if raw_penalty_count > 0 or penalty > 0:
                     self.penalty_baseline = (self.baseline_decay * self.penalty_baseline +
                                              (1 - self.baseline_decay) * penalty)
 
             # Clip到[-1, 1]
             final_reward = max(-1.0, min(1.0, reward))
+            try:
+                self.reward_preclip_samples.append(float(reward))
+                self.reward_final_samples.append(float(final_reward))
+            except Exception:
+                pass
+
+            if self.penalty_trace_all:
+                print(
+                    f"[PenaltyTrace][final] pos={pos} formula={formula} raw_penalty_count={int(raw_penalty_count)} "
+                    f"pos_events={int(pos_events)} neg_events={int(neg_events)} good_rate={float(good_rate):.6f} "
+                    f"obj_penalty={float(obj_penalty):.6f} byte_penalty={float(byte_penalty):.6f} "
+                    f"penalty={float(penalty):.6f} reward_preclip={float(reward):.6f} final_reward={float(final_reward):.6f}"
+                )
 
             # 更新统计（已应用部分）
             self.finalized_num += raw_penalty_count
@@ -2041,33 +2186,60 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.total_byte_penalty += byte_penalty
 
             # 写入 buffer：组合奖励（penalty / original / miss / trend）
-            mixed = 0.0
             penalty_comp = final_reward  # penalty 映射后的奖励（已裁剪）
+            penalty_delta = penalty_comp
+            mixed = 0.0
             mixed_terms = []
+            gate = 1.0
+            penalty_bonus = 0.0
+            base_reward = 0.0
 
-            # penalty 项：
-            # - raw_penalty_count>0: 典型负样本（错误驱逐）
-            # - raw_penalty_count==0 且 evicted_count>0: 视为正样本（安全驱逐），可选计入
-            _pen_ok = (raw_penalty_count > 0) or bool(getattr(self, "penalty_empty_as_good", False))
-            if getattr(self, 'reward_use_penalty', True) and _pen_ok:
-                mixed += self.reward_w_penalty * float(penalty_comp)
-                mixed_terms.append(('pen', self.reward_w_penalty, float(penalty_comp)))
+            if getattr(self, 'reward_mix_mode', 'legacy') == 'gated_penalty_mix':
+                if getattr(self, 'reward_use_original', False):
+                    base_reward += self.reward_w_base_orig * float(orig_comp)
+                    mixed_terms.append(('orig', self.reward_w_base_orig, float(orig_comp)))
+                if getattr(self, 'reward_use_missratio', False):
+                    base_reward += self.reward_w_base_miss * float(miss_comp)
+                    mixed_terms.append(('miss', self.reward_w_base_miss, float(miss_comp)))
+                if getattr(self, 'reward_use_missratiotrend', False):
+                    base_reward += self.reward_w_base_trend * float(trend_comp)
+                    mixed_terms.append(('trend', self.reward_w_base_trend, float(trend_comp)))
+                if not mixed_terms:
+                    base_reward = float(orig_comp)
 
-            if getattr(self, 'reward_use_original', False):
-                mixed += self.reward_w_original * float(orig_comp)
-                mixed_terms.append(('orig', self.reward_w_original, float(orig_comp)))
+                g_count = min(1.0, float(raw_penalty_count) / max(1.0, float(self.penalty_gate_mincount)))
+                g_balance = min(1.0, float(good_rate) / max(1e-6, float(self.penalty_gate_goodrate)))
+                pen_scale_ref = max(1e-6, float(self.penalty_gate_penaltyscale) * max(float(self.penalty_baseline), 0.05))
+                g_mag = 1.0 / (1.0 + float(penalty) / pen_scale_ref)
+                g_time = 1.0 if int(getattr(self, 'penalty_cutoff', 0)) > 0 else float(self.penalty_gate_no_cutoff_scale)
+                gate = max(0.0, min(1.0, g_count * g_balance * g_mag * g_time))
 
-            if getattr(self, 'reward_use_missratio', False):
-                mixed += self.reward_w_miss * float(miss_comp)
-                mixed_terms.append(('miss', self.reward_w_miss, float(miss_comp)))
+                _pen_ok = (raw_penalty_count > 0) or bool(getattr(self, "penalty_empty_as_good", False))
+                if getattr(self, 'reward_use_penalty', True) and _pen_ok:
+                    penalty_bonus = float(self.reward_w_penalty_delta) * float(gate) * float(penalty_delta)
+                mixed = float(base_reward) + float(penalty_bonus)
+            else:
+                # legacy 混合：维持当前行为
+                _pen_ok = (raw_penalty_count > 0) or bool(getattr(self, "penalty_empty_as_good", False))
+                if getattr(self, 'reward_use_penalty', True) and _pen_ok:
+                    mixed += self.reward_w_penalty * float(penalty_comp)
+                    mixed_terms.append(('pen', self.reward_w_penalty, float(penalty_comp)))
 
-            if getattr(self, 'reward_use_missratiotrend', False):
-                mixed += self.reward_w_trend * float(trend_comp)
-                mixed_terms.append(('trend', self.reward_w_trend, float(trend_comp)))
+                if getattr(self, 'reward_use_original', False):
+                    mixed += self.reward_w_original * float(orig_comp)
+                    mixed_terms.append(('orig', self.reward_w_original, float(orig_comp)))
 
-            # 如果 penalty 也没加（例如 raw_penalty_count=0），且其他项都没启用，则回退为 original
-            if not mixed_terms:
-                mixed = float(orig_comp)
+                if getattr(self, 'reward_use_missratio', False):
+                    mixed += self.reward_w_miss * float(miss_comp)
+                    mixed_terms.append(('miss', self.reward_w_miss, float(miss_comp)))
+
+                if getattr(self, 'reward_use_missratiotrend', False):
+                    mixed += self.reward_w_trend * float(trend_comp)
+                    mixed_terms.append(('trend', self.reward_w_trend, float(trend_comp)))
+
+                # 如果 penalty 也没加（例如 raw_penalty_count=0），且其他项都没启用，则回退为 original
+                if not mixed_terms:
+                    mixed = float(orig_comp)
             final_mixed_pre_clip = float(mixed)
             final_mixed = max(-1.0, min(1.0, final_mixed_pre_clip))
             # 保存组件供诊断
@@ -2077,6 +2249,10 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                     'orig': float(orig_comp),
                     'miss': float(miss_comp),
                     'trend': float(trend_comp),
+                    'base': float(base_reward) if getattr(self, 'reward_mix_mode', 'legacy') == 'gated_penalty_mix' else 0.0,
+                    'gate': float(gate),
+                    'penalty_bonus': float(penalty_bonus),
+                    'penalty_delta': float(penalty_delta),
                     'final': float(final_mixed),
                     'final_pre_clip': float(final_mixed_pre_clip),
                     'clip_delta': float(final_mixed - final_mixed_pre_clip),
@@ -2246,6 +2422,12 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         else:
             prop_on_finalized = 0.0
 
+        scale_stats = self._summarize_distribution(getattr(self, 'scale_samples', None))
+        obj_penalty_stats = self._summarize_distribution(getattr(self, 'obj_penalty_samples', None))
+        penalty_stats = self._summarize_distribution(getattr(self, 'penalty_samples', None))
+        reward_preclip_stats = self._summarize_distribution(getattr(self, 'reward_preclip_samples', None))
+        reward_final_stats = self._summarize_distribution(getattr(self, 'reward_final_samples', None))
+
         return {
             # 新语义
             'corrected_num': corr_recv,                 # 收到的惩罚事件总数（retrospective_correct_reward）
@@ -2277,6 +2459,43 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             'last_reward_final': float(self._last_reward_components.get('final', 0.0) if hasattr(self, '_last_reward_components') else 0.0),
             'last_reward_final_pre_clip': float(self._last_reward_components.get('final_pre_clip', 0.0) if hasattr(self, '_last_reward_components') else 0.0),
             'last_reward_clip_delta': float(self._last_reward_components.get('clip_delta', 0.0) if hasattr(self, '_last_reward_components') else 0.0),
+
+            # 分布统计：scale(d) -> penalty(formula前) -> reward(formula后)
+            'scale_count': int(scale_stats.get('count', 0)),
+            'scale_min': float(scale_stats.get('min', 0.0)),
+            'scale_p10': float(scale_stats.get('p10', 0.0)),
+            'scale_p50': float(scale_stats.get('p50', 0.0)),
+            'scale_p90': float(scale_stats.get('p90', 0.0)),
+            'scale_mean': float(scale_stats.get('mean', 0.0)),
+            'scale_max': float(scale_stats.get('max', 0.0)),
+            'obj_penalty_count': int(obj_penalty_stats.get('count', 0)),
+            'obj_penalty_min': float(obj_penalty_stats.get('min', 0.0)),
+            'obj_penalty_p10': float(obj_penalty_stats.get('p10', 0.0)),
+            'obj_penalty_p50': float(obj_penalty_stats.get('p50', 0.0)),
+            'obj_penalty_p90': float(obj_penalty_stats.get('p90', 0.0)),
+            'obj_penalty_mean': float(obj_penalty_stats.get('mean', 0.0)),
+            'obj_penalty_max': float(obj_penalty_stats.get('max', 0.0)),
+            'penalty_count': int(penalty_stats.get('count', 0)),
+            'penalty_min': float(penalty_stats.get('min', 0.0)),
+            'penalty_p10': float(penalty_stats.get('p10', 0.0)),
+            'penalty_p50': float(penalty_stats.get('p50', 0.0)),
+            'penalty_p90': float(penalty_stats.get('p90', 0.0)),
+            'penalty_mean': float(penalty_stats.get('mean', 0.0)),
+            'penalty_max': float(penalty_stats.get('max', 0.0)),
+            'reward_preclip_count': int(reward_preclip_stats.get('count', 0)),
+            'reward_preclip_min': float(reward_preclip_stats.get('min', 0.0)),
+            'reward_preclip_p10': float(reward_preclip_stats.get('p10', 0.0)),
+            'reward_preclip_p50': float(reward_preclip_stats.get('p50', 0.0)),
+            'reward_preclip_p90': float(reward_preclip_stats.get('p90', 0.0)),
+            'reward_preclip_mean': float(reward_preclip_stats.get('mean', 0.0)),
+            'reward_preclip_max': float(reward_preclip_stats.get('max', 0.0)),
+            'reward_final_count': int(reward_final_stats.get('count', 0)),
+            'reward_final_min': float(reward_final_stats.get('min', 0.0)),
+            'reward_final_p10': float(reward_final_stats.get('p10', 0.0)),
+            'reward_final_p50': float(reward_final_stats.get('p50', 0.0)),
+            'reward_final_p90': float(reward_final_stats.get('p90', 0.0)),
+            'reward_final_mean': float(reward_final_stats.get('mean', 0.0)),
+            'reward_final_max': float(reward_final_stats.get('max', 0.0)),
         }
 
 # --- 自定义Gymnasium环境 ---
@@ -4105,7 +4324,7 @@ class LohEnv(gym.Env):
         self._current_weights = weights.copy()
 
         if LOH_INCLUDE_WEIGHTS_IN_OBS:
-            new_observation = np.concatenate([new_observation, weights.astype(np.float32)])
+            new_observation = np.concatenate([new_observation, weights[:ACTION_DIM].astype(np.float32)])
 
         # 若启用固定观测模式，则将返回给RL的观测替换为常数向量
         if LOH_FIXED_OBS_MODE == 1:
@@ -4393,6 +4612,27 @@ class LOHTrainingCallback(BaseCallback):
                                 # finalize 诊断指标
                                 self.logger.record("loh/finalize_last_penalty_sum", float(cstats.get('finalize_last_step_penalty_sum', 0.0)))
                                 self.logger.record("loh/applied_penalties_total", float(cstats.get('applied_penalties_total', 0)))
+                                self.logger.record("loh/scale_count", float(cstats.get('scale_count', 0)))
+                                self.logger.record("loh/scale_p10", float(cstats.get('scale_p10', 0.0)))
+                                self.logger.record("loh/scale_p50", float(cstats.get('scale_p50', 0.0)))
+                                self.logger.record("loh/scale_p90", float(cstats.get('scale_p90', 0.0)))
+                                self.logger.record("loh/scale_mean", float(cstats.get('scale_mean', 0.0)))
+                                self.logger.record("loh/obj_penalty_p10", float(cstats.get('obj_penalty_p10', 0.0)))
+                                self.logger.record("loh/obj_penalty_p50", float(cstats.get('obj_penalty_p50', 0.0)))
+                                self.logger.record("loh/obj_penalty_p90", float(cstats.get('obj_penalty_p90', 0.0)))
+                                self.logger.record("loh/obj_penalty_mean", float(cstats.get('obj_penalty_mean', 0.0)))
+                                self.logger.record("loh/penalty_p10", float(cstats.get('penalty_p10', 0.0)))
+                                self.logger.record("loh/penalty_p50", float(cstats.get('penalty_p50', 0.0)))
+                                self.logger.record("loh/penalty_p90", float(cstats.get('penalty_p90', 0.0)))
+                                self.logger.record("loh/penalty_mean", float(cstats.get('penalty_mean', 0.0)))
+                                self.logger.record("reward/final_preclip_p10", float(cstats.get('reward_preclip_p10', 0.0)))
+                                self.logger.record("reward/final_preclip_p50", float(cstats.get('reward_preclip_p50', 0.0)))
+                                self.logger.record("reward/final_preclip_p90", float(cstats.get('reward_preclip_p90', 0.0)))
+                                self.logger.record("reward/final_preclip_mean", float(cstats.get('reward_preclip_mean', 0.0)))
+                                self.logger.record("reward/final_after_formula_p10", float(cstats.get('reward_final_p10', 0.0)))
+                                self.logger.record("reward/final_after_formula_p50", float(cstats.get('reward_final_p50', 0.0)))
+                                self.logger.record("reward/final_after_formula_p90", float(cstats.get('reward_final_p90', 0.0)))
+                                self.logger.record("reward/final_after_formula_mean", float(cstats.get('reward_final_mean', 0.0)))
                                 # 新增：记录最近一次 finalize 的奖励组件到 TensorBoard（以 reward/ 前缀归类）
                                 try:
                                     self.logger.record("reward/component_penalty", float(cstats.get('last_reward_penalty', 0.0)))
