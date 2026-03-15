@@ -191,10 +191,40 @@ static int loh_irt_heap_enabled = 1;  // 默认启用，compound 模式下自动
 static int loh_feature_log1p = 0;  // 对应环境 LOH_FEATURE_LOG1P
 static int loh_feature_log1p_reciprocal =
     0;  // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
+// 统一公式模式（默认开启）：
+//   - frequency:  log1p(x) / (1 + log1p(x))
+//   - recency/size/IRT: 1 / (1 + log1p(x))
+// 该模式下不再根据 trace 在 LOG1P/RECIPROCAL 之间切换。
+static int loh_feature_unified_formula =
+    1;  // 对应环境 LOH_FEATURE_UNIFIED_FORMULA
+// 统一公式变体（默认 1）：
+//   1: baseline      g=log1p(x)/(1+log1p(x))
+//   2: aggressive    g=log1p(x)/(beta+log1p(x))
+//   3: exp-decay     g=1-exp(-log1p(x)/beta)
+//   4: power         g=(log1p(x)/(1+log1p(x)))^gamma
+static int loh_unified_variant = 1;      // LOH_UNIFIED_VARIANT
+static double loh_unified_beta = 1.0;    // LOH_UNIFIED_BETA
+static double loh_unified_gamma = 1.35;  // LOH_UNIFIED_GAMMA
+// 统一公式方法（默认 1）：
+//   1: 原 unified 变体族（v1~v4）
+//   2: 非对称统一公式（freq 用 log-cap，其他维度用 reciprocal-log）
+//   3: alpha 混合（log-cap 与 reciprocal-log 的固定权重混合）
+static int loh_unified_method = 1;            // LOH_UNIFIED_METHOD
+static double loh_unified_alpha = 0.5;        // LOH_UNIFIED_ALPHA，仅 method=3
+static double loh_unified_freq_cap = 4096.0;  // LOH_UNIFIED_FREQ_CAP
 
 // 运行时开关：是否在计算后进行基于 log1p(max) 的归一化与裁剪
 static int loh_feature_normalize =
     0;  // 对应环境 LOH_ENABLE_FEATURE_NORMALIZATION
+
+// 自适应特征归一化（默认关闭）：
+// 对“变换后的特征值”维护在线分位数区间 [lo_q, hi_q]，预热后映射到 [0,1]。
+static int loh_adaptive_feature_normalize =
+    0;  // 对应环境 LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION
+static double loh_adaptive_norm_lo_q = 0.01;  // 对应环境 LOH_ADAPTIVE_NORM_LO_Q
+static double loh_adaptive_norm_hi_q = 0.99;  // 对应环境 LOH_ADAPTIVE_NORM_HI_Q
+static uint64_t loh_adaptive_norm_warmup =
+    4096;  // 对应环境 LOH_ADAPTIVE_NORM_WARMUP
 
 // =============================
 // 3.5) 自动特征模式检测
@@ -521,7 +551,7 @@ static void LOH_print_cache(const cache_t *cache);
 
 #define IRT_HISTORY_SIZE 3
 // 定义 IRT（请求间隔时间）的历史数据结构
-#define MAX_CANDIDATES_LIMIT 2048  // 编译期候选池数组上限
+#define MAX_CANDIDATES_LIMIT 256   // 编译期候选池数组上限
 #define MAX_CANDIDATES_DEFAULT 96  // 默认运行时候选池大小
 // 运行时实际候选池大小（可通过环境变量 LOH_STRUCTURED_CANDIDATES 覆盖）
 static int loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
@@ -903,6 +933,10 @@ typedef struct {
   uint64_t feature_clip_count[FEATURE_DIM];  // 每个特征被裁剪到上界的次数
   uint64_t feature_sample_count
       [FEATURE_DIM];  // 每个特征被处理的总样本数（用于计算比例）
+  // 自适应归一化在线状态（基于变换后特征）
+  double adaptive_q_lo[FEATURE_DIM];
+  double adaptive_q_hi[FEATURE_DIM];
+  uint64_t adaptive_norm_count[FEATURE_DIM];
   // 【删除 global_access_records】：改用对象级访问窗口和 ghost cache
   // 【新增】为被驱逐对象保留历史信息的 Ghost 缓存（类似 ThreeLCache 的
   // out_cache）
@@ -1263,13 +1297,215 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
 
 // === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
 
+static inline void loh_online_quantile_update(double *q, double x,
+                                              double target,
+                                              uint64_t sample_count) {
+  const double lr = (sample_count < 1024) ? 0.05 : 0.005;
+  const double indicator = (x <= *q) ? 1.0 : 0.0;
+  *q += lr * (target - indicator);
+}
+
+static inline double loh_apply_feature_normalization(LOH_params_t *params,
+                                                     int idx, double out) {
+  if (params == NULL) return out;
+
+  params->feature_sample_count[idx]++;
+
+  if (loh_adaptive_feature_normalize) {
+    uint64_t c = ++params->adaptive_norm_count[idx];
+    if (c == 1) {
+      params->adaptive_q_lo[idx] = out;
+      params->adaptive_q_hi[idx] = out;
+    } else {
+      loh_online_quantile_update(&params->adaptive_q_lo[idx], out,
+                                 loh_adaptive_norm_lo_q, c);
+      loh_online_quantile_update(&params->adaptive_q_hi[idx], out,
+                                 loh_adaptive_norm_hi_q, c);
+      if (params->adaptive_q_lo[idx] > params->adaptive_q_hi[idx]) {
+        double mid =
+            0.5 * (params->adaptive_q_lo[idx] + params->adaptive_q_hi[idx]);
+        params->adaptive_q_lo[idx] = mid;
+        params->adaptive_q_hi[idx] = mid;
+      }
+    }
+
+    if (c <= loh_adaptive_norm_warmup) {
+      return out;
+    }
+
+    const double lo = params->adaptive_q_lo[idx];
+    const double hi = params->adaptive_q_hi[idx];
+    const double denom = hi - lo;
+    if (denom <= 1e-12) return 0.5;
+
+    double nn = (out - lo) / denom;
+    if (nn < 0.0) {
+      params->feature_clip_count[idx]++;
+      nn = 0.0;
+    } else if (nn > 1.0) {
+      params->feature_clip_count[idx]++;
+      nn = 1.0;
+    }
+    return nn;
+  }
+
+  if (loh_feature_normalize) {
+    const double denom = log1p(loh_feature_norm_max[idx]);
+    double nn = out / (denom > 0.0 ? denom : 1.0);
+    if (nn > 1.0) {
+      params->feature_clip_count[idx]++;
+      nn = 1.0;
+    }
+    return nn;
+  }
+
+  return out;
+}
+
+static inline double loh_unified_log_ratio(double raw) {
+  if (raw <= 0.0) return 0.0;
+
+  const double l = log1p(raw);
+  double g = 0.0;
+  switch (loh_unified_variant) {
+    case 2: {
+      const double b = (loh_unified_beta > 1e-9) ? loh_unified_beta : 1.0;
+      g = l / (b + l);
+      break;
+    }
+    case 3: {
+      const double b = (loh_unified_beta > 1e-9) ? loh_unified_beta : 1.0;
+      g = 1.0 - exp(-l / b);
+      break;
+    }
+    case 4: {
+      const double base = l / (1.0 + l);
+      const double gm = (loh_unified_gamma > 1e-9) ? loh_unified_gamma : 1.0;
+      g = pow(base, gm);
+      break;
+    }
+    case 1:
+    default:
+      g = l / (1.0 + l);
+      break;
+  }
+
+  if (g < 0.0) return 0.0;
+  if (g > 1.0) return 1.0;
+  return g;
+}
+
+static inline double loh_unified_good_feature(double raw) {
+  if (raw <= 0.0) return 0.0;
+
+  // 统一把 raw 映射到 [0,1] 的 log-cap 比值，供 method 2~6 复用。
+  const double cap = (loh_unified_freq_cap > 1e-9) ? loh_unified_freq_cap : 1.0;
+  const double denom = log1p(cap);
+  double log_cap = log1p(raw) / (denom > 1e-12 ? denom : 1.0);
+  if (log_cap < 0.0) log_cap = 0.0;
+  if (log_cap > 1.0) log_cap = 1.0;
+
+  if (loh_unified_method == 2 || loh_unified_method == 3) {
+    if (loh_unified_method == 2) {
+      return log_cap;
+    }
+
+    const double recip = loh_unified_log_ratio(raw);
+    const double a =
+        (loh_unified_alpha < 0.0)
+            ? 0.0
+            : ((loh_unified_alpha > 1.0) ? 1.0 : loh_unified_alpha);
+    return a * log_cap + (1.0 - a) * recip;
+  }
+
+  if (loh_unified_method == 4) {
+    // Method-4: CDF-like monotonic map (log-cap 后做幂次拉伸，默认更强调低值区)
+    const double p = (loh_unified_beta > 1e-9) ? loh_unified_beta : 0.7;
+    return pow(log_cap, p);
+  }
+
+  if (loh_unified_method == 5) {
+    // Method-5: Robust-Z-like squashing in [0,1] (中心 0.5，tanh 压缩)
+    const double s = (loh_unified_gamma > 1e-6) ? loh_unified_gamma : 0.20;
+    double z = (log_cap - 0.5) / s;
+    return 0.5 * (tanh(z) + 1.0);
+  }
+
+  if (loh_unified_method == 6) {
+    // Method-6: QLog+Gamma (先 log-cap，再 gamma 校正)
+    const double gm = (loh_unified_gamma > 1e-9) ? loh_unified_gamma : 0.8;
+    return pow(log_cap, gm);
+  }
+
+  return loh_unified_log_ratio(raw);
+}
+
+static inline double loh_unified_bad_feature(int feature_idx, double raw) {
+  if (raw <= 0.0) return 1.0;
+
+  const double recip_bad = 1.0 / (1.0 + log1p(raw));
+  if (loh_unified_method == 2) {
+    return recip_bad;
+  }
+
+  if (loh_unified_method == 3) {
+    const double cap = (loh_feature_norm_max[feature_idx] > 1e-9)
+                           ? loh_feature_norm_max[feature_idx]
+                           : 1.0;
+    const double denom = log1p(cap);
+    double log_bad = 1.0 - (log1p(raw) / (denom > 1e-12 ? denom : 1.0));
+    if (log_bad < 0.0) log_bad = 0.0;
+    if (log_bad > 1.0) log_bad = 1.0;
+    const double a =
+        (loh_unified_alpha < 0.0)
+            ? 0.0
+            : ((loh_unified_alpha > 1.0) ? 1.0 : loh_unified_alpha);
+    return a * log_bad + (1.0 - a) * recip_bad;
+  }
+
+  if (loh_unified_method == 4 || loh_unified_method == 5 ||
+      loh_unified_method == 6) {
+    const double cap = (loh_feature_norm_max[feature_idx] > 1e-9)
+                           ? loh_feature_norm_max[feature_idx]
+                           : 1.0;
+    const double denom = log1p(cap);
+    double log_ratio = log1p(raw) / (denom > 1e-12 ? denom : 1.0);
+    if (log_ratio < 0.0) log_ratio = 0.0;
+    if (log_ratio > 1.0) log_ratio = 1.0;
+
+    if (loh_unified_method == 4) {
+      const double p = (loh_unified_beta > 1e-9) ? loh_unified_beta : 0.7;
+      double good = pow(log_ratio, p);
+      return 1.0 - good;
+    }
+
+    if (loh_unified_method == 5) {
+      const double s = (loh_unified_gamma > 1e-6) ? loh_unified_gamma : 0.20;
+      double z = (log_ratio - 0.5) / s;
+      double good = 0.5 * (tanh(z) + 1.0);
+      return 1.0 - good;
+    }
+
+    // method-6
+    {
+      const double gm = (loh_unified_gamma > 1e-9) ? loh_unified_gamma : 0.8;
+      double good = pow(log_ratio, gm);
+      return 1.0 - good;
+    }
+  }
+
+  return 1.0 - loh_unified_log_ratio(raw);
+}
+
 static double calculate_irt_feature(LOH_params_t *params, int64_t irt_value) {
   // 约定：调用者必须保证 IRT 已初始化且为正；否则直接中断调试
   g_assert(irt_value > 0);
 
   double v = (double)irt_value;
   double out;
-  if (loh_feature_log1p) {
+  if (loh_feature_unified_formula) {
+    out = loh_unified_bad_feature(3, v);
+  } else if (loh_feature_log1p) {
     // LOG1P 模式：直接 log1p(raw)
     out = log1p(v);
   } else {
@@ -1279,20 +1515,9 @@ static double calculate_irt_feature(LOH_params_t *params, int64_t irt_value) {
     out = 1.0 / (1.0 + v);
   }
 
-  /* 可选归一化：除以 log1p(max) 并裁剪到 [0,1]，并统计裁剪次数/样本数 */
-  if (loh_feature_normalize && params != NULL) {
-    const int idx = 3; /* IRT features mapped to index 3,4,5 — use same denom */
-    double denom = log1p(loh_feature_norm_max[idx]);
-    params->feature_sample_count[idx]++;
-    double nn = out / (denom > 0.0 ? denom : 1.0);
-    if (nn > 1.0) {
-      params->feature_clip_count[idx]++;
-      LOH_DEBUG_PRINT_DETAILED(
-          "[LOH] Feature[%d] clipped: pre=%.6f post=%.6f (raw_irt=%.0f)\n", idx,
-          nn, 1.0, v);
-      nn = 1.0;
-    }
-    return nn;
+  if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
+      params != NULL) {
+    return loh_apply_feature_normalization(params, 3, out);
   }
 
   return out;
@@ -1304,26 +1529,18 @@ static double calculate_recency(LOH_params_t *params, int64_t recency_raw) {
 
   double v = (double)recency_raw;
   double out;
-  if (loh_feature_log1p) {
+  if (loh_feature_unified_formula) {
+    out = loh_unified_bad_feature(0, v);
+  } else if (loh_feature_log1p) {
     out = log1p(v);
   } else {
     out = loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(v)))
                                        : (1.0 / (1.0 + v));
   }
 
-  if (loh_feature_normalize && params != NULL) {
-    const int idx = 0; /* recency */
-    double denom = log1p(loh_feature_norm_max[idx]);
-    params->feature_sample_count[idx]++;
-    double nn = out / (denom > 0.0 ? denom : 1.0);
-    if (nn > 1.0) {
-      params->feature_clip_count[idx]++;
-      LOH_DEBUG_PRINT_DETAILED(
-          "[LOH] Feature[%d] clipped: pre=%.6f post=%.6f (recency_raw=%.0f)\n",
-          idx, nn, 1.0, v);
-      nn = 1.0;
-    }
-    return nn;
+  if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
+      params != NULL) {
+    return loh_apply_feature_normalization(params, 0, out);
   }
 
   return out;
@@ -1334,7 +1551,9 @@ static double calculate_frequency(LOH_params_t *params, int64_t freq_raw) {
 
   double f = (double)freq_raw;
   double out;
-  if (loh_feature_log1p) {
+  if (loh_feature_unified_formula) {
+    out = loh_unified_good_feature(f);
+  } else if (loh_feature_log1p) {
     out = log1p(f);
   } else {
     const double K = 1.0;
@@ -1342,19 +1561,9 @@ static double calculate_frequency(LOH_params_t *params, int64_t freq_raw) {
     out = (f > 0.0) ? (f / (f + K)) : 0.0;
   }
 
-  if (loh_feature_normalize && params != NULL) {
-    const int idx = 1; /* frequency */
-    double denom = log1p(loh_feature_norm_max[idx]);
-    params->feature_sample_count[idx]++;
-    double nn = out / (denom > 0.0 ? denom : 1.0);
-    if (nn > 1.0) {
-      params->feature_clip_count[idx]++;
-      LOH_DEBUG_PRINT_DETAILED(
-          "[LOH] Feature[%d] clipped: pre=%.6f post=%.6f (freq_raw=%.0f)\n",
-          idx, nn, 1.0, f);
-      nn = 1.0;
-    }
-    return nn;
+  if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
+      params != NULL) {
+    return loh_apply_feature_normalization(params, 1, out);
   }
 
   return out;
@@ -1365,7 +1574,10 @@ static double calculate_size(LOH_params_t *params, int64_t size_bytes) {
 
   double size_bytes_d = (double)size_bytes;
   double out;
-  if (loh_feature_log1p) {
+  if (loh_feature_unified_formula) {
+    double size_mb = size_bytes_d / (1024.0 * 1024.0);
+    out = loh_unified_bad_feature(2, size_mb);
+  } else if (loh_feature_log1p) {
     out = log1p(size_bytes_d);
   } else {
     double size_mb = size_bytes_d / (1024.0 * 1024.0);
@@ -1374,19 +1586,9 @@ static double calculate_size(LOH_params_t *params, int64_t size_bytes) {
                                        : (1.0 / (1.0 + A * size_mb));
   }
 
-  if (loh_feature_normalize && params != NULL) {
-    const int idx = 2; /* size */
-    double denom = log1p(loh_feature_norm_max[idx]);
-    params->feature_sample_count[idx]++;
-    double nn = out / (denom > 0.0 ? denom : 1.0);
-    if (nn > 1.0) {
-      params->feature_clip_count[idx]++;
-      LOH_DEBUG_PRINT_DETAILED(
-          "[LOH] Feature[%d] clipped: pre=%.6f post=%.6f (size_bytes=%.0f)\n",
-          idx, nn, 1.0, size_bytes_d);
-      nn = 1.0;
-    }
-    return nn;
+  if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
+      params != NULL) {
+    return loh_apply_feature_normalization(params, 2, out);
   }
 
   return out;
@@ -2768,6 +2970,29 @@ static void sync_with_actor_critic_fast(LOH_params_t *params) {
   m->total_evicted_bytes = 0;
   m->total_evicted_count = 0;
   m->pending_penalty_count = 0;
+#if LOH_ENABLE_PENALTY
+  m->total_evicted_bytes = params->epoch_evicted_bytes;
+  m->total_evicted_count = params->epoch_evicted_count;
+  if (params->penalty_queue_size > 0 && params->shm_fd >= 0) {
+    const size_t payload_size =
+        (size_t)params->penalty_queue_size * sizeof(penalty_entry_t);
+    const off_t payload_off = (off_t)sizeof(shm_data_t);
+    ssize_t written = pwrite(params->shm_fd, params->penalty_queue,
+                             payload_size, payload_off);
+    if (written == (ssize_t)payload_size) {
+      m->pending_penalty_count = params->penalty_queue_size;
+      params->penalty_queue_size = 0;
+    } else {
+      LOH_DEBUG_PRINT_BASIC(
+          "[LOH NONBLOCK] penalty pwrite failed: want=%zu wrote=%zd err=%s\n",
+          payload_size, written, strerror(errno));
+      m->pending_penalty_count = 0;
+    }
+  }
+  // 写入共享内存后重置 epoch 计数，避免跨轮累计。
+  params->epoch_evicted_bytes = 0;
+  params->epoch_evicted_count = 0;
+#endif
   m->score_model = params->score_model;
   m->mlp_hidden = params->mlp_hidden;
   m->mlp_param_len = params->mlp_param_len;
@@ -3605,7 +3830,7 @@ static void loh_debug_check_membership(LOH_params_t *params, cache_obj_t *obj,
 #endif
 
 // 轻量去重 seen 表：使用 generation-tag 避免每轮清零
-#define LOH_SEEN_CAP 8192  // 足以支持 MAX_CANDIDATES_LIMIT=2048 的 4x 负载因子
+#define LOH_SEEN_CAP 1024  // 足以支持 MAX_CANDIDATES_LIMIT=256 的 4x 负载因子
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert((LOH_SEEN_CAP & (LOH_SEEN_CAP - 1)) == 0,
                "LOH_SEEN_CAP must be a power of two");
@@ -3994,6 +4219,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   for (int i = 0; i < FEATURE_DIM; i++) {
     params->feature_clip_count[i] = 0;
     params->feature_sample_count[i] = 0;
+    params->adaptive_q_lo[i] = 0.0;
+    params->adaptive_q_hi[i] = 0.0;
+    params->adaptive_norm_count[i] = 0;
   }
 
   // 初始化历史特征统计
@@ -4327,9 +4555,24 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   // 3.1) 特征模式（LOH_FEATURE_LOG1P / LOH_FEATURE_LOG1P_RECIPROCAL /
   //      LOH_ENABLE_FEATURE_NORMALIZATION）
   {
+    const char *unified = getenv("LOH_FEATURE_UNIFIED_FORMULA");
     const char *raw = getenv("LOH_FEATURE_LOG1P");
     const char *rec = getenv("LOH_FEATURE_LOG1P_RECIPROCAL");
     const char *norm = getenv("LOH_ENABLE_FEATURE_NORMALIZATION");
+    const char *adaptive_norm =
+        getenv("LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION");
+    const char *unified_variant = getenv("LOH_UNIFIED_VARIANT");
+    const char *unified_beta = getenv("LOH_UNIFIED_BETA");
+    const char *unified_gamma = getenv("LOH_UNIFIED_GAMMA");
+    const char *unified_method = getenv("LOH_UNIFIED_METHOD");
+    const char *unified_alpha = getenv("LOH_UNIFIED_ALPHA");
+    const char *unified_freq_cap = getenv("LOH_UNIFIED_FREQ_CAP");
+    const char *adaptive_lo_q = getenv("LOH_ADAPTIVE_NORM_LO_Q");
+    const char *adaptive_hi_q = getenv("LOH_ADAPTIVE_NORM_HI_Q");
+    const char *adaptive_warmup = getenv("LOH_ADAPTIVE_NORM_WARMUP");
+
+    loh_feature_unified_formula =
+        loh_parse_bool_env(unified, loh_feature_unified_formula);
 
     // 使用当前变量的初始值作为默认值，再由环境变量覆盖
     loh_feature_log1p = loh_parse_bool_env(raw, loh_feature_log1p);
@@ -4341,10 +4584,72 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     }
 
     loh_feature_normalize = loh_parse_bool_env(norm, loh_feature_normalize);
+    loh_adaptive_feature_normalize =
+        loh_parse_bool_env(adaptive_norm, loh_adaptive_feature_normalize);
+
+    if (unified_variant && unified_variant[0] != '\0') {
+      int v = atoi(unified_variant);
+      if (v >= 1 && v <= 4) {
+        loh_unified_variant = v;
+      }
+    }
+    if (unified_beta && unified_beta[0] != '\0') {
+      double b = atof(unified_beta);
+      if (b > 1e-9) loh_unified_beta = b;
+    }
+    if (unified_gamma && unified_gamma[0] != '\0') {
+      double g = atof(unified_gamma);
+      if (g > 1e-9) loh_unified_gamma = g;
+    }
+    if (unified_method && unified_method[0] != '\0') {
+      int m = atoi(unified_method);
+      if (m >= 1 && m <= 6) loh_unified_method = m;
+    }
+    if (unified_alpha && unified_alpha[0] != '\0') {
+      loh_unified_alpha = atof(unified_alpha);
+    }
+    if (unified_freq_cap && unified_freq_cap[0] != '\0') {
+      double c = atof(unified_freq_cap);
+      if (c > 1e-9) loh_unified_freq_cap = c;
+    }
+
+    if (adaptive_lo_q && adaptive_lo_q[0] != '\0') {
+      loh_adaptive_norm_lo_q = atof(adaptive_lo_q);
+    }
+    if (adaptive_hi_q && adaptive_hi_q[0] != '\0') {
+      loh_adaptive_norm_hi_q = atof(adaptive_hi_q);
+    }
+    if (adaptive_warmup && adaptive_warmup[0] != '\0') {
+      long long w = atoll(adaptive_warmup);
+      if (w > 0) loh_adaptive_norm_warmup = (uint64_t)w;
+    }
+
+    if (loh_adaptive_norm_lo_q < 0.0) loh_adaptive_norm_lo_q = 0.0;
+    if (loh_adaptive_norm_hi_q > 1.0) loh_adaptive_norm_hi_q = 1.0;
+    if (loh_adaptive_norm_lo_q >= loh_adaptive_norm_hi_q) {
+      loh_adaptive_norm_lo_q = 0.01;
+      loh_adaptive_norm_hi_q = 0.99;
+    }
+
+    if (loh_feature_unified_formula) {
+      // 统一公式模式固定使用同一变换族，避免 trace 级模式分流。
+      loh_feature_log1p = 0;
+      loh_feature_log1p_reciprocal = 1;
+      loh_auto_feature_mode = 0;
+    }
 
     LOH_DEBUG_PRINT_CONFIG(
-        "[LOH INIT] feature mode: LOG1P=%d, RECIPROCAL=%d, NORMALIZE=%d\n",
-        loh_feature_log1p, loh_feature_log1p_reciprocal, loh_feature_normalize);
+        "[LOH INIT] feature mode: UNIFIED=%d, LOG1P=%d, RECIPROCAL=%d, "
+        "NORMALIZE=%d, "
+        "ADAPTIVE_NORM=%d (lo_q=%.3f, hi_q=%.3f, warmup=%llu), "
+        "UNIFIED_VARIANT=%d (beta=%.3f, gamma=%.3f), "
+        "UNIFIED_METHOD=%d (alpha=%.3f, freq_cap=%.1f)\n",
+        loh_feature_unified_formula, loh_feature_log1p,
+        loh_feature_log1p_reciprocal, loh_feature_normalize,
+        loh_adaptive_feature_normalize, loh_adaptive_norm_lo_q,
+        loh_adaptive_norm_hi_q, (unsigned long long)loh_adaptive_norm_warmup,
+        loh_unified_variant, loh_unified_beta, loh_unified_gamma,
+        loh_unified_method, loh_unified_alpha, loh_unified_freq_cap);
   }
 
   // 3.1.5) 自动特征模式检测（LOH_AUTO_FEATURE_MODE）
@@ -4360,6 +4665,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     const char *env_cv_thresh = getenv("LOH_AUTO_CV_THRESHOLD");
     if (env_cv_thresh && env_cv_thresh[0] != '\0') {
       loh_auto_cv_threshold = atof(env_cv_thresh);
+    }
+    if (loh_feature_unified_formula) {
+      loh_auto_feature_mode = 0;
     }
     if (loh_auto_feature_mode) {
       printf(
@@ -4684,6 +4992,25 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
 static void LOH_free(cache_t *cache) {
   LOH_params_t *params = (LOH_params_t *)(cache->eviction_params);
 
+  // 释放共享内存前通知 Python 端终止。
+  if (params->shm_mmap != NULL) {
+    __atomic_store_n(&params->shm_mmap->terminate, 1, __ATOMIC_RELEASE);
+    if (params->sem_requested && params->sem_enabled &&
+        params->sem_ready != NULL) {
+      sem_post(params->sem_ready);
+    }
+  } else if (params->shm_file != NULL) {
+    shm_data_t tmp;
+    memset(&tmp, 0, sizeof(tmp));
+    if (fseeko(params->shm_file, 0, SEEK_SET) == 0 &&
+        fread(&tmp, sizeof(shm_data_t), 1, params->shm_file) == 1) {
+      tmp.terminate = 1;
+      rewind(params->shm_file);
+      fwrite(&tmp, sizeof(shm_data_t), 1, params->shm_file);
+      fflush(params->shm_file);
+    }
+  }
+
   // 释放 IRT 堆
   irt_heap_free(params);
 
@@ -4824,7 +5151,7 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
         reset_time.tv_sec, reset_time.tv_nsec);
     /* 如果启用了特征归一化，打印本 epoch
      * 的裁剪统计（每个特征的样本数、裁剪次数及比例） */
-    if (loh_feature_normalize) {
+    if (loh_feature_normalize || loh_adaptive_feature_normalize) {
       LOH_DEBUG_PRINT_DETAILED(
           "[LOH] Feature normalization clip stats (epoch):\n");
       for (int i = 0; i < FEATURE_DIM; i++) {
@@ -5501,8 +5828,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   PERF_ACCUM(params, cand_collect_recency, ts_collect_rec);
   // recency 阶段无单独压缩流程（天然无重复），dedup 计时保持 0
   // 标记候选来源
-  for (int i = recency_start; i < params->n_candidates; i++)
-    loh_cand_source[i] = 0;
+  if (loh_adaptive_budget) {
+    for (int i = recency_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 0;
+  }
 
 #if LOH_INCLUDE_CANDIDATE_FEATURES
   for (int i = recency_start; i < params->n_candidates; i++) {
@@ -5540,8 +5869,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   freq_table_get_candidates(params, budget[1], &params->n_candidates);
   PERF_ACCUM(params, cand_collect_freq, ts_collect_freq);
   // 频率候选已在收集阶段融合 seen 去重，省去单独dedup
-  for (int i = freq_start; i < params->n_candidates; i++)
-    loh_cand_source[i] = 1;
+  if (loh_adaptive_budget) {
+    for (int i = freq_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 1;
+  }
 
   // NOTE: 统计在 getter 内已完成
 
@@ -5568,8 +5899,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   size_ds_get_candidates(params, budget[2], &params->n_candidates);
   PERF_ACCUM(params, cand_collect_size, ts_collect_size);
   // 尺寸候选已在收集阶段融合 seen 去重，省去单独dedup
-  for (int i = size_start; i < params->n_candidates; i++)
-    loh_cand_source[i] = 2;
+  if (loh_adaptive_budget) {
+    for (int i = size_start; i < params->n_candidates; i++)
+      loh_cand_source[i] = 2;
+  }
 
   // NOTE: 统计在 getter 内已完成
 
@@ -5596,8 +5929,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
     irt1_heap_get_candidates(params, budget[3], &params->n_candidates);
     PERF_ACCUM(params, cand_collect_irt1, ts_collect_irt1);
     // IRT1 候选已在收集阶段融合 seen 去重，省去单独dedup
-    for (int i = irt1_start; i < params->n_candidates; i++)
-      loh_cand_source[i] = 3;
+    if (loh_adaptive_budget) {
+      for (int i = irt1_start; i < params->n_candidates; i++)
+        loh_cand_source[i] = 3;
+    }
 
     // NOTE: 统计在 getter 内已完成
 
@@ -5625,8 +5960,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
     irt2_heap_get_candidates(params, budget[4], &params->n_candidates);
     PERF_ACCUM(params, cand_collect_irt2, ts_collect_irt2);
     // IRT2 候选已在收集阶段融合 seen 去重，省去单独dedup
-    for (int i = irt2_start; i < params->n_candidates; i++)
-      loh_cand_source[i] = 4;
+    if (loh_adaptive_budget) {
+      for (int i = irt2_start; i < params->n_candidates; i++)
+        loh_cand_source[i] = 4;
+    }
 
     // NOTE: 统计在 getter 内已完成
 
@@ -5654,8 +5991,10 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
     irt3_heap_get_candidates(params, budget[5], &params->n_candidates);
     PERF_ACCUM(params, cand_collect_irt3, ts_collect_irt3);
     // IRT3 候选已在收集阶段融合 seen 去重，省去单独dedup
-    for (int i = irt3_start; i < params->n_candidates; i++)
-      loh_cand_source[i] = 5;
+    if (loh_adaptive_budget) {
+      for (int i = irt3_start; i < params->n_candidates; i++)
+        loh_cand_source[i] = 5;
+    }
 
     // NOTE: 统计在 getter 内已完成
 
@@ -5711,7 +6050,7 @@ random_sampling_section:
     return params->q_tail;
   }
   // 标记随机/尾部候选来源（位于结构化候选之后的所有候选）
-  {
+  if (loh_adaptive_budget) {
     int struct_end = loh_structured_candidates < params->n_candidates
                          ? loh_structured_candidates
                          : params->n_candidates;
@@ -5748,8 +6087,11 @@ random_sampling_section:
   // 超快速路径：fast_compound + (LOG1P 或 RECIPROCAL) + 线性模型 →
   // 合并特征计算与评分为单循环
   const int ultra_fast =
-      (fast_compound && (loh_feature_log1p || loh_feature_log1p_reciprocal) &&
-       !loh_feature_normalize);
+      (fast_compound &&
+       (!loh_feature_unified_formula || loh_unified_method == 1) &&
+       (loh_feature_unified_formula || loh_feature_log1p ||
+        loh_feature_log1p_reciprocal) &&
+       !loh_feature_normalize && !loh_adaptive_feature_normalize);
 
   // 将权重提升到寄存器，避免在循环中反复读取
   const double *w = params->weights;
@@ -5757,7 +6099,7 @@ random_sampling_section:
   for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
 
   if (loh_score_use_compound) {
-    if (loh_feature_log1p) {
+    if (loh_feature_log1p && !loh_feature_unified_formula) {
       sign[0] = -1.0;  // recency
       sign[1] = 1.0;   // frequency
       sign[2] = -1.0;  // size
@@ -5770,7 +6112,7 @@ random_sampling_section:
     }
   } else {
     if (loh_use_heuristic_signs) {
-      if (loh_feature_log1p) {
+      if (loh_feature_log1p && !loh_feature_unified_formula) {
         // LOG1P 模式：feature 越大 = raw 越大 = 越"不好"的维度用 -1
         sign[0] = -1.0;  // recency: 越老越该驱逐
         sign[1] = 1.0;   // frequency: 越频繁越该保留
@@ -5805,7 +6147,26 @@ random_sampling_section:
       double rec, freq, sz, score;
       const double eps = 1e-12;
 
-      if (loh_feature_log1p) {
+      if (loh_feature_unified_formula) {
+        // 统一公式：frequency 用 log-ratio，其他维度用其互补（均在 [0,1]）
+        const double delta_raw =
+            (double)(cur_ts - candidate->LOH.last_access_counter);
+        rec = 1.0 / (1.0 + fast_log1p_approx(delta_raw));
+
+        const double log_count =
+            fast_log1p_approx((double)candidate->LOH.access_count);
+        freq = (log_count > 0.0) ? (log_count / (log_count + 1.0)) : 0.0;
+
+        const double size_mb = (double)candidate->obj_size / 1048576.0;
+        const double log_size = fast_log1p_approx(size_mb);
+        sz = 1.0 / (1.0 + log_size);
+
+        score = rec * ws[0] + freq * ws[1] + sz * ws[2] + (freq * rec) * ws[3] +
+                (freq * sz) * ws[4] + (rec * sz) * ws[5];
+        if (do_v2) {
+          score += (freq * rec * sz) * ws[6];
+        }
+      } else if (loh_feature_log1p) {
         // ── LOG1P 模式：fast_log1p_approx 直接做特征 ──
         rec = fast_log1p_approx(
             (double)(cur_ts - candidate->LOH.last_access_counter));
