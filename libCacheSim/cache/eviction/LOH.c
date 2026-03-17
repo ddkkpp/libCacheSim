@@ -182,15 +182,18 @@ static int loh_score_compound_v2 =
 // 在 LOH_init 中根据 loh_score_use_compound 自动设置。
 static int loh_irt_heap_enabled = 1;  // 默认启用，compound 模式下自动禁用
 
-// 特征归一化模式开关：运行期从环境读取一次后缓存
-//   - loh_feature_log1p=1 时：所有特征统一采用 log1p(raw)，并允许 Python 端直接
-//     使用原始连续动作作为权重（不再 softmax）。
-//   - loh_feature_log1p_reciprocal=1 时：使用 "log1p+1/(1+x)" 的 reciprocal
-//     模式。
-//   - 若两者都未显式开启，则使用旧的 1/(1+x)、f/(f+1)、1/(1+A*MB) 形式。
-static int loh_feature_log1p = 0;  // 对应环境 LOH_FEATURE_LOG1P
+// 特征模式开关：运行期从环境读取一次后缓存
+//   - loh_feature_unified_formula=1: 走 unified 公式族
+//   - loh_feature_identity=1:      走 raw identity（仅可选归一化）
+//   - loh_feature_log1p=1:         走 log1p(raw)
+//   - loh_feature_reciprocal=1:    走 reciprocal 家族
+//       * loh_feature_log1p_reciprocal=1 -> reciprocal(log1p(x))
+//       * loh_feature_log1p_reciprocal=0 -> reciprocal(raw x)
+static int loh_feature_log1p = 0;       // 对应环境 LOH_FEATURE_LOG1P
+static int loh_feature_reciprocal = 1;  // 对应环境 LOH_FEATURE_RECIPROCAL
 static int loh_feature_log1p_reciprocal =
-    0;  // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
+    0;                                // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
+static int loh_feature_identity = 0;  // 对应环境 LOH_FEATURE_IDENTITY
 // 统一公式模式（默认开启）：
 //   - frequency:  log1p(x) / (1 + log1p(x))
 //   - recency/size/IRT: 1 / (1 + log1p(x))
@@ -225,6 +228,10 @@ static double loh_adaptive_norm_lo_q = 0.01;  // 对应环境 LOH_ADAPTIVE_NORM_
 static double loh_adaptive_norm_hi_q = 0.99;  // 对应环境 LOH_ADAPTIVE_NORM_HI_Q
 static uint64_t loh_adaptive_norm_warmup =
     4096;  // 对应环境 LOH_ADAPTIVE_NORM_WARMUP
+// 自适应分位统计输入空间：
+//   0=out(默认，当前行为)  1=raw  2=log1p(raw)
+// 对应环境变量：LOH_ADAPTIVE_NORM_QUANTILE_INPUT
+static int loh_adaptive_norm_quantile_input = 0;
 
 // =============================
 // 3.5) 自动特征模式检测
@@ -936,7 +943,6 @@ typedef struct {
   // 自适应归一化在线状态（基于变换后特征）
   double adaptive_q_lo[FEATURE_DIM];
   double adaptive_q_hi[FEATURE_DIM];
-  uint64_t adaptive_norm_count[FEATURE_DIM];
   // 【删除 global_access_records】：改用对象级访问窗口和 ghost cache
   // 【新增】为被驱逐对象保留历史信息的 Ghost 缓存（类似 ThreeLCache 的
   // out_cache）
@@ -1205,6 +1211,7 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
 
   if (score > 0.0) {
     loh_feature_log1p = 0;
+    loh_feature_reciprocal = 1;
     loh_feature_log1p_reciprocal = 1;
     printf(
         "[LOH AUTO-DETECT] DECISION: LOG1P_RECIPROCAL mode "
@@ -1212,6 +1219,7 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
         score);
   } else {
     loh_feature_log1p = 1;
+    loh_feature_reciprocal = 0;
     loh_feature_log1p_reciprocal = 0;
     printf(
         "[LOH AUTO-DETECT] DECISION: LOG1P mode "
@@ -1238,20 +1246,20 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
   printf("[LOH FEATURE RANGES] === 三种模式下 frequency 特征范围 ===\n");
   printf("  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_freq_min,
          log_freq_max);
-  printf("  RECIPROCAL:   [%.3f, %.3f] (log1p(f)/(log1p(f)+1), bounded)\n",
+  printf("  LOG1P_RECIP:  [%.3f, %.3f] (log1p(f)/(log1p(f)+1), bounded)\n",
          log_freq_min / (log_freq_min + 1.0),
          log_freq_max / (log_freq_max + 1.0));
-  printf("  DEFAULT:      [%.3f, %.3f] (f/(f+1), bounded)\n",
+  printf("  RECIP_RAW:    [%.3f, %.3f] (f/(f+1), bounded)\n",
          1.0 / 2.0, /* f=1 → 1/2 */
          (double)max_ac / ((double)max_ac + 1.0));
   printf("[LOH FEATURE RANGES] === 三种模式下 recency 特征范围 ===\n");
   printf("  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_rec_min,
          log_rec_max);
-  printf("  RECIPROCAL:   [%.3f, %.3f] (1/(1+log1p(v)), bounded)\n",
+  printf("  LOG1P_RECIP:  [%.3f, %.3f] (1/(1+log1p(v)), bounded)\n",
          (log_rec_max > 0) ? 1.0 / (1.0 + log_rec_max) : 0.0,
          (log_rec_min > 0) ? 1.0 / (1.0 + log_rec_min) : 1.0);
   printf(
-      "  DEFAULT:      [%.6f, %.3f] (1/(1+v), bounded)\n",
+      "  RECIP_RAW:    [%.6f, %.3f] (1/(1+v), bounded)\n",
       (accum.max_recency > 0) ? 1.0 / (1.0 + (double)accum.max_recency) : 0.0,
       (accum.min_recency > 0 && accum.min_recency < INT64_MAX)
           ? 1.0 / (1.0 + (double)accum.min_recency)
@@ -1289,10 +1297,13 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
   // 实验表明随机候选在所有最佳配置中都被使用
 
   printf(
-      "[LOH AUTO-DETECT] Final config: LOG1P=%d, RECIPROCAL=%d, "
+      "[LOH AUTO-DETECT] Final config: UNIFIED=%d, IDENTITY=%d, "
+      "LOG1P=%d, RECIPROCAL=%d, LOG1P_RECIPROCAL=%d, "
       "NORMALIZE=%d, COMPOUND=%d, COMPOUND_V2=%d, RSC=%d\n",
-      loh_feature_log1p, loh_feature_log1p_reciprocal, loh_feature_normalize,
-      loh_score_use_compound, loh_score_compound_v2, loh_random_candidates);
+      loh_feature_unified_formula, loh_feature_identity, loh_feature_log1p,
+      loh_feature_reciprocal, loh_feature_log1p_reciprocal,
+      loh_feature_normalize, loh_score_use_compound, loh_score_compound_v2,
+      loh_random_candidates);
 }
 
 // === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
@@ -1306,21 +1317,33 @@ static inline void loh_online_quantile_update(double *q, double x,
 }
 
 static inline double loh_apply_feature_normalization(LOH_params_t *params,
-                                                     int idx, double out) {
+                                                     int idx, double out,
+                                                     double raw_for_quantile) {
   if (params == NULL) return out;
 
   params->feature_sample_count[idx]++;
 
   if (loh_adaptive_feature_normalize) {
-    uint64_t c = ++params->adaptive_norm_count[idx];
-    if (c == 1) {
-      params->adaptive_q_lo[idx] = out;
-      params->adaptive_q_hi[idx] = out;
+    double q_obs = out;
+    if (loh_adaptive_norm_quantile_input == 1) {
+      q_obs = raw_for_quantile;
+    } else if (loh_adaptive_norm_quantile_input == 2) {
+      q_obs = (raw_for_quantile > 0.0) ? log1p(raw_for_quantile) : 0.0;
+    }
+
+    // 以请求时间戳作为统一进度：同一时间基准用于 warmup 与在线分位学习率。
+    uint64_t t = (params->current_timestamp > 0)
+                     ? (uint64_t)params->current_timestamp
+                     : 1;
+
+    if (t == 1) {
+      params->adaptive_q_lo[idx] = q_obs;
+      params->adaptive_q_hi[idx] = q_obs;
     } else {
-      loh_online_quantile_update(&params->adaptive_q_lo[idx], out,
-                                 loh_adaptive_norm_lo_q, c);
-      loh_online_quantile_update(&params->adaptive_q_hi[idx], out,
-                                 loh_adaptive_norm_hi_q, c);
+      loh_online_quantile_update(&params->adaptive_q_lo[idx], q_obs,
+                                 loh_adaptive_norm_lo_q, t);
+      loh_online_quantile_update(&params->adaptive_q_hi[idx], q_obs,
+                                 loh_adaptive_norm_hi_q, t);
       if (params->adaptive_q_lo[idx] > params->adaptive_q_hi[idx]) {
         double mid =
             0.5 * (params->adaptive_q_lo[idx] + params->adaptive_q_hi[idx]);
@@ -1329,7 +1352,7 @@ static inline double loh_apply_feature_normalization(LOH_params_t *params,
       }
     }
 
-    if (c <= loh_adaptive_norm_warmup) {
+    if (t <= loh_adaptive_norm_warmup) {
       return out;
     }
 
@@ -1505,11 +1528,13 @@ static double calculate_irt_feature(LOH_params_t *params, int64_t irt_value) {
   double out;
   if (loh_feature_unified_formula) {
     out = loh_unified_bad_feature(3, v);
+  } else if (loh_feature_identity) {
+    out = v;
   } else if (loh_feature_log1p) {
     // LOG1P 模式：直接 log1p(raw)
     out = log1p(v);
   } else {
-    if (loh_feature_log1p_reciprocal) {
+    if (loh_feature_reciprocal && loh_feature_log1p_reciprocal) {
       v = log1p(v);
     }
     out = 1.0 / (1.0 + v);
@@ -1517,7 +1542,7 @@ static double calculate_irt_feature(LOH_params_t *params, int64_t irt_value) {
 
   if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
       params != NULL) {
-    return loh_apply_feature_normalization(params, 3, out);
+    return loh_apply_feature_normalization(params, 3, out, v);
   }
 
   return out;
@@ -1531,16 +1556,19 @@ static double calculate_recency(LOH_params_t *params, int64_t recency_raw) {
   double out;
   if (loh_feature_unified_formula) {
     out = loh_unified_bad_feature(0, v);
+  } else if (loh_feature_identity) {
+    out = v;
   } else if (loh_feature_log1p) {
     out = log1p(v);
   } else {
-    out = loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(v)))
-                                       : (1.0 / (1.0 + v));
+    out = (loh_feature_reciprocal && loh_feature_log1p_reciprocal)
+              ? (1.0 / (1.0 + log1p(v)))
+              : (1.0 / (1.0 + v));
   }
 
   if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
       params != NULL) {
-    return loh_apply_feature_normalization(params, 0, out);
+    return loh_apply_feature_normalization(params, 0, out, v);
   }
 
   return out;
@@ -1553,17 +1581,19 @@ static double calculate_frequency(LOH_params_t *params, int64_t freq_raw) {
   double out;
   if (loh_feature_unified_formula) {
     out = loh_unified_good_feature(f);
+  } else if (loh_feature_identity) {
+    out = f;
   } else if (loh_feature_log1p) {
     out = log1p(f);
   } else {
     const double K = 1.0;
-    if (loh_feature_log1p_reciprocal) f = log1p(f);
+    if (loh_feature_reciprocal && loh_feature_log1p_reciprocal) f = log1p(f);
     out = (f > 0.0) ? (f / (f + K)) : 0.0;
   }
 
   if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
       params != NULL) {
-    return loh_apply_feature_normalization(params, 1, out);
+    return loh_apply_feature_normalization(params, 1, out, f);
   }
 
   return out;
@@ -1577,18 +1607,21 @@ static double calculate_size(LOH_params_t *params, int64_t size_bytes) {
   if (loh_feature_unified_formula) {
     double size_mb = size_bytes_d / (1024.0 * 1024.0);
     out = loh_unified_bad_feature(2, size_mb);
+  } else if (loh_feature_identity) {
+    out = size_bytes_d;
   } else if (loh_feature_log1p) {
     out = log1p(size_bytes_d);
   } else {
     double size_mb = size_bytes_d / (1024.0 * 1024.0);
     const double A = 1.0;
-    out = loh_feature_log1p_reciprocal ? (1.0 / (1.0 + log1p(A * size_mb)))
-                                       : (1.0 / (1.0 + A * size_mb));
+    out = (loh_feature_reciprocal && loh_feature_log1p_reciprocal)
+              ? (1.0 / (1.0 + log1p(A * size_mb)))
+              : (1.0 / (1.0 + A * size_mb));
   }
 
   if ((loh_feature_normalize || loh_adaptive_feature_normalize) &&
       params != NULL) {
-    return loh_apply_feature_normalization(params, 2, out);
+    return loh_apply_feature_normalization(params, 2, out, size_bytes_d);
   }
 
   return out;
@@ -4046,9 +4079,18 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       getenv("LOH_DISABLE_SEMAPHORE") ? getenv("LOH_DISABLE_SEMAPHORE")
                                       : "(unused)");
   LOH_DEBUG_PRINT_CONFIG(
-      "  LOH_FEATURE_LOG1P_RAW=%s, LOH_FEATURE_LOG1P_RECIPROCAL=%s\n",
-      getenv("LOH_FEATURE_LOG1P_RAW") ? getenv("LOH_FEATURE_LOG1P_RAW")
-                                      : "(unset)",
+      "  LOH_FEATURE_UNIFIED_FORMULA=%s, LOH_FEATURE_IDENTITY=%s\n",
+      getenv("LOH_FEATURE_UNIFIED_FORMULA")
+          ? getenv("LOH_FEATURE_UNIFIED_FORMULA")
+          : "(unset)",
+      getenv("LOH_FEATURE_IDENTITY") ? getenv("LOH_FEATURE_IDENTITY")
+                                     : "(unset)");
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOH_FEATURE_LOG1P=%s, LOH_FEATURE_RECIPROCAL=%s, "
+      "LOH_FEATURE_LOG1P_RECIPROCAL=%s\n",
+      getenv("LOH_FEATURE_LOG1P") ? getenv("LOH_FEATURE_LOG1P") : "(unset)",
+      getenv("LOH_FEATURE_RECIPROCAL") ? getenv("LOH_FEATURE_RECIPROCAL")
+                                       : "(unset)",
       getenv("LOH_FEATURE_LOG1P_RECIPROCAL")
           ? getenv("LOH_FEATURE_LOG1P_RECIPROCAL")
           : "(unset)");
@@ -4221,7 +4263,6 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     params->feature_sample_count[i] = 0;
     params->adaptive_q_lo[i] = 0.0;
     params->adaptive_q_hi[i] = 0.0;
-    params->adaptive_norm_count[i] = 0;
   }
 
   // 初始化历史特征统计
@@ -4552,11 +4593,12 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   }
 
   // 3) 特征变换 / 归一化相关
-  // 3.1) 特征模式（LOH_FEATURE_LOG1P / LOH_FEATURE_LOG1P_RECIPROCAL /
-  //      LOH_ENABLE_FEATURE_NORMALIZATION）
+  // 3.1) 特征模式（UNIFIED / IDENTITY / LOG1P / RECIPROCAL 家族）
   {
     const char *unified = getenv("LOH_FEATURE_UNIFIED_FORMULA");
+    const char *identity = getenv("LOH_FEATURE_IDENTITY");
     const char *raw = getenv("LOH_FEATURE_LOG1P");
+    const char *recip = getenv("LOH_FEATURE_RECIPROCAL");
     const char *rec = getenv("LOH_FEATURE_LOG1P_RECIPROCAL");
     const char *norm = getenv("LOH_ENABLE_FEATURE_NORMALIZATION");
     const char *adaptive_norm =
@@ -4570,17 +4612,30 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     const char *adaptive_lo_q = getenv("LOH_ADAPTIVE_NORM_LO_Q");
     const char *adaptive_hi_q = getenv("LOH_ADAPTIVE_NORM_HI_Q");
     const char *adaptive_warmup = getenv("LOH_ADAPTIVE_NORM_WARMUP");
+    const char *adaptive_q_input = getenv("LOH_ADAPTIVE_NORM_QUANTILE_INPUT");
 
     loh_feature_unified_formula =
         loh_parse_bool_env(unified, loh_feature_unified_formula);
+    loh_feature_identity = loh_parse_bool_env(identity, loh_feature_identity);
 
-    // 使用当前变量的初始值作为默认值，再由环境变量覆盖
-    loh_feature_log1p = loh_parse_bool_env(raw, loh_feature_log1p);
+    // 当 unified 开启时，不再改写 LOG1P/RECIPROCAL 相关开关；
+    // 仅在计算路径上优先走 unified，避免语义误导。
+    if (loh_feature_unified_formula) {
+      loh_auto_feature_mode = 0;
+    }
 
-    // 仅在 LOG1P 未开启时才考虑 RECIPROCAL 模式
-    if (!loh_feature_log1p) {
+    if (!loh_feature_unified_formula && !loh_feature_identity) {
+      // 使用当前变量的初始值作为默认值，再由环境变量覆盖
+      loh_feature_log1p = loh_parse_bool_env(raw, loh_feature_log1p);
+      loh_feature_reciprocal =
+          loh_parse_bool_env(recip, loh_feature_reciprocal);
       loh_feature_log1p_reciprocal =
           loh_parse_bool_env(rec, loh_feature_log1p_reciprocal);
+
+      // 层级关系：LOG1P > RECIPROCAL
+      if (loh_feature_log1p) {
+        loh_feature_reciprocal = 0;
+      }
     }
 
     loh_feature_normalize = loh_parse_bool_env(norm, loh_feature_normalize);
@@ -4621,7 +4676,17 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     }
     if (adaptive_warmup && adaptive_warmup[0] != '\0') {
       long long w = atoll(adaptive_warmup);
-      if (w > 0) loh_adaptive_norm_warmup = (uint64_t)w;
+      if (w >= 0) loh_adaptive_norm_warmup = (uint64_t)w;
+    }
+    if (adaptive_q_input && adaptive_q_input[0] != '\0') {
+      if (strcmp(adaptive_q_input, "raw") == 0) {
+        loh_adaptive_norm_quantile_input = 1;
+      } else if (strcmp(adaptive_q_input, "log1p") == 0 ||
+                 strcmp(adaptive_q_input, "log1p_raw") == 0) {
+        loh_adaptive_norm_quantile_input = 2;
+      } else {
+        loh_adaptive_norm_quantile_input = 0;
+      }
     }
 
     if (loh_adaptive_norm_lo_q < 0.0) loh_adaptive_norm_lo_q = 0.0;
@@ -4631,25 +4696,21 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       loh_adaptive_norm_hi_q = 0.99;
     }
 
-    if (loh_feature_unified_formula) {
-      // 统一公式模式固定使用同一变换族，避免 trace 级模式分流。
-      loh_feature_log1p = 0;
-      loh_feature_log1p_reciprocal = 1;
-      loh_auto_feature_mode = 0;
-    }
-
     LOH_DEBUG_PRINT_CONFIG(
-        "[LOH INIT] feature mode: UNIFIED=%d, LOG1P=%d, RECIPROCAL=%d, "
+        "[LOH INIT] feature mode: UNIFIED=%d, IDENTITY=%d, LOG1P=%d, "
+        "RECIPROCAL=%d, LOG1P_RECIPROCAL=%d, "
         "NORMALIZE=%d, "
-        "ADAPTIVE_NORM=%d (lo_q=%.3f, hi_q=%.3f, warmup=%llu), "
+        "ADAPTIVE_NORM=%d (lo_q=%.3f, hi_q=%.3f, warmup=%llu, q_input=%d), "
         "UNIFIED_VARIANT=%d (beta=%.3f, gamma=%.3f), "
         "UNIFIED_METHOD=%d (alpha=%.3f, freq_cap=%.1f)\n",
-        loh_feature_unified_formula, loh_feature_log1p,
-        loh_feature_log1p_reciprocal, loh_feature_normalize,
-        loh_adaptive_feature_normalize, loh_adaptive_norm_lo_q,
-        loh_adaptive_norm_hi_q, (unsigned long long)loh_adaptive_norm_warmup,
-        loh_unified_variant, loh_unified_beta, loh_unified_gamma,
-        loh_unified_method, loh_unified_alpha, loh_unified_freq_cap);
+        loh_feature_unified_formula, loh_feature_identity, loh_feature_log1p,
+        loh_feature_reciprocal, loh_feature_log1p_reciprocal,
+        loh_feature_normalize, loh_adaptive_feature_normalize,
+        loh_adaptive_norm_lo_q, loh_adaptive_norm_hi_q,
+        (unsigned long long)loh_adaptive_norm_warmup,
+        loh_adaptive_norm_quantile_input, loh_unified_variant, loh_unified_beta,
+        loh_unified_gamma, loh_unified_method, loh_unified_alpha,
+        loh_unified_freq_cap);
   }
 
   // 3.1.5) 自动特征模式检测（LOH_AUTO_FEATURE_MODE）
@@ -5181,8 +5242,8 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
     params->is_warmed_up = true;
     LOH_DEBUG_PRINT_BASIC(
         "[LOH] Cache warmed up - occupied: %ld bytes (threshold: %ld), "
-        "n_obj: %ld, timestamp: %ld (threshold: 10000)\n",
-        cache_get_occupied_byte_default(cache), cache->cache_size / 2,
+        "n_obj: %ld, timestamp: %ld\n",
+        cache_get_occupied_byte_default(cache), cache->cache_size,
         /* prefer accessor if available */
         (long)(cache->get_n_obj ? cache->get_n_obj(cache) : cache->n_obj),
         params->current_timestamp);
@@ -6099,7 +6160,8 @@ random_sampling_section:
   for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
 
   if (loh_score_use_compound) {
-    if (loh_feature_log1p && !loh_feature_unified_formula) {
+    if ((loh_feature_log1p || loh_feature_identity) &&
+        !loh_feature_unified_formula) {
       sign[0] = -1.0;  // recency
       sign[1] = 1.0;   // frequency
       sign[2] = -1.0;  // size
@@ -6112,7 +6174,8 @@ random_sampling_section:
     }
   } else {
     if (loh_use_heuristic_signs) {
-      if (loh_feature_log1p && !loh_feature_unified_formula) {
+      if ((loh_feature_log1p || loh_feature_identity) &&
+          !loh_feature_unified_formula) {
         // LOG1P 模式：feature 越大 = raw 越大 = 越"不好"的维度用 -1
         sign[0] = -1.0;  // recency: 越老越该驱逐
         sign[1] = 1.0;   // frequency: 越频繁越该保留
@@ -6122,8 +6185,8 @@ random_sampling_section:
         sign[5] = -1.0;  // irt3
         sign[6] = 1.0;
       } else {
-        // RECIPROCAL / DEFAULT 模式：feature 已编码"好坏"方向
-        // （值越大 = 越应保留），所有 sign 用 +1
+        // RECIPROCAL 家族模式（raw 或 log1p_reciprocal）：feature
+        // 已编码"好坏"方向 （值越大 = 越应保留），所有 sign 用 +1
         for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
       }
     } else {
