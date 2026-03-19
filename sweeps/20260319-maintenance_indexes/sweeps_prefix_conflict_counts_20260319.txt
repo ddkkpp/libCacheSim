@@ -1,0 +1,3 @@
+]633;E;{   echo "remaining_nonprefixed=$(wc -l < \\"$IN\\")"\x3b   echo "conflicts_target_exists=$yes"\x3b   echo "can_rename_now=$no"\x3b } > "$CNT";41c0ab9c-1ae2-468d-8b5d-9e812f4dd434]633;Cremaining_nonprefixed=
+conflicts_target_exists=56
+can_rename_now=6

@@ -1,0 +1,7 @@
+[32m[INFO]  03-06-2026 01:00:06 cli_reader_utils.c:259  (tid=124046525128000): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:00:30 cli_reader_utils.c:288  (tid=124046525128000): working set size: 12262537 object 181175213422620 byte
+[0m[32m[INFO]  03-06-2026 01:00:31 cli_parser.c:558  (tid=124046525128000): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, 3LCache
+[0m[36m[DEBUG] 03-06-2026 01:00:31 request.h:125  (tid=124046525128000): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:00:31 request.h:125  (tid=124046525128000): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[32m[INFO]  03-06-2026 01:00:47    sim.c:61   (tid=124046525128000): meta_reag.oracleGeneral.zst ThreeLCache-BMR 24.00 hour: 5518404 requests, miss ratio 0.3512, interval miss ratio 0.3512
+[0m

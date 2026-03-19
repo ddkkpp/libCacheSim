@@ -1,0 +1,14 @@
+[36m[DEBUG] 03-04-2026 10:05:50 zstdReader.c:43   (tid=128847567623680): create zstd reader data/MetaCDN/meta_reag.oracleGeneral.zst
+[0m[36m[DEBUG] 03-04-2026 10:05:50 reader.c:511  (tid=128847567623680): reset reader current offset 0
+[0m[32m[INFO]  03-04-2026 10:05:50 cli_reader_utils.c:259  (tid=128847567623680): calculating working set size...
+[0m[36m[DEBUG] 03-04-2026 10:05:50 cli_reader_utils.c:263  (tid=128847567623680): processed 2000000 requests, 736813 objects, 10403163893233 bytes
+[0m[36m[DEBUG] 03-04-2026 10:05:51 cli_reader_utils.c:263  (tid=128847567623680): processed 4000000 requests, 1427047 objects, 21063431335069 bytes
+[0m[36m[DEBUG] 03-04-2026 10:05:51 cli_reader_utils.c:263  (tid=128847567623680): processed 6000000 requests, 2061597 objects, 29850181040459 bytes
+[0m[36m[DEBUG] 03-04-2026 10:05:52 cli_reader_utils.c:263  (tid=128847567623680): processed 8000000 requests, 2598252 objects, 36465172297585 bytes
+[0m[36m[DEBUG] 03-04-2026 10:05:52 reader.c:245  (tid=128847567623680): read_one_req: processed 8000000 requests capped by the user
+[0m[32m[INFO]  03-04-2026 10:05:52 cli_reader_utils.c:288  (tid=128847567623680): working set size: 2598253 object 36465172298027 byte
+[0m[36m[DEBUG] 03-04-2026 10:05:52 reader.c:511  (tid=128847567623680): reset reader current offset 0
+[0m[32m[INFO]  03-04-2026 10:05:52 cli_parser.c:558  (tid=128847567623680): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, 3LCache, eviction-params: objective=object-miss-ratio
+[0m[36m[DEBUG] 03-04-2026 10:05:52 request.h:125  (tid=128847567623680): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-04-2026 10:05:52 request.h:125  (tid=128847567623680): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m

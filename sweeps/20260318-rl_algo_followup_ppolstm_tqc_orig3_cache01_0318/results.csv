@@ -1,0 +1,13 @@
+algo,exclude_recent_steps,exclude_applied,trace,status,rc,final_mr,final_bmr,final_mqps,log_path
+TQC,0,1,meta,ok,0,0.269112,0.155074,0.76,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/meta_TQC_ex0_cache01_0318_090752.log
+TQC,0,1,1063,ok,0,0.022382,0.023666,0.38,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/1063_TQC_ex0_cache01_0318_090752.log
+TQC,2000,1,1063,ok,0,0.022800,0.024089,0.37,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/1063_TQC_ex2000_cache01_0318_090907.log
+TQC,2000,1,meta,ok,0,0.269136,0.154943,0.64,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/meta_TQC_ex2000_cache01_0318_092609.log
+TQC,10000,1,1063,ok,0,0.023053,0.024308,0.36,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/1063_TQC_ex10000_cache01_0318_092738.log
+TQC,0,1,wiki,ok,0,0.171161,0.140755,0.06,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/wiki_TQC_ex0_cache01_0318_090752.log
+TQC,10000,1,meta,ok,0,0.269142,0.154975,0.56,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/meta_TQC_ex10000_cache01_0318_100300.log
+PPO_LSTM,NA,0,1063,ok,0,0.021565,0.023161,0.38,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/1063_PPO_LSTM_exNA_cache01_0318_100439.log
+TQC,2000,1,wiki,ok,0,0.170938,0.140127,0.06,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/wiki_TQC_ex2000_cache01_0318_092419.log
+PPO_LSTM,NA,0,meta,ok,0,0.269182,0.153765,0.41,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/meta_PPO_LSTM_exNA_cache01_0318_102142.log
+TQC,10000,1,wiki,ok,0,0.171146,0.140472,0.06,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/wiki_TQC_ex10000_cache01_0318_094456.log
+PPO_LSTM,NA,0,wiki,ok,0,0.172121,0.133722,0.07,tmp/rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/wiki_PPO_LSTM_exNA_cache01_0318_102121.log

@@ -1,0 +1,7 @@
+run_tag,trace,seed,exclude_recent_steps,final_mr,final_bmr,final_mqps,log_path,rc
+run2,lru10m,20307137,0,0.079167,0.084632,0.29,tmp/td3_ex0_lru_lfu_10m_0318/lru10m_TD3_ex0_run2_0318_191218.log,0
+run1,lru10m,20305661,0,0.078719,0.084083,0.29,tmp/td3_ex0_lru_lfu_10m_0318/lru10m_TD3_ex0_run1_0318_191218.log,0
+run1,lfu10m,20305661,0,0.084386,0.085719,0.24,tmp/td3_ex0_lru_lfu_10m_0318/lfu10m_TD3_ex0_run1_0318_191218.log,0
+run3,lru10m,20305751,0,0.077676,0.083066,0.27,tmp/td3_ex0_lru_lfu_10m_0318/lru10m_TD3_ex0_run3_0318_191310.log,0
+run2,lfu10m,20307137,0,0.080763,0.082303,0.22,tmp/td3_ex0_lru_lfu_10m_0318/lfu10m_TD3_ex0_run2_0318_191310.log,0
+run3,lfu10m,20305751,0,0.080935,0.081571,0.22,tmp/td3_ex0_lru_lfu_10m_0318/lfu10m_TD3_ex0_run3_0318_191316.log,0

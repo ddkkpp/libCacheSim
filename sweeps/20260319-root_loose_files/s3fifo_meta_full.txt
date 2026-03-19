@@ -1,0 +1,14 @@
+[32m[INFO]  03-06-2026 01:00:06 cli_reader_utils.c:259  (tid=134426508926272): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:00:29 cli_reader_utils.c:288  (tid=134426508926272): working set size: 12262537 object 181175213422620 byte
+[0m[32m[INFO]  03-06-2026 01:00:30 cli_parser.c:558  (tid=134426508926272): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, S3FIFO
+[0m[36m[DEBUG] 03-06-2026 01:00:30 request.h:125  (tid=134426508926272): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:00:30 request.h:125  (tid=134426508926272): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[32m[INFO]  03-06-2026 01:00:37    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 24.00 hour: 5518404 requests, miss ratio 0.3533, interval miss ratio 0.3533
+[0m[32m[INFO]  03-06-2026 01:00:46    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 48.00 hour: 11176128 requests, miss ratio 0.3442, interval miss ratio 0.3354
+[0m[32m[INFO]  03-06-2026 01:00:55    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 72.00 hour: 16602126 requests, miss ratio 0.3438, interval miss ratio 0.3428
+[0m[32m[INFO]  03-06-2026 01:01:03    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 96.00 hour: 22193191 requests, miss ratio 0.3434, interval miss ratio 0.3425
+[0m[32m[INFO]  03-06-2026 01:01:11    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 120.00 hour: 28036259 requests, miss ratio 0.3391, interval miss ratio 0.3225
+[0m[32m[INFO]  03-06-2026 01:01:14    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 144.00 hour: 33615787 requests, miss ratio 0.3347, interval miss ratio 0.3130
+[0m[32m[INFO]  03-06-2026 01:01:27    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 168.00 hour: 39441428 requests, miss ratio 0.3312, interval miss ratio 0.3109
+[0m[32m[INFO]  03-06-2026 01:01:31    sim.c:61   (tid=134426508926272): meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 192.00 hour: 45619651 requests, miss ratio 0.3264, interval miss ratio 0.2956
+[0mdata/MetaCDN/meta_reag.oracleGeneral.zst S3FIFO-0.1000-2 cache size    16TiB,         45623306 req, miss ratio 0.326397, byte miss ratio 0.170717, throughput 0.74 MQPS

@@ -1,0 +1,7 @@
+run_tag,trace,seed,exclude_recent_steps,final_mr,final_bmr,final_mqps,log_path,rc
+run1,meta,20266556,0,0.370026,0.214916,0.54,tmp/td3_ex0_retest_0318/meta_TD3_ex0_cache01_run1_0318_113420.log,0
+run2,meta,20290817,0,0.370243,0.216023,0.50,tmp/td3_ex0_retest_0318/meta_TD3_ex0_cache01_run2_0318_113420.log,0
+run2,1063,20290817,0,0.293916,0.310793,0.09,tmp/td3_ex0_retest_0318/1063_TD3_ex0_cache01_run2_0318_113420.log,0
+run1,1063,20266556,0,0.291878,0.310185,0.09,tmp/td3_ex0_retest_0318/1063_TD3_ex0_cache01_run1_0318_113420.log,0
+run1,wiki,20266556,0,0.580488,0.514803,0.04,tmp/td3_ex0_retest_0318/wiki_TD3_ex0_cache01_run1_0318_113420.log,0
+run2,wiki,20290817,0,0.580089,0.514020,0.04,tmp/td3_ex0_retest_0318/wiki_TD3_ex0_cache01_run2_0318_113420.log,0

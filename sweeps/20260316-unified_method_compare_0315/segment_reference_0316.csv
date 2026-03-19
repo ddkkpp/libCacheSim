@@ -1,0 +1,10 @@
+trace,log_path,mr_24h,imr_24h,mr_48h,imr_48h,mr_72h,imr_72h,mr_96h,imr_96h,final_mr,notes
+1063,tmp/1063_perf0_async.log,0.0930,0.0930,0.0771,0.0575,0.0596,0.0372,0.0480,0.0178,0.026931,good_fullreq
+1063,tmp/rl_state_1063_full_nb_candidate.log,0.0936,0.0936,0.0770,0.0565,0.0591,0.0360,0.0474,0.0170,0.026092,good_fullreq
+1063,tmp/unified_method_compare_0315/topup_adaptive_1063_asym.log,0.2176,0.2176,0.2119,0.2048,0.2086,0.2043,0.1986,0.1725,0.134970,bad_fullreq
+1063,tmp/1063_decay_adaptive.log,0.2422,0.2422,0.2409,0.2393,0.2516,0.2653,0.2571,0.2715,0.256736,very_bad_fullreq
+wiki,tmp/rl_wiki_randonly_fullreq.log,,,,,,,0.1984,0.1738,0.172273,good_fullreq
+wiki,tmp/wiki_async_decay/run.log,,,,,,,0.2009,0.1785,0.177963,mid_fullreq
+wiki,tmp/rl_wiki_nothreads1_0310_111641/cachesim.log,0.2917,0.2917,0.2411,0.1921,0.2194,0.1800,0.2122,0.1917,0.188123,worse_fullreq
+meta,tmp/meta_perf0_async.log,0.3471,0.3471,0.3215,0.2965,0.3110,0.2895,0.3036,0.2814,0.269410,good_fullreq
+meta,tmp/full0315_meta_driver.log,0.3471,0.3471,0.3215,0.2965,0.3110,0.2894,0.3035,0.2812,0.269083,good_fullreq

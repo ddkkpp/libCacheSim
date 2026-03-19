@@ -1,0 +1,147 @@
+@@SEC@@1. 主结果表：3M requests（按 1063 MR 从好到坏排序）
+@@SEC@@2. 主结果表：8M requests（按 1063 MR 从好到坏排序）
+@@SEC@@3. LOH vs 竞争算法对比（8M）
+@@SEC@@4. LOH 特征模式对比（8M, 固定权重）
+@@SEC@@5. LOH RL 特征模式对比（8M, RL）
+@@SEC@@6. Trace 特性
+@@SEC@@7. auto-detect 验证数据
+@@SEC@@7.1 全量分布视角下的公式与归一化建议（2026-03-14）
+@@FILE@@补充说明：这里的结论不再只看 100K/200K 采样点，而是结合全量 trace 的离线分布文件进行判断。分布摘要来自 [tmp/trace_dist_stats_0314/summary_sorted.tsv](tmp/trace_dist_stats_0314/summary_sorted.tsv)。
+@@TIME@@补充说明：这里的结论不再只看 100K/200K 采样点，而是结合全量 trace 的离线分布文件进行判断。分布摘要来自 [tmp/trace_dist_stats_0314/summary_sorted.tsv](tmp/trace_dist_stats_0314/summary_sorted.tsv)。
+@@SEC@@8. 吞吐量优化效果总结
+@@SEC@@9. 实验配置速查
+@@FILE@@bash scripts/test_loh_rl_sb3.sh <trace> 0.1
+@@SEC@@10. 完整请求量（Full Req）串行测试结果（2026-03-06）
+@@FILE@@> 日志均保存于 `tmp/` 目录。
+@@FILE@@- `tmp/rl_1063_full_0306_011029.log`
+@@FILE@@- `tmp/rl_wiki_full_0306_011921.log`
+@@FILE@@- `tmp/rl_meta_full_0306_010910.log`
+@@FILE@@- `gated_penalty_mix`（LOG1P, structured/random=96/96, `CACHESIM_NUM_REQ=0`）在 1063 full req 上得到 `0.026796 / 0.029398 / 0.33 MQPS`，外层日志为 `tmp/gated_1063_full_script.log`。
+@@FILE@@- `tmp/phase_ab_latest/results.csv`
+@@FILE@@- `tmp/phase_ab_0312_223925/logs/phaseA_rl_1063_0p1_log1p_w1.log`
+@@TIME@@- `tmp/phase_ab_0312_223925/logs/phaseA_rl_1063_0p1_log1p_w1.log`
+@@FILE@@- `tmp/phase_ab_0312_223925/logs/phaseA_rl_meta_0p1_log1p_w1.log`
+@@TIME@@- `tmp/phase_ab_0312_223925/logs/phaseA_rl_meta_0p1_log1p_w1.log`
+@@FILE@@- `tmp/phase_ab_0312_223925/logs/phaseA_rl_wiki_0p1_reciprocal_w1.log`
+@@TIME@@- `tmp/phase_ab_0312_223925/logs/phaseA_rl_wiki_0p1_reciprocal_w1.log`
+@@TIME@@| LOH-RL gated-penalty (0312) | 0.026796 / 0.029398 / 0.33 | — | — | `gated_penalty_mix`，质量优于 0306 结构化 RL，但吞吐显著下降 |
+@@FILE@@- `tmp/compare_full_0306_014357.csv`
+@@FILE@@- `tmp/compare_full_0306_014357.log`
+@@FILE@@- `tmp/cmp_1063_LFUDA_full_0306_120723.log`
+@@FILE@@- Random-Only: `tmp/rl_{meta,1063,wiki}_randonly_cand{32..256}_8M.log`
+@@FILE@@- Structured: `tmp/rl_{meta,1063,wiki}_struct_cand{32..256}_8M.log`
+@@FILE@@- 结果汇总: `tmp/randonly_sweep_results.csv`, `tmp/randonly_sweep_refined.csv`, `tmp/struct_sweep_results.csv`
+@@FILE@@- `tmp/rl_meta_randonly_fullreq.log`
+@@FILE@@- `tmp/rl_1063_randonly_fullreq.log`
+@@FILE@@- `tmp/rl_wiki_randonly_fullreq.log`
+@@FILE@@- `tmp/adaptive_budget_orig3_0313_184729/results.csv`
+@@TIME@@- `tmp/adaptive_budget_orig3_0313_184729/results.csv`
+@@FILE@@- `tmp/adaptive_budget_orig3_0313_184729/runner.log`
+@@TIME@@- `tmp/adaptive_budget_orig3_0313_184729/runner.log`
+@@FILE@@- `scripts/debug.sh -r`：新增 `-r`/`--release` 参数，编译到 `_build_rel`（-O2 -DNDEBUG），同时继承所有 LOH_INCLUDE_* 环境变量
+@@SEC@@11. 全量 Trace 实验公共配置
+@@SEC@@12. 全量 Trace 实验汇总表
+@@TIME@@| 0310 探索 | 0.027083 | 0.030018 | 0.61 | 10,312 | LOG1P=1, PERF_PROFILING=1 | ✅ | §14 |
+@@TIME@@| 0310 探索 | 0.206713 | 0.190577 | 0.17 | 14,831 | ❌ LOG1P=1 (应为 0), PERF_PROFILING=1 | ✅ 但特征模式不匹配 | §14 |
+@@TIME@@| 0310 tuned | 0.206839 | 0.190691 | 0.17 | 13,544 | ❌ LOG1P=1 (应为 0), PERF_PROFILING=1 | ✅ 但特征模式不匹配 | §14 |
+@@TIME@@| 0310 探索 | 0.269427 | 0.156722 | 0.78 | 900 | LOG1P=1, PERF_PROFILING=1 | ✅ | §14 |
+@@TIME@@| LOH-RL gated-penalty (0312) | 0.026796 / 0.029398 / 0.33 | — | — |
+@@SEC@@13. 0306 基线复现验证（全量 trace, 2026-03-10）
+@@FILE@@| 0306 wiki | `tmp/rl_wiki_full_0306_011921.log` | `tmp/ac_sb3_0306_011921.log` |
+@@FILE@@| 0306 1063 | `tmp/rl_1063_full_0306_011029.log` | `tmp/ac_sb3_0306_011029.log` |
+@@FILE@@| 0306 meta | `tmp/rl_meta_full_0306_010910.log` | `tmp/ac_sb3_0306_010910.log` |
+@@FILE@@| NB36 wiki | `cachesim_sb3_0310_130728.log` | `ac_sb3_0310_130728.log` |
+@@TIME@@| NB36 wiki | `cachesim_sb3_0310_130728.log` | `ac_sb3_0310_130728.log` |
+@@FILE@@| NB36 1063 | `cachesim_sb3_0310_145105.log` | `ac_sb3_0310_145105.log` |
+@@TIME@@| NB36 1063 | `cachesim_sb3_0310_145105.log` | `ac_sb3_0310_145105.log` |
+@@FILE@@| NB36 meta | `cachesim_sb3_0310_150449.log` | `ac_sb3_0310_150449.log` |
+@@TIME@@| NB36 meta | `cachesim_sb3_0310_150449.log` | `ac_sb3_0310_150449.log` |
+@@FILE@@| wiki RSC=0 (错) | `cachesim_sb3_0310_114414.log` | `ac_sb3_0310_114414.log` |
+@@TIME@@| wiki RSC=0 (错) | `cachesim_sb3_0310_114414.log` | `ac_sb3_0310_114414.log` |
+@@FILE@@| 1063 LOG1P=0 (错) | `cachesim_sb3_0310_134240.log` | `ac_sb3_0310_134240.log` |
+@@TIME@@| 1063 LOG1P=0 (错) | `cachesim_sb3_0310_134240.log` | `ac_sb3_0310_134240.log` |
+@@SEC@@14. 0310 参数探索实验
+@@TIME@@使用 0310 代码（含 AsyncProfiledSAC、LOH_PERF_PROFILING=1 等新功能），统一使用 LOG1P=1 跑全量。
+@@FILE@@| wiki | 0.206713 | 0.190577 | 0.17 | 14,831 | — | `tmp/rl_wiki_full_0310_010834.log` |
+@@TIME@@| wiki | 0.206713 | 0.190577 | 0.17 | 14,831 | — | `tmp/rl_wiki_full_0310_010834.log` |
+@@FILE@@| wiki (tuned) | 0.206839 | 0.190691 | 0.17 | 13,544 | — | `tmp/rl_wiki_full_tuned_0310.log` |
+@@TIME@@| wiki (tuned) | 0.206839 | 0.190691 | 0.17 | 13,544 | — | `tmp/rl_wiki_full_tuned_0310.log` |
+@@FILE@@| 1063 | 0.027083 | 0.030018 | 0.61 | 10,312 | — | `tmp/rl_1063_full_0310_005641.log` |
+@@TIME@@| 1063 | 0.027083 | 0.030018 | 0.61 | 10,312 | — | `tmp/rl_1063_full_0310_005641.log` |
+@@FILE@@| meta | 0.269427 | 0.156722 | 0.78 | 900 | — | `tmp/rl_meta_full_0310_010715.log` |
+@@TIME@@| meta | 0.269427 | 0.156722 | 0.78 | 900 | — | `tmp/rl_meta_full_0310_010715.log` |
+@@TIME@@### 14.2 早期截断/失败的 0310 测试
+@@FILE@@| `tmp/rl_1063_full_0310_004726.log` | 1063 | 3,000,000 (非全量) | MR=0.289723 | `--num-req=3000000` + cache=2GiB（配置错误，非 0.1 比例） |
+@@TIME@@| `tmp/rl_1063_full_0310_004726.log` | 1063 | 3,000,000 (非全量) | MR=0.289723 | `--num-req=3000000` + cache=2GiB（配置错误，非 0.1 比例） |
+@@FILE@@| `tmp/rl_1063_full_0310_004851.log` | 1063 | — | 未完成 | cachesim 被 cleanup 停止 |
+@@TIME@@| `tmp/rl_1063_full_0310_004851.log` | 1063 | — | 未完成 | cachesim 被 cleanup 停止 |
+@@FILE@@| `tmp/rl_meta_full_0310_004746.log` | meta | 3,000,000 (非全量) | MR=0.368107 | `--num-req=3000000` + cache=1TiB（配置错误） |
+@@TIME@@| `tmp/rl_meta_full_0310_004746.log` | meta | 3,000,000 (非全量) | MR=0.368107 | `--num-req=3000000` + cache=1TiB（配置错误） |
+@@FILE@@| `tmp/rl_wiki_full_0310_004758.log` | wiki | — | 未完成 | cachesim 被 cleanup 停止 |
+@@TIME@@| `tmp/rl_wiki_full_0310_004758.log` | wiki | — | 未完成 | cachesim 被 cleanup 停止 |
+@@FILE@@| `tmp/rl_sequential_nohup_full.log` | — | — | 空 (12 行) | 脚本启动后即中止 |
+@@SEC@@15. Blocked / NonBlocked / Async 集成测试（2026-03-09）
+@@FILE@@| **nb_500** | 1063 | 360,960,512 | **0.026646** | 0.029527 | **0.58** | ✅ | `cachesim_sb3_0309_203908.log` | `tmp/rl_interval_1063_nb_500.log` |
+@@FILE@@| **bl_50000** | 1063 | 360,960,512 | 0.027407 | 0.030382 | 0.50 | ✅ | `cachesim_sb3_0309_210328.log` | `tmp/rl_interval_1063_bl_50000.log` |
+@@FILE@@| bl_500 | 1063 | — | — | — | — | ❌ 未完成 | 无 | `tmp/rl_interval_1063_bl_500.log` |
+@@FILE@@| ab_sync_8M | 1063 | 8M | 0.285942 | 0.262948 | 0.11 | `tmp/rl_ab_sync_8M.log` |
+@@FILE@@| ab_async_8M | 1063 | 8M | 0.283841 | 0.261536 | 0.11 | `tmp/rl_ab_async_8M.log` |
+@@FILE@@| ab_async_8M_opt | 1063 | 8M | 0.284116 | 0.261514 | 0.11 | `tmp/rl_ab_async_8M_opt.log` |
+@@FILE@@| ab_async_5M_pickle | 1063 | 5M | 0.317170 | 0.282810 | 0.09 | `tmp/rl_ab_async_5M_pickle.log` |
+@@FILE@@| ab_sync_full | 1063 | 360,960,512 | 0.232346 | 0.208728 | 0.12 | ✅ | `tmp/rl_ab_sync_full.log` |
+@@FILE@@| ab_async_full | 1063 | — | — | — | — | ❌ Python 崩溃 | `tmp/rl_ab_async_full.log` |
+@@FILE@@| ab_async_full_v2 | 1063 | — | — | — | — | ❌ 未完成 | `tmp/rl_ab_async_full_v2.log` |
+@@FILE@@| async_v3_1M | 1063 | 1M | 0.603989 | 0.18 | **0（错误）** | unset | ✅ | `tmp/rl_async_v3_1M.log` |
+@@FILE@@| async_v3_5M | 1063 | 5M | 0.342635 | 0.27 | **0（错误）** | unset | ✅ | `tmp/rl_async_v3_5M.log` |
+@@FILE@@| async_1063 | 1063 | ALL | — | — | 1 | 1 | ❌ Python 崩溃 | `tmp/rl_async_1063.log` |
+@@FILE@@| async_v2_1063 | 1063 | ALL | — | — | 1 | 1 | ❌ Python 崩溃 | `tmp/rl_async_v2_1063.log` |
+@@FILE@@| 1063 | 0.027085 | 0.030005 | 0.57 | 870,003 (145,001) | 7,248 | 0 | `ac_sb3_0310_170940.log` |
+@@TIME@@| 1063 | 0.027085 | 0.030005 | 0.57 | 870,003 (145,001) | 7,248 | 0 | `ac_sb3_0310_170940.log` |
+@@FILE@@| wiki | 0.175426 | 0.141343 | 0.14 | 1,465,629 (244,272) | 17,660 | 0 | `ac_sb3_0310_172046.log` |
+@@TIME@@| wiki | 0.175426 | 0.141343 | 0.14 | 1,465,629 (244,272) | 17,660 | 0 | `ac_sb3_0310_172046.log` |
+@@FILE@@| meta | 0.269425 | 0.156414 | 0.69 | 87,465 (14,578) | 687 | 0 | `ac_sb3_0310_174648.log` |
+@@TIME@@| meta | 0.269425 | 0.156414 | 0.69 | 87,465 (14,578) | 687 | 0 | `ac_sb3_0310_174648.log` |
+@@SEC@@16. Rand-Only 全量实验（无 RL 训练，仅随机权重采样）
+@@FILE@@| wiki | **0.172273** | 0.135979 | 0.14 | 0 | `tmp/rl_wiki_randonly_fullreq.log` |
+@@FILE@@| 1063 | **0.023817** | 0.027561 | 0.78 | 1 | `tmp/rl_1063_randonly_fullreq.log` |
+@@FILE@@| meta | 0.269843 | 0.156441 | 0.43 | 1 | `tmp/rl_meta_randonly_fullreq.log` |
+@@SEC@@17. 失败/不完整全量实验汇总
+@@FILE@@| `tmp/rl_ab_async_full.log` | 1063 | Python 崩溃退出 | 无 |
+@@FILE@@| `tmp/rl_ab_async_full_v2.log` | 1063 | 启动后被清理 | 无 |
+@@FILE@@| `tmp/rl_1063_full_0310_004726.log` | 1063 | 实际仅 3M req + cache=2GiB 配置错误 | MR=0.290 (不可比) |
+@@TIME@@| `tmp/rl_1063_full_0310_004726.log` | 1063 | 实际仅 3M req + cache=2GiB 配置错误 | MR=0.290 (不可比) |
+@@FILE@@| `tmp/rl_1063_full_0310_004851.log` | 1063 | cachesim 被 cleanup 停止 | 无 |
+@@TIME@@| `tmp/rl_1063_full_0310_004851.log` | 1063 | cachesim 被 cleanup 停止 | 无 |
+@@FILE@@| `tmp/rl_meta_full_0310_004746.log` | meta | 实际仅 3M req + cache=1TiB 配置错误 | MR=0.368 (不可比) |
+@@TIME@@| `tmp/rl_meta_full_0310_004746.log` | meta | 实际仅 3M req + cache=1TiB 配置错误 | MR=0.368 (不可比) |
+@@FILE@@| `tmp/rl_wiki_full_0310_004758.log` | wiki | cachesim 被 cleanup 停止 | 无 |
+@@TIME@@| `tmp/rl_wiki_full_0310_004758.log` | wiki | cachesim 被 cleanup 停止 | 无 |
+@@FILE@@| `tmp/rl_sequential_nohup_full.log` | — | 脚本启动即中止 (12 行) | 无 |
+@@FILE@@| `tmp/cmp_1063_LFUDA_full_0306_120723.log` | 1063 | LFUDA 72h 时被系统信号停止 (rc=147) | MR≈0.480 (不完整) |
+@@SEC@@18. Decay + Adaptive Budget 全量实验（2026-03-11）
+@@FILE@@bash scripts/run_nonblocked36.sh data/WikiCDN/wiki_2019t.oracleGeneral.zst 0.1 0 wiki_async_decay
+@@FILE@@bash scripts/run_nonblocked36.sh data/TencentCBS/1063.oracleGeneral.zst 0.1 0 1063_async_decay
+@@FILE@@bash scripts/run_nonblocked36.sh data/MetaCDN/meta_reag.oracleGeneral.zst 0.1 0 meta_async_decay
+@@FILE@@- `tmp/1063_async_decay/run.log`、`cachesim_sb3_0311_005222.log`、`ac_sb3_0311_005222.log`
+@@TIME@@- `tmp/1063_async_decay/run.log`、`cachesim_sb3_0311_005222.log`、`ac_sb3_0311_005222.log`
+@@FILE@@- `tmp/wiki_async_decay/run.log`、`cachesim_sb3_0311_002938.log`、`ac_sb3_0311_002938.log`
+@@TIME@@- `tmp/wiki_async_decay/run.log`、`cachesim_sb3_0311_002938.log`、`ac_sb3_0311_002938.log`
+@@FILE@@- `tmp/meta_async_decay/run.log`、`cachesim_sb3_0311_010229.log`、`ac_sb3_0311_010229.log`
+@@TIME@@- `tmp/meta_async_decay/run.log`、`cachesim_sb3_0311_010229.log`、`ac_sb3_0311_010229.log`
+@@SEC@@§19 综合批量实验：6配置×3 trace + Grid Search + Penalty + MR权重
+@@FILE@@**脚本**: `scripts/batch_experiment.sh`
+@@FILE@@**结果目录**: `tmp/batch_0311_020224/`
+@@TIME@@**结果目录**: `tmp/batch_0311_020224/`
+@@SEC@@0. 当前最好配置（2026-03-13 更新）
+@@SEC@@20. 网络层数与 Replay Buffer 测试总结（含 baseline 对比）
+@@FILE@@> - Full req 批量测试：`tmp/full_default_netbuf_full_0313_221815/results.csv`
+@@TIME@@> - Full req 批量测试：`tmp/full_default_netbuf_full_0313_221815/results.csv`
+@@FILE@@> - 早期 3M 试跑：`tmp/full_default_netbuf_0313_221624/results.csv`
+@@TIME@@> - 早期 3M 试跑：`tmp/full_default_netbuf_0313_221624/results.csv`
+@@SEC@@21. 特征归一化实验
+@@FILE@@> 数据来源：`tmp/sec20_full_matrix_0314_4way/results.csv`
+@@TIME@@> 数据来源：`tmp/sec20_full_matrix_0314_4way/results.csv`
+@@FILE@@1. 全局清理互杀：`scripts/test_loh_rl_sb3.sh` 在未启用并行安全时会执行全局 `pkill`，并发 case 会互相终止 Python/cachesim。
+@@FILE@@2. 时间戳冲突：同秒启动的并发 case 复用同一 `RUN_TIMESTAMP`，导致 `ac_sb3_*.log` / `cachesim_sb3_*.log` 同名，放大并发竞态。
+@@FILE@@- 代码证据：`scripts/test_loh_rl_sb3.sh` 的并行安全分支/全局清理分支与秒级时间戳。
+@@TIME@@*更新时间: 2026-03-14, 新增 §7.1：全量分布视角下的公式与归一化建议；重构 §20：网络层数与 Replay Buffer（主表加入 baseline，统一展示 MR/Byte MR/MQPS）；重构 §21：sec20 差异化配置矩阵（公式与归一化，补充“为何难以跨 trace 统一最优”）；调整 §0：当前最好配置（合并 0312 weights-as-state 与 0313 adaptive-budget 结论）*

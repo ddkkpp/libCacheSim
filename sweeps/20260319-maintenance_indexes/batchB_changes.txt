@@ -1,0 +1,427 @@
+updated_nonroot_refs=65
+REF test_scripts/10230213-analyze_training.sh
+REF scripts/append_sweep_to_results_md.py
+REF scripts/summarize_penalty_runs_0203_plus.py
+REF scripts/batch_all_experiments.sh
+REF scripts/collect_root_logs_into_summary.py
+REF scripts/summarize_logs_by_trace.py
+REF scripts/analyze_loh_penalty_runs.py
+REF scripts/loh_actor_critic_sb3.py
+REF scripts/gen_report.sh
+REF scripts/sweep_loh_rl_sb3.sh
+REF scripts/append_sweep_results_to_summary.py
+REF scripts/wait_and_append_sweep.sh
+REF .tmp/gen_loh_cfg_patch.py
+REF .github/copilot-instructions.md
+REF docs/20260318-EXPERIMENT_ASSET_INDEX.md
+REF docs/20251023-PENALTY_FIX_SUMMARY.md
+REF docs/20260313-_generated_metakv_and_original3_all_algorithms.md
+REF docs/20251117-LOH_Framework_and_Experiments_Summary.md
+REF docs/20251023-TWO_COMPONENT_PENALTY_IMPLEMENTATION.md
+REF docs/20251125-LOH_CLEANUP_SUMMARY.md
+REF docs/20251117-Scripts_and_Docs_Files_Summary.md
+REF docs/20260206-_generated_ac_reward_signal_report_0204_pen1_final_config_rich.md
+REF docs/20260206-_generated_ac_reward_signal_report_0204_pen1_final_combined.md
+REF docs/20251028-README.md
+REF docs/20251117-LOH_EXP_HISTORY.md
+REF docs/20260131-LOH_PARAM_COVERAGE_SUMMARY.md
+REF docs/20251023-EVICTION_TIMESTAMP_IMPROVEMENT.md
+REF docs/20251028-DOC_INDEX.md
+REF docs/20260303-COMPREHENSIVE_EXPERIMENT_SUMMARY.md
+REF docs/20260317-FULL_EXPERIMENT_RESULTS.md
+REF docs/20251027-PENALTY_QUEUE_OPTIMIZATION.md
+REF docs/20260129-LOH_TESTED_CONFIGS_SUMMARY.md
+REF doc/quickstart_mrcProfiler.md
+REF doc/advanced_lib_extend.md
+REF tmp/docs_md_existing_20260318.txt
+REF tmp/20260316-unified_three_cfg_0316/run.sh
+REF tmp/20260317-adaptive_quantile_input_3trace_0316/rerun_1063_qinput_raw.sh
+REF tmp/20260317-adaptive_quantile_input_3trace_0316/run.sh
+REF tmp/20260316-log1p_adaptive_tune_0316/run.sh
+REF tmp/20260316-1063_bound_effect_0316_w0_identity/run.sh
+REF tmp/20260317-log1p_qinput_276_3trace_0317/run_pending_serial.sh
+REF tmp/20260317-log1p_qinput_276_3trace_0317/run.sh
+REF tmp/20260314-sec20_bestcfg_0314_run/run.sh
+REF tmp/20260318-rl_algo_followup_ppolstm_tqc_orig3_cache01_0318/merge_into_2715.sh
+REF tmp/20260316-penalty_no_penalty_0316/run.sh
+REF tmp/20260317-log1p_qinput_orig3_cache0001_0317/run.sh
+REF tmp/20260317-log1p_qinput_4trace_0317/run.sh
+REF tmp/20260318-transformq0_wobs0_orig3_cache01_0317/run.sh
+REF tmp/20260316-1063_bound_effect_0316_w0/run_extra3.sh
+REF tmp/20260316-1063_bound_effect_0316_w0/run.sh
+REF tmp/20260316-penalty_ablation_pair_0316/run.sh
+REF tmp/20260317-transformq0_hitmiss1_orig3_cache01_0317/watch_doc.sh
+REF tmp/20260317-transformq0_hitmiss1_orig3_cache01_0317/run.sh
+REF tmp/20260316-bound_extra3_alltraces_0316/run.sh
+REF tmp/20260318-reward_paths_nondefault_orig3_cache01_0318/run.sh
+REF tmp/20260318-transformq0_mrw_sweep_orig3_cache01_0318/rerun_na_cases.sh
+REF tmp/20260318-transformq0_mrw_sweep_orig3_cache01_0318/run.sh
+REF tmp/20260317-transformq1_orig3_cache0001_0317/run.sh
+REF tmp/20260317-transformq1_orig3_cache01_0317/run.sh
+REF tmp/20260316-hitmiss_lo00_hi100_full_0316/run.sh
+REF tmp/20260317-log1p_qinput_hitmiss_3trace_0317/rerun_wiki_hitmiss.sh
+REF tmp/20260317-log1p_qinput_hitmiss_3trace_0317/run.sh
+REF tmp/20260318-rl_algo_exclude_sweep_orig3_cache01_0318/run.sh
+REF tmp/20260316-unified_method_compare_0315/monitor_update_doc.py
+REF libCacheSim-node/package.json
+renamed_dirs=0
+moved_tmp_files=358
+TMP tmp/1063_8m_norm0_rl.log -> tmp/20260319-root_loose_files/1063_8m_norm0_rl.log
+TMP tmp/1063_8m_norm1_rl.log -> tmp/20260319-root_loose_files/1063_8m_norm1_rl.log
+TMP tmp/1063_decay_adaptive.log -> tmp/20260319-root_loose_files/1063_decay_adaptive.log
+TMP tmp/1063_decay_adaptive_v2.log -> tmp/20260319-root_loose_files/1063_decay_adaptive_v2.log
+TMP tmp/1063_decay_adaptive_v3.log -> tmp/20260319-root_loose_files/1063_decay_adaptive_v3.log
+TMP tmp/1063_decay_only.log -> tmp/20260319-root_loose_files/1063_decay_only.log
+TMP tmp/1063_full_release_0312_1500.log -> tmp/20260319-root_loose_files/1063_full_release_0312_1500.log
+TMP tmp/1063_perf0_async.log -> tmp/20260319-root_loose_files/1063_perf0_async.log
+TMP tmp/1063_release_maxfix_0312_1453.log -> tmp/20260319-root_loose_files/1063_release_maxfix_0312_1453.log
+TMP tmp/3feat_randonly_run.log -> tmp/20260319-root_loose_files/3feat_randonly_run.log
+TMP tmp/3lc_1063_full.txt -> tmp/20260319-root_loose_files/3lc_1063_full.txt
+TMP tmp/3lc_meta_full.txt -> tmp/20260319-root_loose_files/3lc_meta_full.txt
+TMP tmp/3lc_omr_1063_full.txt -> tmp/20260319-root_loose_files/3lc_omr_1063_full.txt
+TMP tmp/3lc_omr_meta_full.txt -> tmp/20260319-root_loose_files/3lc_omr_meta_full.txt
+TMP tmp/3lc_omr_wiki_full.txt -> tmp/20260319-root_loose_files/3lc_omr_wiki_full.txt
+TMP tmp/3lc_wiki_full.txt -> tmp/20260319-root_loose_files/3lc_wiki_full.txt
+TMP tmp/FW_1063_3m.txt -> tmp/20260319-root_loose_files/FW_1063_3m.txt
+TMP tmp/FW_meta_3m.txt -> tmp/20260319-root_loose_files/FW_meta_3m.txt
+TMP tmp/FW_wiki_3m.txt -> tmp/20260319-root_loose_files/FW_wiki_3m.txt
+TMP tmp/GDSF_1063_3m.txt -> tmp/20260319-root_loose_files/GDSF_1063_3m.txt
+TMP tmp/GDSF_1063_8m.txt -> tmp/20260319-root_loose_files/GDSF_1063_8m.txt
+TMP tmp/GDSF_meta_3m.txt -> tmp/20260319-root_loose_files/GDSF_meta_3m.txt
+TMP tmp/GDSF_meta_8m.txt -> tmp/20260319-root_loose_files/GDSF_meta_8m.txt
+TMP tmp/GDSF_wiki_3m.txt -> tmp/20260319-root_loose_files/GDSF_wiki_3m.txt
+TMP tmp/GDSF_wiki_8m.txt -> tmp/20260319-root_loose_files/GDSF_wiki_8m.txt
+TMP tmp/LOH_current_vs_blob0d.diff -> tmp/20260319-root_loose_files/LOH_current_vs_blob0d.diff
+TMP tmp/LOH_current_vs_blob0d.hunks -> tmp/20260319-root_loose_files/LOH_current_vs_blob0d.hunks
+TMP tmp/LOH_current_vs_blob0d.hunks.withlineno -> tmp/20260319-root_loose_files/LOH_current_vs_blob0d.hunks.withlineno
+TMP tmp/LOH_recover_blob_0d824074.c -> tmp/20260319-root_loose_files/LOH_recover_blob_0d824074.c
+TMP tmp/LOH_recover_blob_3d0b050c.c -> tmp/20260319-root_loose_files/LOH_recover_blob_3d0b050c.c
+TMP tmp/LRU_1063_3m.txt -> tmp/20260319-root_loose_files/LRU_1063_3m.txt
+TMP tmp/LRU_1063_8m.txt -> tmp/20260319-root_loose_files/LRU_1063_8m.txt
+TMP tmp/LRU_meta_3m.txt -> tmp/20260319-root_loose_files/LRU_meta_3m.txt
+TMP tmp/LRU_meta_8m.txt -> tmp/20260319-root_loose_files/LRU_meta_8m.txt
+TMP tmp/LRU_wiki_3m.txt -> tmp/20260319-root_loose_files/LRU_wiki_3m.txt
+TMP tmp/LRU_wiki_8m.txt -> tmp/20260319-root_loose_files/LRU_wiki_8m.txt
+TMP tmp/T1_1063_r64s96_0312.log -> tmp/20260319-root_loose_files/T1_1063_r64s96_0312.log
+TMP tmp/a2c_log1p_compound_3m.log -> tmp/20260319-root_loose_files/a2c_log1p_compound_3m.log
+TMP tmp/a2c_log1p_nocompound_3m.log -> tmp/20260319-root_loose_files/a2c_log1p_nocompound_3m.log
+TMP tmp/ac_sb3_0306_010910.log -> tmp/20260319-root_loose_files/ac_sb3_0306_010910.log
+TMP tmp/ac_sb3_0306_011029.log -> tmp/20260319-root_loose_files/ac_sb3_0306_011029.log
+TMP tmp/ac_sb3_0306_011921.log -> tmp/20260319-root_loose_files/ac_sb3_0306_011921.log
+TMP tmp/adaptive_1063.log -> tmp/20260319-root_loose_files/adaptive_1063.log
+TMP tmp/adaptive_all.log -> tmp/20260319-root_loose_files/adaptive_all.log
+TMP tmp/adaptive_meta.log -> tmp/20260319-root_loose_files/adaptive_meta.log
+TMP tmp/additive_results.csv -> tmp/20260319-root_loose_files/additive_results.csv
+TMP tmp/additive_run.log -> tmp/20260319-root_loose_files/additive_run.log
+TMP tmp/batch_main.log -> tmp/20260319-root_loose_files/batch_main.log
+TMP tmp/belady_1063_full.txt -> tmp/20260319-root_loose_files/belady_1063_full.txt
+TMP tmp/belady_meta_full.txt -> tmp/20260319-root_loose_files/belady_meta_full.txt
+TMP tmp/belady_wiki_full.txt -> tmp/20260319-root_loose_files/belady_wiki_full.txt
+TMP tmp/cachesim_sb3_0303_rl_log1p_a2c.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_log1p_a2c.log
+TMP tmp/cachesim_sb3_0303_rl_sac_38dim.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_38dim.log
+TMP tmp/cachesim_sb3_0303_rl_sac_38dim_v2.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_38dim_v2.log
+TMP tmp/cachesim_sb3_0303_rl_sac_bound3_38dim.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_bound3_38dim.log
+TMP tmp/cachesim_sb3_0303_rl_sac_conservative.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_conservative.log
+TMP tmp/cachesim_sb3_0303_rl_sac_default_baseline.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_default_baseline.log
+TMP tmp/cachesim_sb3_0303_rl_sac_nocompound_log1p.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_nocompound_log1p.log
+TMP tmp/cachesim_sb3_0303_rl_sac_scale3.log -> tmp/20260319-root_loose_files/cachesim_sb3_0303_rl_sac_scale3.log
+TMP tmp/cachesim_sb3_0306_010910.log -> tmp/20260319-root_loose_files/cachesim_sb3_0306_010910.log
+TMP tmp/cachesim_sb3_0306_011029.log -> tmp/20260319-root_loose_files/cachesim_sb3_0306_011029.log
+TMP tmp/cachesim_sb3_0306_011921.log -> tmp/20260319-root_loose_files/cachesim_sb3_0306_011921.log
+TMP tmp/chapter_file_time_raw.txt -> tmp/20260319-root_loose_files/chapter_file_time_raw.txt
+TMP tmp/cmp_1063.oracleGeneral_3LCache_0306_111400.log -> tmp/20260319-root_loose_files/cmp_1063.oracleGeneral_3LCache_0306_111400.log
+TMP tmp/cmp_1063.oracleGeneral_3LCache_0306_114133.log -> tmp/20260319-root_loose_files/cmp_1063.oracleGeneral_3LCache_0306_114133.log
+TMP tmp/cmp_1063_LFUDA_full_0306_120723.log -> tmp/20260319-root_loose_files/cmp_1063_LFUDA_full_0306_120723.log
+TMP tmp/cmp_meta_reag.oracleGeneral_3LCache_0306_113922.log -> tmp/20260319-root_loose_files/cmp_meta_reag.oracleGeneral_3LCache_0306_113922.log
+TMP tmp/cmp_meta_reag.oracleGeneral_3LCache_0306_120452.log -> tmp/20260319-root_loose_files/cmp_meta_reag.oracleGeneral_3LCache_0306_120452.log
+TMP tmp/cmp_meta_reag.oracleGeneral_BeladySize_0306_111339.log -> tmp/20260319-root_loose_files/cmp_meta_reag.oracleGeneral_BeladySize_0306_111339.log
+TMP tmp/cmp_wiki_2019t.oracleGeneral_3LCache_0306_112739.log -> tmp/20260319-root_loose_files/cmp_wiki_2019t.oracleGeneral_3LCache_0306_112739.log
+TMP tmp/cmp_wiki_2019t.oracleGeneral_3LCache_0306_115313.log -> tmp/20260319-root_loose_files/cmp_wiki_2019t.oracleGeneral_3LCache_0306_115313.log
+TMP tmp/cmp_wiki_2019t.oracleGeneral_BeladySize_0306_110109.log -> tmp/20260319-root_loose_files/cmp_wiki_2019t.oracleGeneral_BeladySize_0306_110109.log
+TMP tmp/compare_full_0306_014357.csv -> tmp/20260319-root_loose_files/compare_full_0306_014357.csv
+TMP tmp/compare_full_0306_014357.log -> tmp/20260319-root_loose_files/compare_full_0306_014357.log
+TMP tmp/decay_rl_3m.log -> tmp/20260319-root_loose_files/decay_rl_3m.log
+TMP tmp/decay_wiki_bench.txt -> tmp/20260319-root_loose_files/decay_wiki_bench.txt
+TMP tmp/docs_md_existing_20260318.txt -> tmp/20260319-root_loose_files/docs_md_existing_20260318.txt
+TMP tmp/full0315_1063_driver.log -> tmp/20260319-root_loose_files/full0315_1063_driver.log
+TMP tmp/full0315_meta_driver.log -> tmp/20260319-root_loose_files/full0315_meta_driver.log
+TMP tmp/full0315_wiki_driver.log -> tmp/20260319-root_loose_files/full0315_wiki_driver.log
+TMP tmp/gated_1063_full.log -> tmp/20260319-root_loose_files/gated_1063_full.log
+TMP tmp/gated_1063_full_all.log -> tmp/20260319-root_loose_files/gated_1063_full_all.log
+TMP tmp/gated_1063_full_script.log -> tmp/20260319-root_loose_files/gated_1063_full_script.log
+TMP tmp/gated_compare_1063_3m_gated.log -> tmp/20260319-root_loose_files/gated_compare_1063_3m_gated.log
+TMP tmp/gated_compare_1063_3m_legacy.log -> tmp/20260319-root_loose_files/gated_compare_1063_3m_legacy.log
+TMP tmp/gdsf_1063_full.txt -> tmp/20260319-root_loose_files/gdsf_1063_full.txt
+TMP tmp/gdsf_meta_full.txt -> tmp/20260319-root_loose_files/gdsf_meta_full.txt
+TMP tmp/gdsf_wiki_full.txt -> tmp/20260319-root_loose_files/gdsf_wiki_full.txt
+TMP tmp/gen_doc_ref_candidates_20260318.py -> tmp/20260319-maintenance_indexes/gen_doc_ref_candidates_20260318.py
+TMP tmp/irt_randonly_run.log -> tmp/20260319-root_loose_files/irt_randonly_run.log
+TMP tmp/lfu_1063_full.txt -> tmp/20260319-root_loose_files/lfu_1063_full.txt
+TMP tmp/lfu_meta_full.txt -> tmp/20260319-root_loose_files/lfu_meta_full.txt
+TMP tmp/lfu_wiki_full.txt -> tmp/20260319-root_loose_files/lfu_wiki_full.txt
+TMP tmp/lfuda_1063_full.txt -> tmp/20260319-root_loose_files/lfuda_1063_full.txt
+TMP tmp/lfuda_meta_full.txt -> tmp/20260319-root_loose_files/lfuda_meta_full.txt
+TMP tmp/lfuda_wiki_full.txt -> tmp/20260319-root_loose_files/lfuda_wiki_full.txt
+TMP tmp/loh_fw_1063_full.txt -> tmp/20260319-root_loose_files/loh_fw_1063_full.txt
+TMP tmp/loh_fw_meta_full.txt -> tmp/20260319-root_loose_files/loh_fw_meta_full.txt
+TMP tmp/loh_fw_wiki_full.txt -> tmp/20260319-root_loose_files/loh_fw_wiki_full.txt
+TMP tmp/loh_quick_test.log -> tmp/20260319-root_loose_files/loh_quick_test.log
+TMP tmp/loh_quick_test2.log -> tmp/20260319-root_loose_files/loh_quick_test2.log
+TMP tmp/manual_full_1063_gated_cachesim.log -> tmp/20260319-root_loose_files/manual_full_1063_gated_cachesim.log
+TMP tmp/manual_full_1063_gated_python.log -> tmp/20260319-root_loose_files/manual_full_1063_gated_python.log
+TMP tmp/meta_3m_3lcache.log -> tmp/20260319-root_loose_files/meta_3m_3lcache.log
+TMP tmp/meta_3m_baselines.log -> tmp/20260319-root_loose_files/meta_3m_baselines.log
+TMP tmp/meta_3m_rl.log -> tmp/20260319-root_loose_files/meta_3m_rl.log
+TMP tmp/meta_8m_norm0_rl.log -> tmp/20260319-root_loose_files/meta_8m_norm0_rl.log
+TMP tmp/meta_8m_norm1_rl.log -> tmp/20260319-root_loose_files/meta_8m_norm1_rl.log
+TMP tmp/meta_dbg.log -> tmp/20260319-root_loose_files/meta_dbg.log
+TMP tmp/meta_decay_adaptive.log -> tmp/20260319-root_loose_files/meta_decay_adaptive.log
+TMP tmp/meta_decay_adaptive_v3.log -> tmp/20260319-root_loose_files/meta_decay_adaptive_v3.log
+TMP tmp/meta_no_profiling.log -> tmp/20260319-root_loose_files/meta_no_profiling.log
+TMP tmp/meta_perf0_async.log -> tmp/20260319-root_loose_files/meta_perf0_async.log
+TMP tmp/meta_profiling_on.log -> tmp/20260319-root_loose_files/meta_profiling_on.log
+TMP tmp/meta_reag_3lcache_bmr.txt -> tmp/20260319-root_loose_files/meta_reag_3lcache_bmr.txt
+TMP tmp/meta_reag_3lcache_omr.txt -> tmp/20260319-root_loose_files/meta_reag_3lcache_omr.txt
+TMP tmp/meta_reag_rl_8m.log -> tmp/20260319-root_loose_files/meta_reag_rl_8m.log
+TMP tmp/min_runtime_validate_0314.log -> tmp/20260319-root_loose_files/min_runtime_validate_0314.log
+TMP tmp/nodecay_rl_3m.log -> tmp/20260319-root_loose_files/nodecay_rl_3m.log
+TMP tmp/nonroot_doc_refs_missing_20260318.txt -> tmp/20260319-maintenance_indexes/nonroot_doc_refs_missing_20260318.txt
+TMP tmp/nonroot_doc_refs_raw_20260318.txt -> tmp/20260319-maintenance_indexes/nonroot_doc_refs_raw_20260318.txt
+TMP tmp/nonroot_doc_refs_targets_20260318.txt -> tmp/20260319-maintenance_indexes/nonroot_doc_refs_targets_20260318.txt
+TMP tmp/penalty_debug_test.log -> tmp/20260319-root_loose_files/penalty_debug_test.log
+TMP tmp/penalty_sweep_full.log -> tmp/20260319-root_loose_files/penalty_sweep_full.log
+TMP tmp/perf_loh.data -> tmp/20260319-root_loose_files/perf_loh.data
+TMP tmp/phase_ab_latest -> tmp/20260319-root_loose_files/phase_ab_latest
+TMP tmp/phase_ab_launcher_0312_223925.log -> tmp/20260319-root_loose_files/phase_ab_launcher_0312_223925.log
+TMP tmp/phase_ab_launcher_restart.log -> tmp/20260319-root_loose_files/phase_ab_launcher_restart.log
+TMP tmp/quick_decay_40m.log -> tmp/20260319-root_loose_files/quick_decay_40m.log
+TMP tmp/quick_nodecay_40m.log -> tmp/20260319-root_loose_files/quick_nodecay_40m.log
+TMP tmp/randonly_fullreq_run.log -> tmp/20260319-root_loose_files/randonly_fullreq_run.log
+TMP tmp/randonly_sweep.log -> tmp/20260319-root_loose_files/randonly_sweep.log
+TMP tmp/randonly_sweep_refined.csv -> tmp/20260319-root_loose_files/randonly_sweep_refined.csv
+TMP tmp/randonly_sweep_refined_run.log -> tmp/20260319-root_loose_files/randonly_sweep_refined_run.log
+TMP tmp/randonly_sweep_results.csv -> tmp/20260319-root_loose_files/randonly_sweep_results.csv
+TMP tmp/release_r96s96_dbg0_prof0_0312.log -> tmp/20260319-root_loose_files/release_r96s96_dbg0_prof0_0312.log
+TMP tmp/repro_s19_1063_r96s96_0312.log -> tmp/20260319-root_loose_files/repro_s19_1063_r96s96_0312.log
+TMP tmp/reproduce_log1p0_softmax1.log -> tmp/20260319-root_loose_files/reproduce_log1p0_softmax1.log
+TMP tmp/reproduce_log1p0_softmax1_v2.log -> tmp/20260319-root_loose_files/reproduce_log1p0_softmax1_v2.log
+TMP tmp/rl_1063_0312_0049.log -> tmp/20260319-root_loose_files/rl_1063_0312_0049.log
+TMP tmp/rl_1063_3feat_randonly_3M.log -> tmp/20260319-root_loose_files/rl_1063_3feat_randonly_3M.log
+TMP tmp/rl_1063_3m.log -> tmp/20260319-root_loose_files/rl_1063_3m.log
+TMP tmp/rl_1063_additive_groupB_8M.log -> tmp/20260319-root_loose_files/rl_1063_additive_groupB_8M.log
+TMP tmp/rl_1063_additive_groupC_8M.log -> tmp/20260319-root_loose_files/rl_1063_additive_groupC_8M.log
+TMP tmp/rl_1063_full.txt -> tmp/20260319-root_loose_files/rl_1063_full.txt
+TMP tmp/rl_1063_full_0306_011029.log -> tmp/20260319-root_loose_files/rl_1063_full_0306_011029.log
+TMP tmp/rl_1063_full_0310_004726.log -> tmp/20260319-root_loose_files/rl_1063_full_0310_004726.log
+TMP tmp/rl_1063_full_0310_004851.log -> tmp/20260319-root_loose_files/rl_1063_full_0310_004851.log
+TMP tmp/rl_1063_full_0310_005641.log -> tmp/20260319-root_loose_files/rl_1063_full_0310_005641.log
+TMP tmp/rl_1063_irt_randonly_8M.log -> tmp/20260319-root_loose_files/rl_1063_irt_randonly_8M.log
+TMP tmp/rl_1063_log1p.log -> tmp/20260319-root_loose_files/rl_1063_log1p.log
+TMP tmp/rl_1063_log1p_0312.log -> tmp/20260319-root_loose_files/rl_1063_log1p_0312.log
+TMP tmp/rl_1063_log1p_rsc.log -> tmp/20260319-root_loose_files/rl_1063_log1p_rsc.log
+TMP tmp/rl_1063_randonly_8M.log -> tmp/20260319-root_loose_files/rl_1063_randonly_8M.log
+TMP tmp/rl_1063_randonly_cand128_8M.log -> tmp/20260319-root_loose_files/rl_1063_randonly_cand128_8M.log
+TMP tmp/rl_1063_randonly_cand192_8M.log -> tmp/20260319-root_loose_files/rl_1063_randonly_cand192_8M.log
+TMP tmp/rl_1063_randonly_cand256_8M.log -> tmp/20260319-root_loose_files/rl_1063_randonly_cand256_8M.log
+TMP tmp/rl_1063_randonly_cand32_8M.log -> tmp/20260319-root_loose_files/rl_1063_randonly_cand32_8M.log
+TMP tmp/rl_1063_randonly_cand64_8M.log -> tmp/20260319-root_loose_files/rl_1063_randonly_cand64_8M.log
+TMP tmp/rl_1063_randonly_fullreq.log -> tmp/20260319-root_loose_files/rl_1063_randonly_fullreq.log
+TMP tmp/rl_1063_recip.log -> tmp/20260319-root_loose_files/rl_1063_recip.log
+TMP tmp/rl_1063_recip2.log -> tmp/20260319-root_loose_files/rl_1063_recip2.log
+TMP tmp/rl_1063_recip_rsc.log -> tmp/20260319-root_loose_files/rl_1063_recip_rsc.log
+TMP tmp/rl_1063_retry_0312_0110.log -> tmp/20260319-root_loose_files/rl_1063_retry_0312_0110.log
+TMP tmp/rl_1063_s19full_0312.log -> tmp/20260319-root_loose_files/rl_1063_s19full_0312.log
+TMP tmp/rl_1063_struct_cand128_8M.log -> tmp/20260319-root_loose_files/rl_1063_struct_cand128_8M.log
+TMP tmp/rl_1063_struct_cand192_8M.log -> tmp/20260319-root_loose_files/rl_1063_struct_cand192_8M.log
+TMP tmp/rl_1063_struct_cand256_8M.log -> tmp/20260319-root_loose_files/rl_1063_struct_cand256_8M.log
+TMP tmp/rl_1063_struct_cand32_8M.log -> tmp/20260319-root_loose_files/rl_1063_struct_cand32_8M.log
+TMP tmp/rl_1063_struct_cand64_8M.log -> tmp/20260319-root_loose_files/rl_1063_struct_cand64_8M.log
+TMP tmp/rl_1063_struct_cand96_8M.log -> tmp/20260319-root_loose_files/rl_1063_struct_cand96_8M.log
+TMP tmp/rl_ab_async_5M_pickle.log -> tmp/20260319-root_loose_files/rl_ab_async_5M_pickle.log
+TMP tmp/rl_ab_async_8M.log -> tmp/20260319-root_loose_files/rl_ab_async_8M.log
+TMP tmp/rl_ab_async_8M_opt.log -> tmp/20260319-root_loose_files/rl_ab_async_8M_opt.log
+TMP tmp/rl_ab_async_full.log -> tmp/20260319-root_loose_files/rl_ab_async_full.log
+TMP tmp/rl_ab_async_full_v2.log -> tmp/20260319-root_loose_files/rl_ab_async_full_v2.log
+TMP tmp/rl_ab_sync_8M.log -> tmp/20260319-root_loose_files/rl_ab_sync_8M.log
+TMP tmp/rl_ab_sync_full.log -> tmp/20260319-root_loose_files/rl_ab_sync_full.log
+TMP tmp/rl_async_1063.log -> tmp/20260319-root_loose_files/rl_async_1063.log
+TMP tmp/rl_async_v2_1063.log -> tmp/20260319-root_loose_files/rl_async_v2_1063.log
+TMP tmp/rl_async_v3_1M.log -> tmp/20260319-root_loose_files/rl_async_v3_1M.log
+TMP tmp/rl_async_v3_5M.log -> tmp/20260319-root_loose_files/rl_async_v3_5M.log
+TMP tmp/rl_interval_1063_bl_500.log -> tmp/20260319-root_loose_files/rl_interval_1063_bl_500.log
+TMP tmp/rl_interval_1063_bl_50000.log -> tmp/20260319-root_loose_files/rl_interval_1063_bl_50000.log
+TMP tmp/rl_interval_1063_nb_500.log -> tmp/20260319-root_loose_files/rl_interval_1063_nb_500.log
+TMP tmp/rl_meta_0312_0046.log -> tmp/20260319-root_loose_files/rl_meta_0312_0046.log
+TMP tmp/rl_meta_3feat_randonly_3M.log -> tmp/20260319-root_loose_files/rl_meta_3feat_randonly_3M.log
+TMP tmp/rl_meta_3m.log -> tmp/20260319-root_loose_files/rl_meta_3m.log
+TMP tmp/rl_meta_additive_groupB_8M.log -> tmp/20260319-root_loose_files/rl_meta_additive_groupB_8M.log
+TMP tmp/rl_meta_additive_groupC_8M.log -> tmp/20260319-root_loose_files/rl_meta_additive_groupC_8M.log
+TMP tmp/rl_meta_full_0306_010910.log -> tmp/20260319-root_loose_files/rl_meta_full_0306_010910.log
+TMP tmp/rl_meta_full_0310_004746.log -> tmp/20260319-root_loose_files/rl_meta_full_0310_004746.log
+TMP tmp/rl_meta_full_0310_010715.log -> tmp/20260319-root_loose_files/rl_meta_full_0310_010715.log
+TMP tmp/rl_meta_irt_randonly_8M.log -> tmp/20260319-root_loose_files/rl_meta_irt_randonly_8M.log
+TMP tmp/rl_meta_log1p_rsc.log -> tmp/20260319-root_loose_files/rl_meta_log1p_rsc.log
+TMP tmp/rl_meta_randonly_8M.log -> tmp/20260319-root_loose_files/rl_meta_randonly_8M.log
+TMP tmp/rl_meta_randonly_cand128_8M.log -> tmp/20260319-root_loose_files/rl_meta_randonly_cand128_8M.log
+TMP tmp/rl_meta_randonly_cand192_8M.log -> tmp/20260319-root_loose_files/rl_meta_randonly_cand192_8M.log
+TMP tmp/rl_meta_randonly_cand256_8M.log -> tmp/20260319-root_loose_files/rl_meta_randonly_cand256_8M.log
+TMP tmp/rl_meta_randonly_cand32_8M.log -> tmp/20260319-root_loose_files/rl_meta_randonly_cand32_8M.log
+TMP tmp/rl_meta_randonly_cand64_8M.log -> tmp/20260319-root_loose_files/rl_meta_randonly_cand64_8M.log
+TMP tmp/rl_meta_randonly_fullreq.log -> tmp/20260319-root_loose_files/rl_meta_randonly_fullreq.log
+TMP tmp/rl_meta_recip.log -> tmp/20260319-root_loose_files/rl_meta_recip.log
+TMP tmp/rl_meta_struct_cand128_8M.log -> tmp/20260319-root_loose_files/rl_meta_struct_cand128_8M.log
+TMP tmp/rl_meta_struct_cand192_8M.log -> tmp/20260319-root_loose_files/rl_meta_struct_cand192_8M.log
+TMP tmp/rl_meta_struct_cand256_8M.log -> tmp/20260319-root_loose_files/rl_meta_struct_cand256_8M.log
+TMP tmp/rl_meta_struct_cand32_8M.log -> tmp/20260319-root_loose_files/rl_meta_struct_cand32_8M.log
+TMP tmp/rl_meta_struct_cand64_8M.log -> tmp/20260319-root_loose_files/rl_meta_struct_cand64_8M.log
+TMP tmp/rl_meta_struct_cand96_8M.log -> tmp/20260319-root_loose_files/rl_meta_struct_cand96_8M.log
+TMP tmp/rl_sequential_0310_004726.log -> tmp/20260319-root_loose_files/rl_sequential_0310_004726.log
+TMP tmp/rl_sequential_0310_004851.log -> tmp/20260319-root_loose_files/rl_sequential_0310_004851.log
+TMP tmp/rl_sequential_0310_005641.log -> tmp/20260319-root_loose_files/rl_sequential_0310_005641.log
+TMP tmp/rl_sequential_nohup.log -> tmp/20260319-root_loose_files/rl_sequential_nohup.log
+TMP tmp/rl_sequential_nohup_full.log -> tmp/20260319-root_loose_files/rl_sequential_nohup_full.log
+TMP tmp/rl_sequential_nohup_v2.log -> tmp/20260319-root_loose_files/rl_sequential_nohup_v2.log
+TMP tmp/rl_state2_avgtopk_meta_8M.log -> tmp/20260319-root_loose_files/rl_state2_avgtopk_meta_8M.log
+TMP tmp/rl_state2_baseline_meta_8M.log -> tmp/20260319-root_loose_files/rl_state2_baseline_meta_8M.log
+TMP tmp/rl_state2_cache_meta_8M.log -> tmp/20260319-root_loose_files/rl_state2_cache_meta_8M.log
+TMP tmp/rl_state2_candidate_meta_8M.log -> tmp/20260319-root_loose_files/rl_state2_candidate_meta_8M.log
+TMP tmp/rl_state2_hit_miss_meta_8M.log -> tmp/20260319-root_loose_files/rl_state2_hit_miss_meta_8M.log
+TMP tmp/rl_state2_request_meta_8M.log -> tmp/20260319-root_loose_files/rl_state2_request_meta_8M.log
+TMP tmp/rl_state_1063_3M_bl_avgtopk.log -> tmp/20260319-root_loose_files/rl_state_1063_3M_bl_avgtopk.log
+TMP tmp/rl_state_1063_3M_bl_baseline.log -> tmp/20260319-root_loose_files/rl_state_1063_3M_bl_baseline.log
+TMP tmp/rl_state_1063_3M_bl_cache.log -> tmp/20260319-root_loose_files/rl_state_1063_3M_bl_cache.log
+TMP tmp/rl_state_1063_3M_bl_candidate.log -> tmp/20260319-root_loose_files/rl_state_1063_3M_bl_candidate.log
+TMP tmp/rl_state_1063_3M_bl_hit_miss.log -> tmp/20260319-root_loose_files/rl_state_1063_3M_bl_hit_miss.log
+TMP tmp/rl_state_1063_3M_bl_request.log -> tmp/20260319-root_loose_files/rl_state_1063_3M_bl_request.log
+TMP tmp/rl_state_1063_8M_nb_avgtopk.log -> tmp/20260319-root_loose_files/rl_state_1063_8M_nb_avgtopk.log
+TMP tmp/rl_state_1063_8M_nb_baseline.log -> tmp/20260319-root_loose_files/rl_state_1063_8M_nb_baseline.log
+TMP tmp/rl_state_1063_8M_nb_cache.log -> tmp/20260319-root_loose_files/rl_state_1063_8M_nb_cache.log
+TMP tmp/rl_state_1063_8M_nb_candidate.log -> tmp/20260319-root_loose_files/rl_state_1063_8M_nb_candidate.log
+TMP tmp/rl_state_1063_8M_nb_hit_miss.log -> tmp/20260319-root_loose_files/rl_state_1063_8M_nb_hit_miss.log
+TMP tmp/rl_state_1063_8M_nb_request.log -> tmp/20260319-root_loose_files/rl_state_1063_8M_nb_request.log
+TMP tmp/rl_state_1063_full_nb_avgtopk.log -> tmp/20260319-root_loose_files/rl_state_1063_full_nb_avgtopk.log
+TMP tmp/rl_state_1063_full_nb_baseline.log -> tmp/20260319-root_loose_files/rl_state_1063_full_nb_baseline.log
+TMP tmp/rl_state_1063_full_nb_cache.log -> tmp/20260319-root_loose_files/rl_state_1063_full_nb_cache.log
+TMP tmp/rl_state_1063_full_nb_candidate.log -> tmp/20260319-root_loose_files/rl_state_1063_full_nb_candidate.log
+TMP tmp/rl_state_1063_full_nb_hit_miss.log -> tmp/20260319-root_loose_files/rl_state_1063_full_nb_hit_miss.log
+TMP tmp/rl_state_1063_full_nb_request.log -> tmp/20260319-root_loose_files/rl_state_1063_full_nb_request.log
+TMP tmp/rl_state_baseline_meta_8M.log -> tmp/20260319-root_loose_files/rl_state_baseline_meta_8M.log
+TMP tmp/rl_state_cache_meta_8M.log -> tmp/20260319-root_loose_files/rl_state_cache_meta_8M.log
+TMP tmp/rl_state_candidate_meta_8M.log -> tmp/20260319-root_loose_files/rl_state_candidate_meta_8M.log
+TMP tmp/rl_state_hit_miss_meta_8M.log -> tmp/20260319-root_loose_files/rl_state_hit_miss_meta_8M.log
+TMP tmp/rl_verify_meta_cand192_8M.log -> tmp/20260319-root_loose_files/rl_verify_meta_cand192_8M.log
+TMP tmp/rl_wiki_3feat_randonly_3M.log -> tmp/20260319-root_loose_files/rl_wiki_3feat_randonly_3M.log
+TMP tmp/rl_wiki_3m.log -> tmp/20260319-root_loose_files/rl_wiki_3m.log
+TMP tmp/rl_wiki_additive_groupB_8M.log -> tmp/20260319-root_loose_files/rl_wiki_additive_groupB_8M.log
+TMP tmp/rl_wiki_additive_groupC_8M.log -> tmp/20260319-root_loose_files/rl_wiki_additive_groupC_8M.log
+TMP tmp/rl_wiki_full_0306_011921.log -> tmp/20260319-root_loose_files/rl_wiki_full_0306_011921.log
+TMP tmp/rl_wiki_full_0310_004758.log -> tmp/20260319-root_loose_files/rl_wiki_full_0310_004758.log
+TMP tmp/rl_wiki_full_0310_010834.log -> tmp/20260319-root_loose_files/rl_wiki_full_0310_010834.log
+TMP tmp/rl_wiki_full_tuned_0310.log -> tmp/20260319-root_loose_files/rl_wiki_full_tuned_0310.log
+TMP tmp/rl_wiki_irt_randonly_3M.log -> tmp/20260319-root_loose_files/rl_wiki_irt_randonly_3M.log
+TMP tmp/rl_wiki_irt_randonly_3M_fixed.log -> tmp/20260319-root_loose_files/rl_wiki_irt_randonly_3M_fixed.log
+TMP tmp/rl_wiki_irt_randonly_8M.log -> tmp/20260319-root_loose_files/rl_wiki_irt_randonly_8M.log
+TMP tmp/rl_wiki_log1p_rsc.log -> tmp/20260319-root_loose_files/rl_wiki_log1p_rsc.log
+TMP tmp/rl_wiki_randonly_8M.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_8M.log
+TMP tmp/rl_wiki_randonly_cand128_8M.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_cand128_8M.log
+TMP tmp/rl_wiki_randonly_cand192_8M.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_cand192_8M.log
+TMP tmp/rl_wiki_randonly_cand256_8M.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_cand256_8M.log
+TMP tmp/rl_wiki_randonly_cand32_8M.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_cand32_8M.log
+TMP tmp/rl_wiki_randonly_cand64_8M.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_cand64_8M.log
+TMP tmp/rl_wiki_randonly_fullreq.log -> tmp/20260319-root_loose_files/rl_wiki_randonly_fullreq.log
+TMP tmp/rl_wiki_recip.log -> tmp/20260319-root_loose_files/rl_wiki_recip.log
+TMP tmp/rl_wiki_recip_rsc.log -> tmp/20260319-root_loose_files/rl_wiki_recip_rsc.log
+TMP tmp/rl_wiki_struct_cand128_8M.log -> tmp/20260319-root_loose_files/rl_wiki_struct_cand128_8M.log
+TMP tmp/rl_wiki_struct_cand192_8M.log -> tmp/20260319-root_loose_files/rl_wiki_struct_cand192_8M.log
+TMP tmp/rl_wiki_struct_cand256_8M.log -> tmp/20260319-root_loose_files/rl_wiki_struct_cand256_8M.log
+TMP tmp/rl_wiki_struct_cand32_8M.log -> tmp/20260319-root_loose_files/rl_wiki_struct_cand32_8M.log
+TMP tmp/rl_wiki_struct_cand64_8M.log -> tmp/20260319-root_loose_files/rl_wiki_struct_cand64_8M.log
+TMP tmp/rl_wiki_struct_cand96_8M.log -> tmp/20260319-root_loose_files/rl_wiki_struct_cand96_8M.log
+TMP tmp/root_logs_candidates_20260318.txt -> tmp/20260319-maintenance_indexes/root_logs_candidates_20260318.txt
+TMP tmp/root_misc_cleanup_candidates_20260318.txt -> tmp/20260319-maintenance_indexes/root_misc_cleanup_candidates_20260318.txt
+TMP tmp/run_1063_full_nb_only.sh -> tmp/20260319-root_loose_files/run_1063_full_nb_only.sh
+TMP tmp/run_1063_test.sh -> tmp/20260319-root_loose_files/run_1063_test.sh
+TMP tmp/run_3feat_randonly.sh -> tmp/20260319-root_loose_files/run_3feat_randonly.sh
+TMP tmp/run_adaptive_test.sh -> tmp/20260319-root_loose_files/run_adaptive_test.sh
+TMP tmp/run_additive.sh -> tmp/20260319-root_loose_files/run_additive.sh
+TMP tmp/run_async_nb_full.log -> tmp/20260319-root_loose_files/run_async_nb_full.log
+TMP tmp/run_async_nb_full_v2.log -> tmp/20260319-root_loose_files/run_async_nb_full_v2.log
+TMP tmp/run_interval_sweep_1063.sh -> tmp/20260319-root_loose_files/run_interval_sweep_1063.sh
+TMP tmp/run_irt_randonly.sh -> tmp/20260319-root_loose_files/run_irt_randonly.sh
+TMP tmp/run_randonly_fullreq.sh -> tmp/20260319-root_loose_files/run_randonly_fullreq.sh
+TMP tmp/run_randonly_sweep.sh -> tmp/20260319-root_loose_files/run_randonly_sweep.sh
+TMP tmp/run_randonly_sweep_refined.sh -> tmp/20260319-root_loose_files/run_randonly_sweep_refined.sh
+TMP tmp/run_state_sweep.sh -> tmp/20260319-root_loose_files/run_state_sweep.sh
+TMP tmp/run_state_sweep_1063.sh -> tmp/20260319-root_loose_files/run_state_sweep_1063.sh
+TMP tmp/run_struct_cand96.sh -> tmp/20260319-root_loose_files/run_struct_cand96.sh
+TMP tmp/run_struct_sweep.sh -> tmp/20260319-root_loose_files/run_struct_sweep.sh
+TMP tmp/run_verify_refactor.sh -> tmp/20260319-root_loose_files/run_verify_refactor.sh
+TMP tmp/s19_meta_retest_0312_0028.log -> tmp/20260319-root_loose_files/s19_meta_retest_0312_0028.log
+TMP tmp/s19_meta_score_eff_0312_0042.log -> tmp/20260319-root_loose_files/s19_meta_score_eff_0312_0042.log
+TMP tmp/s19_repro_1063.log -> tmp/20260319-root_loose_files/s19_repro_1063.log
+TMP tmp/s3fifo_1063_full.txt -> tmp/20260319-root_loose_files/s3fifo_1063_full.txt
+TMP tmp/s3fifo_meta_full.txt -> tmp/20260319-root_loose_files/s3fifo_meta_full.txt
+TMP tmp/s3fifo_wiki_full.txt -> tmp/20260319-root_loose_files/s3fifo_wiki_full.txt
+TMP tmp/sac_cpd_log1p_softmax_ent005_3m.log -> tmp/20260319-root_loose_files/sac_cpd_log1p_softmax_ent005_3m.log
+TMP tmp/sac_cpd_log1p_softmax_ent005_8m.log -> tmp/20260319-root_loose_files/sac_cpd_log1p_softmax_ent005_8m.log
+TMP tmp/sac_log1p0_softmax1_8m.log -> tmp/20260319-root_loose_files/sac_log1p0_softmax1_8m.log
+TMP tmp/sac_log1p_softmax_3m.log -> tmp/20260319-root_loose_files/sac_log1p_softmax_3m.log
+TMP tmp/smoke_random_only.log -> tmp/20260319-root_loose_files/smoke_random_only.log
+TMP tmp/speed_rl_10m.log -> tmp/20260319-root_loose_files/speed_rl_10m.log
+TMP tmp/speed_test.log -> tmp/20260319-root_loose_files/speed_test.log
+TMP tmp/speed_test_5M.log -> tmp/20260319-root_loose_files/speed_test_5M.log
+TMP tmp/speed_test_rl.log -> tmp/20260319-root_loose_files/speed_test_rl.log
+TMP tmp/struct_cand96_run.log -> tmp/20260319-root_loose_files/struct_cand96_run.log
+TMP tmp/struct_sweep_results.csv -> tmp/20260319-root_loose_files/struct_sweep_results.csv
+TMP tmp/struct_sweep_run.log -> tmp/20260319-root_loose_files/struct_sweep_run.log
+TMP tmp/sweep_1063_master.log -> tmp/20260319-root_loose_files/sweep_1063_master.log
+TMP tmp/sweep_v2_master.log -> tmp/20260319-root_loose_files/sweep_v2_master.log
+TMP tmp/sweep_v3_master.log -> tmp/20260319-root_loose_files/sweep_v3_master.log
+TMP tmp/sweeps_dirs_all_20260318.txt -> tmp/20260319-maintenance_indexes/sweeps_dirs_all_20260318.txt
+TMP tmp/sweeps_dirs_need_prefix_20260318.txt -> tmp/20260319-maintenance_indexes/sweeps_dirs_need_prefix_20260318.txt
+TMP tmp/sweeps_rename_map_20260318.txt -> tmp/20260319-maintenance_indexes/sweeps_rename_map_20260318.txt
+TMP tmp/tail_sample_test.log -> tmp/20260319-root_loose_files/tail_sample_test.log
+TMP tmp/test_1063_adaptive.log -> tmp/20260319-root_loose_files/test_1063_adaptive.log
+TMP tmp/test_L0C1_1063_3M.log -> tmp/20260319-root_loose_files/test_L0C1_1063_3M.log
+TMP tmp/test_L1C1_wiki8M_freqinit.log -> tmp/20260319-root_loose_files/test_L1C1_wiki8M_freqinit.log
+TMP tmp/test_L1C1_wiki8M_freqinit_v2.log -> tmp/20260319-root_loose_files/test_L1C1_wiki8M_freqinit_v2.log
+TMP tmp/test_L1C1_wiki8M_rsc128.log -> tmp/20260319-root_loose_files/test_L1C1_wiki8M_rsc128.log
+TMP tmp/test_LR_C1_1063_3M.log -> tmp/20260319-root_loose_files/test_LR_C1_1063_3M.log
+TMP tmp/test_LR_C1_wiki8M.log -> tmp/20260319-root_loose_files/test_LR_C1_wiki8M.log
+TMP tmp/test_auto_1063_3m.log -> tmp/20260319-root_loose_files/test_auto_1063_3m.log
+TMP tmp/test_s0_r64.log -> tmp/20260319-root_loose_files/test_s0_r64.log
+TMP tmp/test_s0_r64_nrl.log -> tmp/20260319-root_loose_files/test_s0_r64_nrl.log
+TMP tmp/test_s0_r64_pf16.log -> tmp/20260319-root_loose_files/test_s0_r64_pf16.log
+TMP tmp/test_s0_r64_pure.log -> tmp/20260319-root_loose_files/test_s0_r64_pure.log
+TMP tmp/test_struct0_rand64.log -> tmp/20260319-root_loose_files/test_struct0_rand64.log
+TMP tmp/tmp_dirs_all_20260318.txt -> tmp/20260319-maintenance_indexes/tmp_dirs_all_20260318.txt
+TMP tmp/tmp_dirs_need_prefix_20260318.txt -> tmp/20260319-maintenance_indexes/tmp_dirs_need_prefix_20260318.txt
+TMP tmp/tmp_rename_map_20260318.txt -> tmp/20260319-maintenance_indexes/tmp_rename_map_20260318.txt
+TMP tmp/wiki_3lcache_bmr.txt -> tmp/20260319-root_loose_files/wiki_3lcache_bmr.txt
+TMP tmp/wiki_3lcache_omr.txt -> tmp/20260319-root_loose_files/wiki_3lcache_omr.txt
+TMP tmp/wiki_3m_baseline.log -> tmp/20260319-root_loose_files/wiki_3m_baseline.log
+TMP tmp/wiki_3m_irt0.log -> tmp/20260319-root_loose_files/wiki_3m_irt0.log
+TMP tmp/wiki_3m_mlp.log -> tmp/20260319-root_loose_files/wiki_3m_mlp.log
+TMP tmp/wiki_3m_nosoftmax.log -> tmp/20260319-root_loose_files/wiki_3m_nosoftmax.log
+TMP tmp/wiki_3m_penalty.log -> tmp/20260319-root_loose_files/wiki_3m_penalty.log
+TMP tmp/wiki_8m_A_orig_0310_102718.log -> tmp/20260319-root_loose_files/wiki_8m_A_orig_0310_102718.log
+TMP tmp/wiki_8m_B_tuned_0310_102718.log -> tmp/20260319-root_loose_files/wiki_8m_B_tuned_0310_102718.log
+TMP tmp/wiki_8m_ab_nohup.log -> tmp/20260319-root_loose_files/wiki_8m_ab_nohup.log
+TMP tmp/wiki_8m_norm0_rl.log -> tmp/20260319-root_loose_files/wiki_8m_norm0_rl.log
+TMP tmp/wiki_8m_norm1_rl.log -> tmp/20260319-root_loose_files/wiki_8m_norm1_rl.log
+TMP tmp/wiki_decay_adaptive_v3.log -> tmp/20260319-root_loose_files/wiki_decay_adaptive_v3.log
+TMP tmp/wiki_decay_adaptive_v3_uf.log -> tmp/20260319-root_loose_files/wiki_decay_adaptive_v3_uf.log
+TMP tmp/wiki_decay_adaptive_v4.log -> tmp/20260319-root_loose_files/wiki_decay_adaptive_v4.log
+TMP tmp/wiki_decay_adaptive_v5.log -> tmp/20260319-root_loose_files/wiki_decay_adaptive_v5.log
+TMP tmp/wiki_initw_freq_run.log -> tmp/20260319-root_loose_files/wiki_initw_freq_run.log
+TMP tmp/wiki_log1p0_cpd0_8m.log -> tmp/20260319-root_loose_files/wiki_log1p0_cpd0_8m.log
+TMP tmp/wiki_log1p0_cpd0_ema09_8m.log -> tmp/20260319-root_loose_files/wiki_log1p0_cpd0_ema09_8m.log
+TMP tmp/wiki_log1p0_cpd0_lr1e4_8m.log -> tmp/20260319-root_loose_files/wiki_log1p0_cpd0_lr1e4_8m.log
+TMP tmp/wiki_log1p0_cpd0_net128_buf50k_8m.log -> tmp/20260319-root_loose_files/wiki_log1p0_cpd0_net128_buf50k_8m.log
+TMP tmp/wiki_log1p0_cpd1_8m.log -> tmp/20260319-root_loose_files/wiki_log1p0_cpd1_8m.log
+TMP tmp/wiki_nodecay_baseline_check.log -> tmp/20260319-root_loose_files/wiki_nodecay_baseline_check.log
+TMP tmp/wiki_perf0_async.log -> tmp/20260319-root_loose_files/wiki_perf0_async.log
+TMP tmp/wiki_r96s96_decay_async_release_0312.log -> tmp/20260319-root_loose_files/wiki_r96s96_decay_async_release_0312.log
+TMP tmp/wiki_rl_8m.log -> tmp/20260319-root_loose_files/wiki_rl_8m.log
+TMP tmp/wiki_rl_ent001_8m.log -> tmp/20260319-root_loose_files/wiki_rl_ent001_8m.log
+moved_root_logs=0

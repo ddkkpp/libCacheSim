@@ -1,0 +1,5 @@
+3.0M	docs
+29M	sweeps
+9.0G	tmp
+4.0M	scripts
+316G	logs

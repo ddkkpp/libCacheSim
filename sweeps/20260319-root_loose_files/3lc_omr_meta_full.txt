@@ -1,0 +1,10 @@
+[32m[INFO]  03-06-2026 01:00:07 cli_reader_utils.c:259  (tid=128620581305664): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:00:29 cli_reader_utils.c:288  (tid=128620581305664): working set size: 12262537 object 181175213422620 byte
+[0m[32m[INFO]  03-06-2026 01:00:29 cli_parser.c:558  (tid=128620581305664): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, 3LCache, eviction-params: objective=object-miss-ratio
+[0m[36m[DEBUG] 03-06-2026 01:00:29 request.h:125  (tid=128620581305664): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:00:29 request.h:125  (tid=128620581305664): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[32m[INFO]  03-06-2026 01:00:49    sim.c:61   (tid=128620581305664): meta_reag.oracleGeneral.zst ThreeLCache-OMR 24.00 hour: 5518404 requests, miss ratio 0.3520, interval miss ratio 0.3520
+[0m[32m[INFO]  03-06-2026 01:01:27    sim.c:61   (tid=128620581305664): meta_reag.oracleGeneral.zst ThreeLCache-OMR 48.00 hour: 11176128 requests, miss ratio 0.3795, interval miss ratio 0.4063
+[0m[32m[INFO]  03-06-2026 01:01:41    sim.c:61   (tid=128620581305664): meta_reag.oracleGeneral.zst ThreeLCache-OMR 72.00 hour: 16602126 requests, miss ratio 0.3928, interval miss ratio 0.4202
+[0m[32m[INFO]  03-06-2026 01:01:54    sim.c:61   (tid=128620581305664): meta_reag.oracleGeneral.zst ThreeLCache-OMR 96.00 hour: 22193191 requests, miss ratio 0.3985, interval miss ratio 0.4153
+[0m

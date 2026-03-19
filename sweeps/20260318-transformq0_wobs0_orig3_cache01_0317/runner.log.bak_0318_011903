@@ -1,0 +1,23 @@
+[start] transform_quantile=0 + weights_in_obs=0 + hitmiss=0 + orig3 + cache=0.1
+[prebuild] force release + LOH_INCLUDE_HIT_MISS_FEATURES=0
+[prebuild] done
+[queue] active=1/3 action=start case=1063
+[queue] active=2/3 action=start case=wiki
+[queue] active=3/3 action=start case=meta
+[case-start] wiki_transformq0_wobs0_cache01
+[case-start] meta_transformq0_wobs0_cache01
+[case-start] 1063_transformq0_wobs0_cache01
+[case-done] meta_transformq0_wobs0_cache01 status=ok rc=0 final_mr=0.269180 final_bmr=0.153644 final_mqps=0.56
+[queue] active=2/3 action=finish_one
+[start] transform_quantile=0 + weights_in_obs=0 + hitmiss=0 + orig3 + cache=0.1
+[prebuild] force release + LOH_INCLUDE_HIT_MISS_FEATURES=0
+[prebuild] done
+[queue] active=1/3 action=start case=1063
+[queue] active=2/3 action=start case=wiki
+[queue] active=3/3 action=start case=meta
+[case-start] 1063_transformq0_wobs0_cache01
+[case-start] wiki_transformq0_wobs0_cache01
+[case-start] meta_transformq0_wobs0_cache01
+[case-done] wiki_transformq0_wobs0_cache01 status=failed rc=130 final_mr=NA final_bmr=NA final_mqps=NA
+[case-done] meta_transformq0_wobs0_cache01 status=failed rc=130 final_mr=NA final_bmr=NA final_mqps=NA
+[case-done] 1063_transformq0_wobs0_cache01 status=failed rc=130 final_mr=NA final_bmr=NA final_mqps=NA

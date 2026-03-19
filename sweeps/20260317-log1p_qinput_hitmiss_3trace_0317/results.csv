@@ -1,0 +1,11 @@
+trace,status,rc,final_mr,final_bmr,final_mqps,log_path
+meta,failed,143,NA,NA,NA,tmp/log1p_qinput_hitmiss_3trace_0317/meta_log1p_qinput_log1p_hitmiss.log
+1063,failed,143,NA,NA,NA,tmp/log1p_qinput_hitmiss_3trace_0317/1063_log1p_qinput_log1p_hitmiss.log
+wiki,failed,143,NA,NA,NA,tmp/log1p_qinput_hitmiss_3trace_0317/wiki_log1p_qinput_log1p_hitmiss.log
+meta,ok,0,0.269197,0.153780,0.49,tmp/log1p_qinput_hitmiss_3trace_0317/meta_log1p_qinput_log1p_hitmiss.log
+meta,ok,0,0.269185,0.153719,0.32,tmp/log1p_qinput_hitmiss_3trace_0317/meta_log1p_qinput_log1p_hitmiss.log
+meta,ok,0,0.269184,0.153641,0.33,tmp/log1p_qinput_hitmiss_3trace_0317/meta_log1p_qinput_log1p_hitmiss.log
+1063,failed,130,NA,NA,NA,tmp/log1p_qinput_hitmiss_3trace_0317/1063_log1p_qinput_log1p_hitmiss.log
+wiki,failed,130,NA,NA,NA,tmp/log1p_qinput_hitmiss_3trace_0317/wiki_log1p_qinput_log1p_hitmiss.log
+1063,ok,0,0.022793,0.024137,0.27,tmp/log1p_qinput_hitmiss_3trace_0317/1063_log1p_qinput_log1p_hitmiss.log
+wiki,ok,0,0.173248,0.139207,0.07,tmp/log1p_qinput_hitmiss_3trace_0317/wiki_log1p_qinput_log1p_hitmiss_rerun_0317.log

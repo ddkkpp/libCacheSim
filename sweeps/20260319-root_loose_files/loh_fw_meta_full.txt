@@ -1,0 +1,10 @@
+[32m[INFO]  03-06-2026 01:00:07 cli_reader_utils.c:259  (tid=137721942216000): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:00:33 cli_reader_utils.c:288  (tid=137721942216000): working set size: 12262537 object 181175213422620 byte
+[0m[32m[INFO]  03-06-2026 01:00:33 cli_parser.c:558  (tid=137721942216000): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-06-2026 01:00:33 request.h:125  (tid=137721942216000): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:00:33 request.h:125  (tid=137721942216000): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[32m[INFO]  03-06-2026 01:00:42    sim.c:61   (tid=137721942216000): meta_reag.oracleGeneral.zst LOH-OMR 24.00 hour: 5518404 requests, miss ratio 0.3471, interval miss ratio 0.3471
+[0m[32m[INFO]  03-06-2026 01:00:52    sim.c:61   (tid=137721942216000): meta_reag.oracleGeneral.zst LOH-OMR 48.00 hour: 11176128 requests, miss ratio 0.3214, interval miss ratio 0.2964
+[0m[32m[INFO]  03-06-2026 01:01:02    sim.c:61   (tid=137721942216000): meta_reag.oracleGeneral.zst LOH-OMR 72.00 hour: 16602126 requests, miss ratio 0.3110, interval miss ratio 0.2894
+[0m[32m[INFO]  03-06-2026 01:01:35    sim.c:61   (tid=137721942216000): meta_reag.oracleGeneral.zst LOH-OMR 96.00 hour: 22193191 requests, miss ratio 0.3035, interval miss ratio 0.2813
+[0m

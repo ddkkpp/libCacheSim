@@ -1,0 +1,220 @@
+=== Wiki no-decay ===
+[32m[INFO]  03-11-2026 00:10:14 cli_reader_utils.c:259  (tid=132838933478720): calculating working set size...
+[0m[32m[INFO]  03-11-2026 00:10:14 cli_reader_utils.c:283  (tid=132838933478720): estimated working set size (0.09 sample ratio): 1185558 object 30033881966 byte
+[0m[32m[INFO]  03-11-2026 00:10:14 cli_parser.c:558  (tid=132838933478720): trace path: data/WikiCDN/wiki_2019t.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/wiki_2019t.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-11-2026 00:10:14 request.h:125  (tid=132838933478720): req clock_time 0, id 868289764, size 69334, op nop, valid 1
+[0m[36m[DEBUG] 03-11-2026 00:10:14 request.h:125  (tid=132838933478720): req clock_time 0, id 2001638253, size 64248, op nop, valid 1
+[0m[LOH INIT] Initializing LOH (unified version with penalty support)
+=== LOH Cache Initialize ===
+LOH Debug Level: 0
+Cache size: 3003388196
+[LOH INIT] === Environment Variables ===
+  LOH_SHM_KEY=(default 9876)
+  LOH_ENABLE_SEMAPHORE=(unset), LOH_DISABLE_SEMAPHORE=(unused)
+  LOH_FEATURE_LOG1P_RAW=(unset), LOH_FEATURE_LOG1P_RECIPROCAL=1
+  LOH_SCORE_MODEL=(default linear), LOH_MLP_HIDDEN=(default 16)
+  Build-time dims: MISSRATIO=2, HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> CONTEXT_DIM=2
+  LOH_STRUCTURED_CANDIDATES=(unset) (default=96, limit=2048)
+LOH: structured candidates = 96, random candidates = 0 (MAX_CANDIDATES_LIMIT = 2048)
+[LOH INIT] LOH_FIXED_WEIGHTS from env: [0.167, 0.167, 0.167, 0.167, 0.167, 0.167, 0.000]
+[LOH INIT] enable_rl=0 (after env)
+[LOH INIT] Wait mode: default (BLOCKED)
+[LOH INIT] Size data structure: SIZE_BUCKETS (全量分桶)
+[LOH INIT] feature mode: LOG1P=0, RECIPROCAL=1, NORMALIZE=0
+[LOH INIT] Feature Norm Max: Recency=1.3e+08, Freq=1.0e+06, Size=1.6e+10, IRT=1.3e+08
+[LOH INIT] Heuristic signs: ENABLED
+[LOH INIT] Score feature mode: USE_IRT=0, USE_COMPOUND=1, COMPOUND_V2=0
+[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)
+[LOH INIT] Random sampling: COUNT=64
+[LOH INIT] Runtime state dims: HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> ACTIVE=2/2
+[LOH INIT] rl_update_interval=500, enable_rl=0, sem_requested=1
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.588880, byte miss ratio 0.478264, throughput 0.15 MQPS
+
+real	0m20.632s
+user	0m20.500s
+sys	0m0.129s
+=== Wiki with decay ===
+[32m[INFO]  03-11-2026 00:10:34 cli_reader_utils.c:259  (tid=136517375728960): calculating working set size...
+[0m[32m[INFO]  03-11-2026 00:10:35 cli_reader_utils.c:283  (tid=136517375728960): estimated working set size (0.09 sample ratio): 1185558 object 30033881966 byte
+[0m[32m[INFO]  03-11-2026 00:10:35 cli_parser.c:558  (tid=136517375728960): trace path: data/WikiCDN/wiki_2019t.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/wiki_2019t.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-11-2026 00:10:35 request.h:125  (tid=136517375728960): req clock_time 0, id 868289764, size 69334, op nop, valid 1
+[0m[36m[DEBUG] 03-11-2026 00:10:35 request.h:125  (tid=136517375728960): req clock_time 0, id 2001638253, size 64248, op nop, valid 1
+[0m[LOH INIT] Initializing LOH (unified version with penalty support)
+=== LOH Cache Initialize ===
+LOH Debug Level: 0
+Cache size: 3003388196
+[LOH INIT] === Environment Variables ===
+  LOH_SHM_KEY=(default 9876)
+  LOH_ENABLE_SEMAPHORE=(unset), LOH_DISABLE_SEMAPHORE=(unused)
+  LOH_FEATURE_LOG1P_RAW=(unset), LOH_FEATURE_LOG1P_RECIPROCAL=1
+  LOH_SCORE_MODEL=(default linear), LOH_MLP_HIDDEN=(default 16)
+  Build-time dims: MISSRATIO=2, HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> CONTEXT_DIM=2
+  LOH_STRUCTURED_CANDIDATES=(unset) (default=96, limit=2048)
+LOH: structured candidates = 96, random candidates = 0 (MAX_CANDIDATES_LIMIT = 2048)
+[LOH INIT] LOH_FIXED_WEIGHTS from env: [0.167, 0.167, 0.167, 0.167, 0.167, 0.167, 0.000]
+[LOH INIT] enable_rl=0 (after env)
+[LOH INIT] Wait mode: default (BLOCKED)
+[LOH INIT] Size data structure: SIZE_BUCKETS (全量分桶)
+[LOH INIT] feature mode: LOG1P=0, RECIPROCAL=1, NORMALIZE=0
+[LOH INIT] Feature Norm Max: Recency=1.3e+08, Freq=1.0e+06, Size=1.6e+10, IRT=1.3e+08
+[LOH INIT] Heuristic signs: ENABLED
+[LOH INIT] Score feature mode: USE_IRT=0, USE_COMPOUND=1, COMPOUND_V2=0
+[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)
+[LOH INIT] Random sampling: COUNT=64
+[LOH INIT] Decay sampling ENABLED for recency/freq sources: decay=0.9900
+[LOH INIT]   SIZE source: always picks absolute largest (no decay, avoids cascading evictions)
+[LOH INIT]   Random sampling remains UNIFORM (not affected by decay)
+[LOH INIT] Runtime state dims: HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> ACTIVE=2/2
+[LOH INIT] rl_update_interval=500, enable_rl=0, sem_requested=1
+data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     3GiB,          3000000 req, miss ratio 0.588873, byte miss ratio 0.478285, throughput 0.15 MQPS
+
+real	0m20.914s
+user	0m20.788s
+sys	0m0.127s
+=== 1063 no-decay ===
+[32m[INFO]  03-11-2026 00:10:55 cli_reader_utils.c:259  (tid=132987434839360): calculating working set size...
+[0m[32m[INFO]  03-11-2026 00:10:56 cli_reader_utils.c:283  (tid=132987434839360): estimated working set size (0.09 sample ratio): 521829 object 23721432064 byte
+[0m[32m[INFO]  03-11-2026 00:10:56 cli_parser.c:558  (tid=132987434839360): trace path: data/TencentCBS/1063.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/1063.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-11-2026 00:10:56 request.h:125  (tid=132987434839360): req clock_time 1538323199, id 11687814048419840, size 315392, op nop, valid 1
+[0m[36m[DEBUG] 03-11-2026 00:10:56 request.h:125  (tid=132987434839360): req clock_time 1538323199, id 11687814050893824, size 12288, op nop, valid 1
+[0m[LOH INIT] Initializing LOH (unified version with penalty support)
+=== LOH Cache Initialize ===
+LOH Debug Level: 0
+Cache size: 2372143206
+[LOH INIT] === Environment Variables ===
+  LOH_SHM_KEY=(default 9876)
+  LOH_ENABLE_SEMAPHORE=(unset), LOH_DISABLE_SEMAPHORE=(unused)
+  LOH_FEATURE_LOG1P_RAW=(unset), LOH_FEATURE_LOG1P_RECIPROCAL=(unset)
+  LOH_SCORE_MODEL=(default linear), LOH_MLP_HIDDEN=(default 16)
+  Build-time dims: MISSRATIO=2, HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> CONTEXT_DIM=2
+  LOH_STRUCTURED_CANDIDATES=(unset) (default=96, limit=2048)
+LOH: structured candidates = 96, random candidates = 0 (MAX_CANDIDATES_LIMIT = 2048)
+[LOH INIT] LOH_FIXED_WEIGHTS from env: [0.167, 0.167, 0.167, 0.167, 0.167, 0.167, 0.000]
+[LOH INIT] enable_rl=0 (after env)
+[LOH INIT] Wait mode: default (BLOCKED)
+[LOH INIT] Size data structure: SIZE_BUCKETS (全量分桶)
+[LOH INIT] feature mode: LOG1P=1, RECIPROCAL=0, NORMALIZE=0
+[LOH INIT] Feature Norm Max: Recency=1.3e+08, Freq=1.0e+06, Size=1.6e+10, IRT=1.3e+08
+[LOH INIT] Heuristic signs: ENABLED
+[LOH INIT] Score feature mode: USE_IRT=0, USE_COMPOUND=1, COMPOUND_V2=0
+[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)
+[LOH INIT] Random sampling: COUNT=64
+[LOH INIT] Runtime state dims: HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> ACTIVE=2/2
+[LOH INIT] rl_update_interval=500, enable_rl=0, sem_requested=1
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.283552, byte miss ratio 0.330641, throughput 0.32 MQPS
+
+real	0m10.009s
+user	0m9.809s
+sys	0m0.197s
+=== 1063 with decay ===
+[32m[INFO]  03-11-2026 00:11:05 cli_reader_utils.c:259  (tid=125958924258624): calculating working set size...
+[0m[32m[INFO]  03-11-2026 00:11:05 cli_reader_utils.c:283  (tid=125958924258624): estimated working set size (0.09 sample ratio): 521829 object 23721432064 byte
+[0m[32m[INFO]  03-11-2026 00:11:05 cli_parser.c:558  (tid=125958924258624): trace path: data/TencentCBS/1063.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/1063.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-11-2026 00:11:05 request.h:125  (tid=125958924258624): req clock_time 1538323199, id 11687814048419840, size 315392, op nop, valid 1
+[0m[36m[DEBUG] 03-11-2026 00:11:05 request.h:125  (tid=125958924258624): req clock_time 1538323199, id 11687814050893824, size 12288, op nop, valid 1
+[0m[LOH INIT] Initializing LOH (unified version with penalty support)
+=== LOH Cache Initialize ===
+LOH Debug Level: 0
+Cache size: 2372143206
+[LOH INIT] === Environment Variables ===
+  LOH_SHM_KEY=(default 9876)
+  LOH_ENABLE_SEMAPHORE=(unset), LOH_DISABLE_SEMAPHORE=(unused)
+  LOH_FEATURE_LOG1P_RAW=(unset), LOH_FEATURE_LOG1P_RECIPROCAL=(unset)
+  LOH_SCORE_MODEL=(default linear), LOH_MLP_HIDDEN=(default 16)
+  Build-time dims: MISSRATIO=2, HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> CONTEXT_DIM=2
+  LOH_STRUCTURED_CANDIDATES=(unset) (default=96, limit=2048)
+LOH: structured candidates = 96, random candidates = 0 (MAX_CANDIDATES_LIMIT = 2048)
+[LOH INIT] LOH_FIXED_WEIGHTS from env: [0.167, 0.167, 0.167, 0.167, 0.167, 0.167, 0.000]
+[LOH INIT] enable_rl=0 (after env)
+[LOH INIT] Wait mode: default (BLOCKED)
+[LOH INIT] Size data structure: SIZE_BUCKETS (全量分桶)
+[LOH INIT] feature mode: LOG1P=1, RECIPROCAL=0, NORMALIZE=0
+[LOH INIT] Feature Norm Max: Recency=1.3e+08, Freq=1.0e+06, Size=1.6e+10, IRT=1.3e+08
+[LOH INIT] Heuristic signs: ENABLED
+[LOH INIT] Score feature mode: USE_IRT=0, USE_COMPOUND=1, COMPOUND_V2=0
+[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)
+[LOH INIT] Random sampling: COUNT=64
+[LOH INIT] Decay sampling ENABLED for recency/freq sources: decay=0.9900
+[LOH INIT]   SIZE source: always picks absolute largest (no decay, avoids cascading evictions)
+[LOH INIT]   Random sampling remains UNIFORM (not affected by decay)
+[LOH INIT] Runtime state dims: HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> ACTIVE=2/2
+[LOH INIT] rl_update_interval=500, enable_rl=0, sem_requested=1
+data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     2GiB,          3000000 req, miss ratio 0.283487, byte miss ratio 0.330756, throughput 0.34 MQPS
+
+real	0m9.193s
+user	0m9.012s
+sys	0m0.180s
+=== Meta no-decay ===
+[32m[INFO]  03-11-2026 00:11:14 cli_reader_utils.c:259  (tid=132471639235904): calculating working set size...
+[0m[32m[INFO]  03-11-2026 00:11:15 cli_reader_utils.c:288  (tid=132471639235904): working set size: 1103187 object 15909374544175 byte
+[0m[32m[INFO]  03-11-2026 00:11:15 cli_parser.c:558  (tid=132471639235904): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-11-2026 00:11:15 request.h:125  (tid=132471639235904): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-11-2026 00:11:15 request.h:125  (tid=132471639235904): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[LOH INIT] Initializing LOH (unified version with penalty support)
+=== LOH Cache Initialize ===
+LOH Debug Level: 0
+Cache size: 1590937454417
+[LOH INIT] === Environment Variables ===
+  LOH_SHM_KEY=(default 9876)
+  LOH_ENABLE_SEMAPHORE=(unset), LOH_DISABLE_SEMAPHORE=(unused)
+  LOH_FEATURE_LOG1P_RAW=(unset), LOH_FEATURE_LOG1P_RECIPROCAL=(unset)
+  LOH_SCORE_MODEL=(default linear), LOH_MLP_HIDDEN=(default 16)
+  Build-time dims: MISSRATIO=2, HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> CONTEXT_DIM=2
+  LOH_STRUCTURED_CANDIDATES=(unset) (default=96, limit=2048)
+LOH: structured candidates = 96, random candidates = 0 (MAX_CANDIDATES_LIMIT = 2048)
+[LOH INIT] LOH_FIXED_WEIGHTS from env: [0.167, 0.167, 0.167, 0.167, 0.167, 0.167, 0.000]
+[LOH INIT] enable_rl=0 (after env)
+[LOH INIT] Wait mode: default (BLOCKED)
+[LOH INIT] Size data structure: SIZE_BUCKETS (全量分桶)
+[LOH INIT] feature mode: LOG1P=1, RECIPROCAL=0, NORMALIZE=0
+[LOH INIT] Feature Norm Max: Recency=1.3e+08, Freq=1.0e+06, Size=1.6e+10, IRT=1.3e+08
+[LOH INIT] Heuristic signs: ENABLED
+[LOH INIT] Score feature mode: USE_IRT=0, USE_COMPOUND=1, COMPOUND_V2=0
+[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)
+[LOH INIT] Random sampling: COUNT=64
+[LOH INIT] Runtime state dims: HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> ACTIVE=2/2
+[LOH INIT] rl_update_interval=500, enable_rl=0, sem_requested=1
+data/MetaCDN/meta_reag.oracleGeneral.zst LOH-OMR cache size     1TiB,          3000000 req, miss ratio 0.367991, byte miss ratio 0.217271, throughput 1.72 MQPS
+
+real	0m2.564s
+user	0m2.302s
+sys	0m0.233s
+=== Meta with decay ===
+[32m[INFO]  03-11-2026 00:11:17 cli_reader_utils.c:259  (tid=132154068643136): calculating working set size...
+[0m[32m[INFO]  03-11-2026 00:11:17 cli_reader_utils.c:288  (tid=132154068643136): working set size: 1103187 object 15909374544175 byte
+[0m[32m[INFO]  03-11-2026 00:11:17 cli_parser.c:558  (tid=132154068643136): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LOH
+[0m[36m[DEBUG] 03-11-2026 00:11:17 request.h:125  (tid=132154068643136): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-11-2026 00:11:17 request.h:125  (tid=132154068643136): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[LOH INIT] Initializing LOH (unified version with penalty support)
+=== LOH Cache Initialize ===
+LOH Debug Level: 0
+Cache size: 1590937454417
+[LOH INIT] === Environment Variables ===
+  LOH_SHM_KEY=(default 9876)
+  LOH_ENABLE_SEMAPHORE=(unset), LOH_DISABLE_SEMAPHORE=(unused)
+  LOH_FEATURE_LOG1P_RAW=(unset), LOH_FEATURE_LOG1P_RECIPROCAL=(unset)
+  LOH_SCORE_MODEL=(default linear), LOH_MLP_HIDDEN=(default 16)
+  Build-time dims: MISSRATIO=2, HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> CONTEXT_DIM=2
+  LOH_STRUCTURED_CANDIDATES=(unset) (default=96, limit=2048)
+LOH: structured candidates = 96, random candidates = 0 (MAX_CANDIDATES_LIMIT = 2048)
+[LOH INIT] LOH_FIXED_WEIGHTS from env: [0.167, 0.167, 0.167, 0.167, 0.167, 0.167, 0.000]
+[LOH INIT] enable_rl=0 (after env)
+[LOH INIT] Wait mode: default (BLOCKED)
+[LOH INIT] Size data structure: SIZE_BUCKETS (全量分桶)
+[LOH INIT] feature mode: LOG1P=1, RECIPROCAL=0, NORMALIZE=0
+[LOH INIT] Feature Norm Max: Recency=1.3e+08, Freq=1.0e+06, Size=1.6e+10, IRT=1.3e+08
+[LOH INIT] Heuristic signs: ENABLED
+[LOH INIT] Score feature mode: USE_IRT=0, USE_COMPOUND=1, COMPOUND_V2=0
+[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)
+[LOH INIT] Random sampling: COUNT=64
+[LOH INIT] Decay sampling ENABLED for recency/freq sources: decay=0.9900
+[LOH INIT]   SIZE source: always picks absolute largest (no decay, avoids cascading evictions)
+[LOH INIT]   Random sampling remains UNIFORM (not affected by decay)
+[LOH INIT] Runtime state dims: HIT_MISS=0, CACHE=0, CAND=0, TOPK=0, AVGTOPK=0, REQUEST=0 -> ACTIVE=2/2
+[LOH INIT] rl_update_interval=500, enable_rl=0, sem_requested=1
+data/MetaCDN/meta_reag.oracleGeneral.zst LOH-OMR cache size     1TiB,          3000000 req, miss ratio 0.367995, byte miss ratio 0.216613, throughput 1.57 MQPS
+
+real	0m2.592s
+user	0m2.377s
+sys	0m0.215s
+=== ALL DONE ===

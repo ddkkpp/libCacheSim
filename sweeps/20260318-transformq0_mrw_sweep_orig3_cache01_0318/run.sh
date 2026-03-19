@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -u
+
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
+cd "$ROOT_DIR"
+
+OUT_DIR="tmp/transformq0_mrw_sweep_orig3_cache01_0318"
+RESULTS_CSV="$OUT_DIR/results.csv"
+RUNNER_LOG="$OUT_DIR/runner.log"
+DOC_PATH="docs/20260317-FULL_EXPERIMENT_RESULTS.md"
+PARALLEL="${PARALLEL:-3}"
+CACHE_SIZE="0.1"
+
+mkdir -p "$OUT_DIR"
+
+if [ ! -f "$RESULTS_CSV" ]; then
+cat > "$RESULTS_CSV" <<'CSV'
+weight,trace,status,rc,final_mr,final_bmr,final_mqps,log_path
+CSV
+fi
+
+echo "[start] transform_quantile=0 + mrw sweep 0.0..1.0 step0.1 + orig3 + cache=0.1" >> "$RUNNER_LOG"
+
+echo "[prebuild] force release + LOH_INCLUDE_HIT_MISS_FEATURES=0" >> "$RUNNER_LOG"
+(
+  export LOH_BUILD_RELEASE=1
+  export LOH_INCLUDE_HIT_MISS_FEATURES=0
+  export LOH_SKIP_BUILD=0
+  bash scripts/debug.sh -r -c
+) >> "$OUT_DIR/prebuild.log" 2>&1 || {
+  echo "[prebuild] failed, see $OUT_DIR/prebuild.log" >> "$RUNNER_LOG"
+  exit 1
+}
+echo "[prebuild] done" >> "$RUNNER_LOG"
+
+COMMON_ENV=(
+  "CACHESIM_NUM_REQ=0"
+  "LOH_PARALLEL_SAFE=1"
+  "LOH_ENABLE_SEMAPHORE=1"
+  "LOH_SEM_TIMEOUT_S=1.0"
+  "LOH_WAIT_NEWSTATE_MAX_CONSEC_TIMEOUTS=1800"
+  "LOH_WAIT_NEWSTATE_IDLE_S=1800"
+  "LOH_BUILD_RELEASE=1"
+  "LOH_SKIP_BUILD=1"
+  "LOH_SKIP_PIP_INSTALL=1"
+  "LOH_PERF_PROFILING=0"
+  "LOH_DEBUG_LEVEL=0"
+  "LOH_ENABLE_RL=1"
+  "LOH_SCORE_USE_COMPOUND=1"
+  "LOH_SCORE_USE_IRT=0"
+  "LOH_RANDOM_CANDIDATES=96"
+  "LOH_STRUCTURED_CANDIDATES=96"
+  "LOH_WAIT_MODE=nonblocked"
+  "LOH_ASYNC_TRAIN=1"
+  "LOH_INCLUDE_WEIGHTS_IN_OBS=1"
+  "LOH_ADAPTIVE_BUDGET=1"
+  "LOH_USE_SCORE_REBALANCE=0"
+  "LOH_FEATURE_UNIFIED_FORMULA=0"
+  "LOH_FEATURE_IDENTITY=0"
+  "LOH_FEATURE_LOG1P=1"
+  "LOH_FEATURE_LOG1P_RECIPROCAL=0"
+  "LOH_ENABLE_FEATURE_NORMALIZATION=0"
+  "LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION=1"
+  "LOH_ADAPTIVE_NORM_LO_Q=0.0"
+  "LOH_ADAPTIVE_NORM_HI_Q=1.0"
+  "LOH_ADAPTIVE_NORM_WARMUP=0"
+  "LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE=0"
+  "LOH_INCLUDE_HIT_MISS_FEATURES=0"
+)
+
+WEIGHTS=(0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
+TASKS=(
+  "1063|data/TencentCBS/1063.oracleGeneral.zst"
+  "wiki|data/WikiCDN/wiki_2019t.oracleGeneral.zst"
+  "meta|data/MetaCDN/meta_reag.oracleGeneral.zst"
+)
+
+extract_final() {
+  local log_path="$1"
+  awk '
+    /LOH-.*cache size/ {
+      mr=""; bmr=""; mqps="";
+      if (match($0, /miss ratio [0-9]+\.[0-9]+/)) mr = substr($0, RSTART + 11, RLENGTH - 11);
+      if (match($0, /byte miss ratio [0-9]+\.[0-9]+/)) bmr = substr($0, RSTART + 16, RLENGTH - 16);
+      if (match($0, /throughput [0-9]+\.[0-9]+ MQPS/)) mqps = substr($0, RSTART + 11, RLENGTH - 16);
+      if (mr != "" && bmr != "" && mqps != "") last = mr "," bmr "," mqps;
+    }
+    END { if (last != "") print last; }
+  ' "$log_path"
+}
+
+already_done() {
+  local w="$1"
+  local trace_name="$2"
+  grep -q "^${w},${trace_name},ok," "$RESULTS_CSV"
+}
+
+run_one() {
+  local w="$1"
+  local trace_name="$2"
+  local trace_path="$3"
+
+  if already_done "$w" "$trace_name"; then
+    echo "[resume-skip] weight=${w} trace=${trace_name} already done" >> "$RUNNER_LOG"
+    return 0
+  fi
+
+  local w_tag
+  w_tag=$(echo "$w" | tr '.' 'p')
+  local case_name="${trace_name}_transformq0_mrw${w_tag}_cache01"
+  local case_stamp
+  case_stamp="$(date +%m%d_%H%M%S)"
+  local log_path="$OUT_DIR/${case_name}_${case_stamp}.log"
+  local shm_key rc=0
+
+  shm_key=$(printf "%s|%s|%s|%s" "$trace_name" "$CACHE_SIZE" "$w" "$(date +%s%N)" | cksum | awk '{print $1}')
+  rm -f "/dev/shm/loh_ac_${shm_key}" "/dev/shm/sem.loh_ac_ready_${shm_key}" "/dev/shm/sem.loh_ac_ack_${shm_key}" || true
+
+  echo "[case-start] weight=${w} ${case_name}" >> "$RUNNER_LOG"
+  (
+    export LOH_SHM_KEY="$shm_key"
+    export LOH_MISS_RATIO_WEIGHT="$w"
+    export RUN_TIMESTAMP="$(date +%m%d_%H%M%S)_${case_name}_$(date +%s)"
+    for kv in "${COMMON_ENV[@]}"; do export "$kv"; done
+    bash scripts/test_loh_rl_sb3.sh "$trace_path" "$CACHE_SIZE"
+  ) > "$log_path" 2>&1 || rc=$?
+
+  local fin fmr="NA" fbmr="NA" fmqps="NA" status="ok"
+  fin=$(extract_final "$log_path" || true)
+  if [ -n "$fin" ]; then
+    fmr="$(echo "$fin" | cut -d',' -f1)"
+    fbmr="$(echo "$fin" | cut -d',' -f2)"
+    fmqps="$(echo "$fin" | cut -d',' -f3)"
+  fi
+  [ "$rc" -ne 0 ] && status="failed"
+
+  echo "${w},${trace_name},${status},${rc},${fmr},${fbmr},${fmqps},${log_path}" >> "$RESULTS_CSV"
+  echo "[case-done] weight=${w} ${case_name} status=${status} rc=${rc} final_mr=${fmr} final_bmr=${fbmr} final_mqps=${fmqps}" >> "$RUNNER_LOG"
+
+  if [ -f "$OUT_DIR/update_doc_section.py" ]; then
+    (
+      flock 9
+      python3 "$OUT_DIR/update_doc_section.py" "$RESULTS_CSV" "$DOC_PATH" >> "$OUT_DIR/doc_update.log" 2>&1 || true
+    ) 9>"$OUT_DIR/doc_update.lock"
+  fi
+}
+
+running=0
+for w in "${WEIGHTS[@]}"; do
+  for t in "${TASKS[@]}"; do
+    IFS='|' read -r trace_name trace_path <<< "$t"
+    run_one "$w" "$trace_name" "$trace_path" &
+    running=$((running + 1))
+    echo "[queue] active=${running}/${PARALLEL} action=start weight=${w} case=${trace_name}" >> "$RUNNER_LOG"
+    if [ "$running" -ge "$PARALLEL" ]; then
+      wait -n || true
+      running=$((running - 1))
+      echo "[queue] active=${running}/${PARALLEL} action=finish_one" >> "$RUNNER_LOG"
+    fi
+  done
+done
+
+while [ "$running" -gt 0 ]; do
+  wait -n || true
+  running=$((running - 1))
+  echo "[queue] active=${running}/${PARALLEL} action=finish_one" >> "$RUNNER_LOG"
+done
+
+echo "[finished] ${RESULTS_CSV}" >> "$RUNNER_LOG"

@@ -1,0 +1,7 @@
+run_tag,trace,algo,seed,exclude_recent_steps,final_mr,final_bmr,final_mqps,log_path,rc
+run1,meta,SAC,42,0,0.269325,0.153837,0.67,tmp/sac_ex0_orig3_seed42_3407_0318/meta_SAC_ex0_run1_0318_203901.log,0
+run1,1063,SAC,42,0,0.022977,0.024380,0.47,tmp/sac_ex0_orig3_seed42_3407_0318/1063_SAC_ex0_run1_0318_203901.log,0
+run2,1063,SAC,3407,0,0.022901,0.024290,0.47,tmp/sac_ex0_orig3_seed42_3407_0318/1063_SAC_ex0_run2_0318_204023.log,0
+run2,meta,SAC,3407,0,0.269314,0.153798,0.60,tmp/sac_ex0_orig3_seed42_3407_0318/meta_SAC_ex0_run2_0318_205352.log,0
+run1,wiki,SAC,42,0,0.171421,0.137693,0.08,tmp/sac_ex0_orig3_seed42_3407_0318/wiki_SAC_ex0_run1_0318_203901.log,0
+run2,wiki,SAC,3407,0,0.174072,0.141470,0.08,tmp/sac_ex0_orig3_seed42_3407_0318/wiki_SAC_ex0_run2_0318_205219.log,0

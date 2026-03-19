@@ -1,0 +1,13 @@
+./_build/bin/traceAnalyzer
+./_build_dbg/bin/traceAnalyzer
+./_build_rel/bin/traceAnalyzer
+./doc/quickstart_traceAnalyzer.md
+./scripts/run_traceAnalyzer.sh
+./tmp/20260319-maintenance_indexes/traceanalyzer_dirs_found.txt
+./tmp/20260319-maintenance_indexes/traceanalyzer_files_found.txt
+./tmp/20260319-traceanalyzer/build_traceanalyzer.log
+./tmp/20260319-traceanalyzer/lfu10m_traceanalyzer.log
+./tmp/20260319-traceanalyzer/lru10m_traceanalyzer.log
+./tmp/20260319-traceanalyzer/meta_traceanalyzer.log
+./tmp/20260319-traceanalyzer/tencent1063_traceanalyzer.log
+./tmp/20260319-traceanalyzer/wiki_traceanalyzer.log

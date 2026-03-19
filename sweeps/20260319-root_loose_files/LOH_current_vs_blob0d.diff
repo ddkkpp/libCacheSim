@@ -1,0 +1,486 @@
+--- libCacheSim/cache/eviction/LOH.c	2026-03-14 21:47:11.272296283 +0800
++++ tmp/LOH_recover_blob_0d824074.c	2026-03-14 22:18:49.176041557 +0800
+@@ -252,6 +252,8 @@
+ static uint64_t loh_source_evict_count[LOH_MAX_SOURCES];  // 各源驱逐贡献计数
+ static int loh_source_budget[LOH_MAX_SOURCES];  // 自适应预算（初始=均分）
+ static uint64_t loh_adaptive_total_evict = 0;   // 自适应重平衡计数器
++// 候选→来源标签数组（每次 to_evict 重置；与 params->candidates 并行索引）
++static int loh_cand_source[2048 + 256];
+ // per-source 获胜得分累加：O(1)/驱逐，仅在 winner 确定后记录一次
+ static double loh_source_win_score_sum[LOH_MAX_SOURCES];
+ // 是否启用 score-based rebalance（默认 0 = 仅用 win-count，即 §19 行为）
+@@ -476,7 +478,6 @@
+ // 共享内存头文件
+ #include <errno.h>
+ #include <fcntl.h>  // 用于文件锁
+-#include <limits.h>
+ #include <semaphore.h>
+ #include <signal.h>
+ #include <sys/file.h>
+@@ -520,9 +521,12 @@
+ 
+ #define IRT_HISTORY_SIZE 3
+ // 定义 IRT（请求间隔时间）的历史数据结构
++#define MAX_CANDIDATES_LIMIT 2048  // 编译期候选池数组上限
+ #define MAX_CANDIDATES_DEFAULT 96  // 默认运行时候选池大小
+ // 运行时实际候选池大小（可通过环境变量 LOH_STRUCTURED_CANDIDATES 覆盖）
+ static int loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
++// 向后兼容宏：编译期数组大小使用 MAX_CANDIDATES_LIMIT
++#define MAX_CANDIDATES MAX_CANDIDATES_LIMIT
+ // 注意：seen 去重表（见 LOH_SEEN_CAP）容量与候选池大小直接相关。
+ // 每轮驱逐会从 6 个特征各取 candidates_per_feature=loh_structured_candidates/6
+ // 的候选， 去重前的插入尝试数量上界约为
+@@ -872,10 +876,7 @@
+   int mlp_hidden;
+   int mlp_param_len;
+   double mlp_params[LOH_MLP_MAX_PARAMS];
+-  cache_obj_t **candidates;
+-  int *cand_source;  // 与 candidates 并行索引，记录候选来源
+-  double *feat_buf;  // 平铺的候选特征缓存，长度=candidates_capacity*FEATURE_DIM
+-  int candidates_capacity;
++  cache_obj_t *candidates[MAX_CANDIDATES];
+   int n_candidates;
+ 
+   // 学习相关统计信息
+@@ -3604,66 +3605,19 @@
+ #endif
+ 
+ // 轻量去重 seen 表：使用 generation-tag 避免每轮清零
+-static cache_obj_t **loh_seen_slots = NULL;
+-static uint32_t *loh_seen_gens = NULL;
+-static size_t loh_seen_cap = 0;
+-static size_t loh_seen_mask = 0;
++#define LOH_SEEN_CAP 8192  // 足以支持 MAX_CANDIDATES_LIMIT=2048 的 4x 负载因子
++#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
++_Static_assert((LOH_SEEN_CAP & (LOH_SEEN_CAP - 1)) == 0,
++               "LOH_SEEN_CAP must be a power of two");
++#endif
++static cache_obj_t *loh_seen_slots[LOH_SEEN_CAP];
++static uint32_t loh_seen_gens[LOH_SEEN_CAP];
+ static uint32_t loh_seen_cur_gen = 0;
+-
+-static size_t loh_next_pow2(size_t x) {
+-  if (x <= 1) return 1;
+-  x--;
+-  x |= x >> 1;
+-  x |= x >> 2;
+-  x |= x >> 4;
+-  x |= x >> 8;
+-  x |= x >> 16;
+-#if ULONG_MAX > 0xFFFFFFFFUL
+-  x |= x >> 32;
+-#endif
+-  return x + 1;
+-}
+-
+-static bool loh_seen_init(size_t desired_cap) {
+-  size_t cap = loh_next_pow2(desired_cap);
+-  if (cap < 256) cap = 256;
+-  if (cap > (size_t)G_MAXINT) cap = (size_t)G_MAXINT;
+-
+-  cache_obj_t **slots = (cache_obj_t **)calloc(cap, sizeof(cache_obj_t *));
+-  uint32_t *gens = (uint32_t *)calloc(cap, sizeof(uint32_t));
+-  if (slots == NULL || gens == NULL) {
+-    free(slots);
+-    free(gens);
+-    return false;
+-  }
+-
+-  free(loh_seen_slots);
+-  free(loh_seen_gens);
+-  loh_seen_slots = slots;
+-  loh_seen_gens = gens;
+-  loh_seen_cap = cap;
+-  loh_seen_mask = cap - 1;
+-  loh_seen_cur_gen = 1;
+-  return true;
+-}
+-
+-static void loh_seen_free(void) {
+-  free(loh_seen_slots);
+-  free(loh_seen_gens);
+-  loh_seen_slots = NULL;
+-  loh_seen_gens = NULL;
+-  loh_seen_cap = 0;
+-  loh_seen_mask = 0;
+-  loh_seen_cur_gen = 0;
+-}
+-
+ static inline void loh_seen_clear(void) {
+-  if (loh_seen_cap == 0 || loh_seen_slots == NULL || loh_seen_gens == NULL)
+-    return;
+   loh_seen_cur_gen++;
+   if (loh_seen_cur_gen == 0) {
+     // 发生回绕：彻底重置一次
+-    for (size_t i = 0; i < loh_seen_cap; ++i) {
++    for (int i = 0; i < LOH_SEEN_CAP; ++i) {
+       loh_seen_slots[i] = NULL;
+       loh_seen_gens[i] = 0;
+     }
+@@ -3671,19 +3625,17 @@
+   }
+ }
+ static inline size_t loh_seen_hash(cache_obj_t *o) {
+-  return ((uintptr_t)o >> 4) & loh_seen_mask;
++  return ((uintptr_t)o >> 4) & (LOH_SEEN_CAP - 1);
+ }
+ // 返回 true 表示第一次看到并已插入，false 表示已存在
+ static inline bool loh_seen_add(LOH_params_t *params, cache_obj_t *o) {
+   if (!o) return false;
+-  if (loh_seen_cap == 0 || loh_seen_slots == NULL || loh_seen_gens == NULL)
+-    return true;
+ #if LOH_PERF_PROFILING
+   if (params) params->perf.seen_add_calls++;
+ #endif
+   size_t i = loh_seen_hash(o);
+   int local_probes = 0;
+-  for (size_t probed = 0; probed < loh_seen_cap; ++probed) {
++  for (int probed = 0; probed < LOH_SEEN_CAP; ++probed) {
+     local_probes++;
+     if (loh_seen_gens[i] != loh_seen_cur_gen) {
+       loh_seen_slots[i] = o;
+@@ -3709,7 +3661,7 @@
+       }
+       return false;  // 已存在
+     }
+-    i = (i + 1) & loh_seen_mask;
++    i = (i + 1) & (LOH_SEEN_CAP - 1);
+   }
+   // 表满：保守视为重复，避免扩容
+   if (params) {
+@@ -3885,11 +3837,11 @@
+       "TOPK=%d, AVGTOPK=%d, REQUEST=%d -> CONTEXT_DIM=%d\n",
+       MISSRATIO_DIM, HIT_MISS_DIM, CACHE_DIM, CAND_FEATURE_DIM,
+       TOPK_FEATURE_DIM, AVGTOPK_FEATURE_DIM, REQUEST_FEATURE_DIM, CONTEXT_DIM);
+-  LOH_DEBUG_PRINT_CONFIG("  LOH_STRUCTURED_CANDIDATES=%s (default=%d)\n",
+-                         getenv("LOH_STRUCTURED_CANDIDATES")
+-                             ? getenv("LOH_STRUCTURED_CANDIDATES")
+-                             : "(unset)",
+-                         MAX_CANDIDATES_DEFAULT);
++  LOH_DEBUG_PRINT_CONFIG(
++      "  LOH_STRUCTURED_CANDIDATES=%s (default=%d, limit=%d)\n",
++      getenv("LOH_STRUCTURED_CANDIDATES") ? getenv("LOH_STRUCTURED_CANDIDATES")
++                                          : "(unset)",
++      MAX_CANDIDATES_DEFAULT, MAX_CANDIDATES_LIMIT);
+ 
+   cache_t *cache =
+       cache_struct_init("LOH", ccache_params, cache_specific_params);
+@@ -3926,18 +3878,19 @@
+     const char *mc_str = getenv("LOH_STRUCTURED_CANDIDATES");
+     if (mc_str != NULL) {
+       int mc_val = atoi(mc_str);
+-      if (mc_val == 0 || mc_val >= 6) {
++      if ((mc_val == 0 || mc_val >= 6) && mc_val <= MAX_CANDIDATES_LIMIT) {
+         loh_structured_candidates = mc_val;
+       } else {
+         fprintf(stderr,
+                 "LOH WARNING: LOH_STRUCTURED_CANDIDATES=%d out of range "
+-                "{0} ∪ [6, +inf), using default %d\n",
+-                mc_val, MAX_CANDIDATES_DEFAULT);
++                "{0} ∪ [6, %d], using default %d\n",
++                mc_val, MAX_CANDIDATES_LIMIT, MAX_CANDIDATES_DEFAULT);
+         loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
+       }
+     }
+-    printf("LOH_STRUCTURED_CANDIDATES=%d (default=%d)\n",
+-           loh_structured_candidates, MAX_CANDIDATES_DEFAULT);
++    printf("LOH_STRUCTURED_CANDIDATES=%d (default=%d, limit=%d)\n",
++           loh_structured_candidates, MAX_CANDIDATES_DEFAULT,
++           MAX_CANDIDATES_LIMIT);
+   }
+ 
+   // 初始化 frequency 表
+@@ -4517,7 +4470,8 @@
+     const char *env_rsc = getenv("LOH_RANDOM_CANDIDATES");
+     if (env_rsc && env_rsc[0] != '\0') {
+       int rsc_val = atoi(env_rsc);
+-      if (rsc_val >= 0) loh_random_candidates = rsc_val;
++      if (rsc_val >= 0 && rsc_val <= MAX_CANDIDATES_LIMIT)
++        loh_random_candidates = rsc_val;
+     }
+ 
+     LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Random sampling: COUNT=%d\n",
+@@ -4526,52 +4480,6 @@
+            loh_structured_candidates, loh_random_candidates);
+   }
+ 
+-  // 运行时候选容量：结构化 + 随机 + 余量（避免边界抖动导致越界）
+-  {
+-    size_t cap = (size_t)loh_structured_candidates +
+-                 (size_t)loh_random_candidates + 256u;
+-    if (cap < 16u) cap = 16u;
+-    if (cap > (size_t)G_MAXINT) {
+-      fprintf(
+-          stderr,
+-          "LOH WARNING: candidate capacity too large (%zu), clamped to %d\n",
+-          cap, G_MAXINT);
+-      cap = (size_t)G_MAXINT;
+-    }
+-
+-    params->candidates_capacity = (int)cap;
+-    params->candidates = (cache_obj_t **)calloc(
+-        (size_t)params->candidates_capacity, sizeof(cache_obj_t *));
+-    params->cand_source =
+-        (int *)calloc((size_t)params->candidates_capacity, sizeof(int));
+-    params->feat_buf = (double *)calloc(
+-        (size_t)params->candidates_capacity * (size_t)FEATURE_DIM,
+-        sizeof(double));
+-
+-    if (params->candidates == NULL || params->cand_source == NULL ||
+-        params->feat_buf == NULL) {
+-      fprintf(stderr,
+-              "LOH ERROR: failed to allocate candidate buffers (cap=%d)\n",
+-              params->candidates_capacity);
+-      free(params->candidates);
+-      free(params->cand_source);
+-      free(params->feat_buf);
+-      params->candidates = NULL;
+-      params->cand_source = NULL;
+-      params->feat_buf = NULL;
+-      params->candidates_capacity = 0;
+-    }
+-
+-    if (params->candidates_capacity > 0) {
+-      size_t seen_desired = (size_t)params->candidates_capacity * 4u;
+-      if (!loh_seen_init(seen_desired)) {
+-        fprintf(stderr,
+-                "LOH ERROR: failed to initialize seen table (cap=%zu)\n",
+-                seen_desired);
+-      }
+-    }
+-  }
+-
+   // 3.6) 衰减尾部采样配置
+   {
+     const char *env_ts = getenv("LOH_TAIL_SAMPLE");
+@@ -4618,10 +4526,8 @@
+       loh_use_score_rebalance = atoi(env_sr);
+     }
+     if (loh_adaptive_budget) {
+-      printf(
+-          "[LOH INIT] Adaptive budget ENABLED: rebalance period=%d, "
+-          "score_rebalance=%d\n",
+-          LOH_ADAPTIVE_REBALANCE_PERIOD, loh_use_score_rebalance);
++      printf("[LOH INIT] Adaptive budget ENABLED: rebalance period=%d, score_rebalance=%d\n",
++             LOH_ADAPTIVE_REBALANCE_PERIOD, loh_use_score_rebalance);
+     }
+   }
+ 
+@@ -4832,23 +4738,6 @@
+     params->obj_array = NULL;
+   }
+ 
+-  // 释放候选相关动态缓存
+-  if (params->candidates) {
+-    free(params->candidates);
+-    params->candidates = NULL;
+-  }
+-  if (params->cand_source) {
+-    free(params->cand_source);
+-    params->cand_source = NULL;
+-  }
+-  if (params->feat_buf) {
+-    free(params->feat_buf);
+-    params->feat_buf = NULL;
+-  }
+-  params->candidates_capacity = 0;
+-
+-  loh_seen_free();
+-
+   // 最后一次性释放 params
+   g_free(params);
+ }
+@@ -5537,10 +5426,6 @@
+ 
+ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
+   LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+-  if (params->candidates_capacity <= 0 || params->candidates == NULL ||
+-      params->cand_source == NULL || params->feat_buf == NULL) {
+-    return params->q_tail;
+-  }
+   PERF_TS ts_to_evict;
+   PERF_NOW(ts_to_evict);
+ 
+@@ -5615,7 +5500,7 @@
+   // recency 阶段无单独压缩流程（天然无重复），dedup 计时保持 0
+   // 标记候选来源
+   for (int i = recency_start; i < params->n_candidates; i++)
+-    params->cand_source[i] = 0;
++    loh_cand_source[i] = 0;
+ 
+ #if LOH_INCLUDE_CANDIDATE_FEATURES
+   for (int i = recency_start; i < params->n_candidates; i++) {
+@@ -5654,7 +5539,7 @@
+   PERF_ACCUM(params, cand_collect_freq, ts_collect_freq);
+   // 频率候选已在收集阶段融合 seen 去重，省去单独dedup
+   for (int i = freq_start; i < params->n_candidates; i++)
+-    params->cand_source[i] = 1;
++    loh_cand_source[i] = 1;
+ 
+   // NOTE: 统计在 getter 内已完成
+ 
+@@ -5682,7 +5567,7 @@
+   PERF_ACCUM(params, cand_collect_size, ts_collect_size);
+   // 尺寸候选已在收集阶段融合 seen 去重，省去单独dedup
+   for (int i = size_start; i < params->n_candidates; i++)
+-    params->cand_source[i] = 2;
++    loh_cand_source[i] = 2;
+ 
+   // NOTE: 统计在 getter 内已完成
+ 
+@@ -5710,7 +5595,7 @@
+     PERF_ACCUM(params, cand_collect_irt1, ts_collect_irt1);
+     // IRT1 候选已在收集阶段融合 seen 去重，省去单独dedup
+     for (int i = irt1_start; i < params->n_candidates; i++)
+-      params->cand_source[i] = 3;
++      loh_cand_source[i] = 3;
+ 
+     // NOTE: 统计在 getter 内已完成
+ 
+@@ -5739,7 +5624,7 @@
+     PERF_ACCUM(params, cand_collect_irt2, ts_collect_irt2);
+     // IRT2 候选已在收集阶段融合 seen 去重，省去单独dedup
+     for (int i = irt2_start; i < params->n_candidates; i++)
+-      params->cand_source[i] = 4;
++      loh_cand_source[i] = 4;
+ 
+     // NOTE: 统计在 getter 内已完成
+ 
+@@ -5768,7 +5653,7 @@
+     PERF_ACCUM(params, cand_collect_irt3, ts_collect_irt3);
+     // IRT3 候选已在收集阶段融合 seen 去重，省去单独dedup
+     for (int i = irt3_start; i < params->n_candidates; i++)
+-      params->cand_source[i] = 5;
++      loh_cand_source[i] = 5;
+ 
+     // NOTE: 统计在 getter 内已完成
+ 
+@@ -5799,7 +5684,7 @@
+     // (~100ns)。 每次迭代的计算量 (loh_seen_add + 随机数生成) 约 10-15ns，
+     // 因此需要提前 16 步 prefetch 才能覆盖 100ns 延迟。
+     int random_wanted = loh_random_candidates;
+-    int room = params->candidates_capacity - params->n_candidates;
++    int room = MAX_CANDIDATES - params->n_candidates;
+     if (random_wanted > room) random_wanted = room;
+     int random_collected = 0;
+     int max_attempts = random_wanted * 3;
+@@ -5831,7 +5716,7 @@
+     // 如果 loh_structured_candidates == 0, 全部都是随机候选
+     int random_region_start = loh_structured_candidates == 0 ? 0 : struct_end;
+     for (int i = random_region_start; i < params->n_candidates; i++)
+-      params->cand_source[i] = 6;
++      loh_cand_source[i] = 6;
+   }
+ 
+   // 对候选对象评分，选择得分最低的
+@@ -5850,11 +5735,10 @@
+ #endif
+ 
+   // 先为所有候选预计算特征（calc_features 内部已单独计时）
+-  // 注意：候选上限使用运行时容量（结构化+随机+余量）
++  // 注意：使用 MAX_CANDIDATES 而非 loh_structured_candidates 作为上限，
+   // 因为 additive random sampling 可能超出 loh_structured_candidates
+   int cand_n = params->n_candidates;
+-  if (cand_n > params->candidates_capacity)
+-    cand_n = params->candidates_capacity;
++  if (cand_n > MAX_CANDIDATES) cand_n = MAX_CANDIDATES;
+   // Compound + 线性模式下只需 3 个基础特征（recency/freq/size），
+   // 跳过 IRT 特征计算可节省约 50% 特征计算时间
+   const int fast_compound =
+@@ -6046,7 +5930,7 @@
+   }
+ 
+   // ---- 原始两遍路径（MLP / 非 compound / normalize 等场景） ----
+-  double *feat_buf = params->feat_buf;
++  double feat_buf[MAX_CANDIDATES][FEATURE_DIM];
+   PERF_TS ts_feat_loop;
+   PERF_NOW(ts_feat_loop);
+   for (int i = 0; i < cand_n; ++i) {
+@@ -6054,13 +5938,12 @@
+     if (fast_compound) {
+       int64_t delta =
+           params->current_timestamp - candidate->LOH.last_access_counter;
+-      feat_buf[i * FEATURE_DIM + 0] = calculate_recency(params, delta);
+-      feat_buf[i * FEATURE_DIM + 1] =
++      feat_buf[i][0] = calculate_recency(params, delta);
++      feat_buf[i][1] =
+           calculate_frequency(params, (int64_t)candidate->LOH.access_count);
+-      feat_buf[i * FEATURE_DIM + 2] =
+-          calculate_size(params, (int64_t)candidate->obj_size);
++      feat_buf[i][2] = calculate_size(params, (int64_t)candidate->obj_size);
+     } else {
+-      calculate_object_features(params, candidate, &feat_buf[i * FEATURE_DIM]);
++      calculate_object_features(params, candidate, feat_buf[i]);
+     }
+   }
+ #if LOH_PERF_PROFILING
+@@ -6099,7 +5982,7 @@
+ 
+   for (int i = 0; i < cand_n; i++) {
+     cache_obj_t *candidate = params->candidates[i];
+-    const double *f = &feat_buf[i * FEATURE_DIM];
++    const double *f = feat_buf[i];
+     double score = 0.0;
+     int64_t recency_raw =
+         params->current_timestamp - candidate->LOH.last_access_counter;
+@@ -6325,7 +6208,7 @@
+         const double *f = NULL;
+         for (int i = 0; i < cand_n; i++) {
+           if (params->candidates[i] == obj) {
+-            f = &feat_buf[i * FEATURE_DIM];
++            f = feat_buf[i];
+             break;
+           }
+         }
+@@ -6357,7 +6240,7 @@
+         const double *f = NULL;
+         for (int fi = 0; fi < cand_n; fi++) {
+           if (params->candidates[fi] == obj) {
+-            f = &feat_buf[fi * FEATURE_DIM];
++            f = feat_buf[fi];
+             break;
+           }
+         }
+@@ -6399,7 +6282,7 @@
+ 
+   // ── 自适应候选预算跟踪 ──
+   if (loh_adaptive_budget && best_i >= 0 && best_i < params->n_candidates) {
+-    int src = params->cand_source[best_i];
++    int src = loh_cand_source[best_i];
+     if (src >= 0 && src < LOH_MAX_SOURCES) {
+       loh_source_evict_count[src]++;
+       // O(1)/驱逐：仅记录获胜者得分（不在 per-candidate 循环中累加）
+@@ -6416,8 +6299,7 @@
+ 
+       // ---- 基于 per-source 平均获胜得分分配预算 ----
+       // 原理：得分越低 → 候选越适合驱逐 → 源的效能越高
+-      // 仅在 LOH_USE_SCORE_REBALANCE=1 时启用；默认走 win-count 分支（§19
+-      // 行为）
++      // 仅在 LOH_USE_SCORE_REBALANCE=1 时启用；默认走 win-count 分支（§19 行为）
+       if (loh_use_score_rebalance) {
+         double avg_score[LOH_MAX_SOURCES];
+         double global_min_avg = DBL_MAX;
+@@ -6453,9 +6335,10 @@
+             int max_eff_src = 0;
+             double max_eff_val = -1.0;
+             for (int s = 0; s < n_active; s++) {
+-              loh_source_budget[s] = (int)(effectiveness[s] / total_eff *
+-                                               loh_structured_candidates +
+-                                           0.5);
++              loh_source_budget[s] =
++                  (int)(effectiveness[s] / total_eff *
++                            loh_structured_candidates +
++                        0.5);
+               if (loh_source_budget[s] < 1) loh_source_budget[s] = 1;
+               assigned += loh_source_budget[s];
+               if (effectiveness[s] > max_eff_val) {
+@@ -8154,7 +8037,8 @@
+  * @brief 初始化尺寸堆（单一最小堆）
+  */
+ static void size_heap_init(LOH_params_t *params) {
+-  // 设置 Size 堆容量为结构化候选规模，避免候选池扩大后 Top-K 失真
++  // 设置 Size 堆的容量为 MAX_CANDIDATES，确保有足够的大对象候选
++  // （原来是 MAX_CANDIDATES / 6，但这会导致堆在 evict 后逐渐失效）
+   params->size_heap_capacity = loh_structured_candidates;
+   params->size_heap_size = 0;
+   params->size_heap = g_new0(size_heap_entry_t, params->size_heap_capacity);

@@ -1,0 +1,16 @@
+[36m[DEBUG] 03-04-2026 10:32:11 zstdReader.c:43   (tid=124467937273344): create zstd reader data/WikiCDN/wiki_2019t.oracleGeneral.zst
+[0m[36m[DEBUG] 03-04-2026 10:32:11 reader.c:511  (tid=124467937273344): reset reader current offset 0
+[0m[32m[INFO]  03-04-2026 10:32:11 cli_reader_utils.c:259  (tid=124467937273344): calculating working set size...
+[0m[36m[DEBUG] 03-04-2026 10:32:11 cli_reader_utils.c:263  (tid=124467937273344): processed 2000000 requests, 79495 objects, 2018658850 bytes
+[0m[36m[DEBUG] 03-04-2026 10:32:12 cli_reader_utils.c:263  (tid=124467937273344): processed 4000000 requests, 131281 objects, 3276122931 bytes
+[0m[36m[DEBUG] 03-04-2026 10:32:12 cli_reader_utils.c:263  (tid=124467937273344): processed 6000000 requests, 171239 objects, 4232500556 bytes
+[0m[36m[DEBUG] 03-04-2026 10:32:12 cli_reader_utils.c:263  (tid=124467937273344): processed 8000000 requests, 216771 objects, 5219793420 bytes
+[0m[36m[DEBUG] 03-04-2026 10:32:12 reader.c:245  (tid=124467937273344): read_one_req: processed 8000000 requests capped by the user
+[0m[32m[INFO]  03-04-2026 10:32:12 cli_reader_utils.c:283  (tid=124467937273344): estimated working set size (0.09 sample ratio): 2384481 object 57417727620 byte
+[0m[36m[DEBUG] 03-04-2026 10:32:12 reader.c:511  (tid=124467937273344): reset reader current offset 0
+[0m[32m[INFO]  03-04-2026 10:32:12 cli_parser.c:558  (tid=124467937273344): trace path: data/WikiCDN/wiki_2019t.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/wiki_2019t.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, 3LCache
+[0m[36m[DEBUG] 03-04-2026 10:32:12 request.h:125  (tid=124467937273344): req clock_time 0, id 868289764, size 69334, op nop, valid 1
+[0m[36m[DEBUG] 03-04-2026 10:32:12 request.h:125  (tid=124467937273344): req clock_time 0, id 2001638253, size 64248, op nop, valid 1
+[0m[36m[DEBUG] 03-04-2026 10:33:16 reader.c:245  (tid=124467937273344): read_one_req: processed 8000000 requests capped by the user
+[0m[36m[DEBUG] 03-04-2026 10:33:16 zstdReader.c:52   (tid=124467937273344): free zstd reader
+[0mdata/WikiCDN/wiki_2019t.oracleGeneral.zst ThreeLCache-BMR cache size     5GiB,          8000000 req, miss ratio 0.483468, byte miss ratio 0.363100, throughput 0.13 MQPS

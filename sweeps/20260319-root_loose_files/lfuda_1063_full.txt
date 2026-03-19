@@ -1,0 +1,6 @@
+[32m[INFO]  03-06-2026 01:00:06 cli_reader_utils.c:259  (tid=127526240222528): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:01:13 cli_reader_utils.c:283  (tid=127526240222528): estimated working set size (0.09 sample ratio): 1157453 object 50564580352 byte
+[0m[32m[INFO]  03-06-2026 01:01:27 cli_parser.c:558  (tid=127526240222528): trace path: data/TencentCBS/1063.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/1063.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LFUDA
+[0m[36m[DEBUG] 03-06-2026 01:01:27 request.h:125  (tid=127526240222528): req clock_time 1538323199, id 11687814048419840, size 315392, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:01:27 request.h:125  (tid=127526240222528): req clock_time 1538323199, id 11687814050893824, size 12288, op nop, valid 1
+[0m

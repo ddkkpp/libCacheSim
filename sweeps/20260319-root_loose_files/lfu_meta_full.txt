@@ -1,0 +1,14 @@
+[32m[INFO]  03-06-2026 01:00:06 cli_reader_utils.c:259  (tid=123453255617856): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:00:25 cli_reader_utils.c:288  (tid=123453255617856): working set size: 12262537 object 181175213422620 byte
+[0m[32m[INFO]  03-06-2026 01:00:25 cli_parser.c:558  (tid=123453255617856): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LFU
+[0m[36m[DEBUG] 03-06-2026 01:00:25 request.h:125  (tid=123453255617856): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:00:25 request.h:125  (tid=123453255617856): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[32m[INFO]  03-06-2026 01:00:29    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 24.00 hour: 5518404 requests, miss ratio 0.3539, interval miss ratio 0.3539
+[0m[32m[INFO]  03-06-2026 01:00:36    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 48.00 hour: 11176128 requests, miss ratio 0.3707, interval miss ratio 0.3871
+[0m[32m[INFO]  03-06-2026 01:00:39    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 72.00 hour: 16602126 requests, miss ratio 0.3845, interval miss ratio 0.4130
+[0m[32m[INFO]  03-06-2026 01:00:44    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 96.00 hour: 22193191 requests, miss ratio 0.3931, interval miss ratio 0.4185
+[0m[32m[INFO]  03-06-2026 01:00:51    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 120.00 hour: 28036259 requests, miss ratio 0.3945, interval miss ratio 0.4000
+[0m[32m[INFO]  03-06-2026 01:00:55    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 144.00 hour: 33615787 requests, miss ratio 0.4065, interval miss ratio 0.4667
+[0m[32m[INFO]  03-06-2026 01:00:59    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 168.00 hour: 39441428 requests, miss ratio 0.4382, interval miss ratio 0.6209
+[0m[32m[INFO]  03-06-2026 01:01:03    sim.c:61   (tid=123453255617856): meta_reag.oracleGeneral.zst LFU 192.00 hour: 45619651 requests, miss ratio 0.4650, interval miss ratio 0.6365
+[0mdata/MetaCDN/meta_reag.oracleGeneral.zst LFU cache size    16TiB,         45623306 req, miss ratio 0.465043, byte miss ratio 0.437369, throughput 1.19 MQPS

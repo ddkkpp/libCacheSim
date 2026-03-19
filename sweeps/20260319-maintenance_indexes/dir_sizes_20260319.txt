@@ -1,0 +1,37 @@
+]633;E;{   echo "# Directory Sizes (du -sh)"\x3b   du -sh docs sweeps tmp scripts logs 2>/dev/null\x3b   echo\x3b   echo "# Top-level directories"\x3b   du -sh */ 2>/dev/null | sort -h\x3b } > /home/dingkp/libCacheSim/tmp/20260319-maintenance_indexes/dir_sizes_20260319.txt;a59e53da-478f-4774-aa6f-74ceb6225456]633;C# Directory Sizes (du -sh)
+3.0M	docs
+29M	sweeps
+9.0G	tmp
+4.0M	scripts
+316G	logs
+
+# Top-level directories
+12K	configs/
+16K	random/
+40K	cmake/
+52K	libCacheSim-node/
+108K	sb3_logs/
+112K	test_scripts/
+156K	test/
+260K	tb_report_0203_probe/
+796K	example/
+1.5M	result/
+3.0M	docs/
+4.0M	scripts/
+5.9M	libCacheSim/
+6.7M	sb3_checkpoints/
+6.9M	training_logs/
+9.2M	figure/
+9.6M	doc/
+12M	_build_rel/
+21M	_build/
+29M	sweeps/
+29M	tb_report/
+127M	_build_dbg/
+161M	analysis/
+631M	results/
+1.3G	output/
+9.0G	tmp/
+67G	data/
+121G	runs/
+316G	logs/

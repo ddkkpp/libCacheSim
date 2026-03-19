@@ -18,15 +18,16 @@ data_large/
 analysis/
 data/
 runs/
-sweeps/
 tmp/
 sb3_checkpoints/
 sb3_logs/
 training_logs/
 tb_report/
+sweeps/2025*
+sweeps/202601*
+sweeps/202602*
 # Chaos
 sftp-config.json
 # Clangd cache
 *.cache/
 .lint-logs/
-sweeps/

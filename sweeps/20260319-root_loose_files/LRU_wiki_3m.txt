@@ -1,0 +1,6 @@
+[32m[INFO]  03-06-2026 00:13:44 cli_reader_utils.c:259  (tid=134341821701440): calculating working set size...
+[0m[32m[INFO]  03-06-2026 00:13:44 cli_reader_utils.c:283  (tid=134341821701440): estimated working set size (0.09 sample ratio): 1185558 object 30033881966 byte
+[0m[32m[INFO]  03-06-2026 00:13:44 cli_parser.c:558  (tid=134341821701440): trace path: data/WikiCDN/wiki_2019t.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/wiki_2019t.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, LRU
+[0m[36m[DEBUG] 03-06-2026 00:13:44 request.h:125  (tid=134341821701440): req clock_time 0, id 868289764, size 69334, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 00:13:44 request.h:125  (tid=134341821701440): req clock_time 0, id 2001638253, size 64248, op nop, valid 1
+[0mdata/WikiCDN/wiki_2019t.oracleGeneral.zst LRU cache size     3GiB,          3000000 req, miss ratio 0.648938, byte miss ratio 0.546356, throughput 1.83 MQPS

@@ -1,0 +1,2 @@
+scale,formula,pos,status,rc,mr,bmr,mqps,log_path
+baseline,none,0,ok,0,0.364749,0.342070,0.01,tmp/penalty_no_penalty_0316/no_penalty_baseline.log

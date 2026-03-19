@@ -1,0 +1,2 @@
+idx,run_timestamp,exit_code,miss_ratio,byte_miss_ratio,throughput_mqps,trace_file,cache_size,config
+1,smoke_1212_132049_001,0,0.6149,0.6149,0.14,"data/MetaCDN/meta_reag.oracleGeneral.zst",0.1,"LOH_RL_ALGO=TD3 LOH_DUAL_CHANNEL=0 LOH_USE_SOFTMAX=1 LOH_SOFTMAX_TEMP=1.0 LOH_ACTION_SCALE=1.0 LOH_REWARD_MODE=absolute LOH_REWARD_SCALE=1.0 CACHESIM_NUM_REQ=2000"

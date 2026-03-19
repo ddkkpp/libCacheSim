@@ -1,0 +1,2 @@
+]633;E;{ echo "total=$(wc -l < tmp/20260319-maintenance_indexes/sweeps_top_dirs.txt)"\x3b echo "nonprefixed=$(wc -l < tmp/20260319-maintenance_indexes/sweeps_nonprefixed_dirs.txt)"\x3b } > tmp/20260319-maintenance_indexes/sweeps_prefix_audit_counts.txt;88609d33-ca7a-4ff1-af08-8c7982c5e721]633;Ctotal=150
+nonprefixed=150

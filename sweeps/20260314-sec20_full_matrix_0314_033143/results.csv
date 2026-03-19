@@ -1,0 +1,5 @@
+trace,formula,mode,status,rc,mr,bmr,log_path
+1063,log1p,baseline,ok,0,0.022209,0.025355,tmp/sec20_full_matrix_0314_033143/1063_log1p_baseline.log
+1063,log1p,fixed_norm,failed,143,NA,NA,tmp/sec20_full_matrix_0314_033143/1063_log1p_fixed_norm.log
+1063,log1p,adaptive_norm,failed,1,NA,NA,tmp/sec20_full_matrix_0314_033143/1063_log1p_adaptive_norm.log
+wiki,log1p,baseline,failed,1,NA,NA,tmp/sec20_full_matrix_0314_033143/wiki_log1p_baseline.log

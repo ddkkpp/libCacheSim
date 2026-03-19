@@ -1,0 +1,12 @@
+[32m[INFO]  03-06-2026 01:00:06 cli_reader_utils.c:259  (tid=138823292980544): calculating working set size...
+[0m[32m[INFO]  03-06-2026 01:00:29 cli_reader_utils.c:288  (tid=138823292980544): working set size: 12262537 object 181175213422620 byte
+[0m[32m[INFO]  03-06-2026 01:00:29 cli_parser.c:558  (tid=138823292980544): trace path: data/MetaCDN/meta_reag.oracleGeneral.zst, trace_type ORACLE_GENERAL_TRACE, ofilepath result/meta_reag.oracleGeneral.zst.cachesim, 20 threads, warmup -1 sec, total 1 algo x 1 size = 1 caches, Belady
+[0m[36m[DEBUG] 03-06-2026 01:00:29 request.h:125  (tid=138823292980544): req clock_time 2, id 9923303287488963378, size 4294967295, op nop, valid 1
+[0m[36m[DEBUG] 03-06-2026 01:00:29 request.h:125  (tid=138823292980544): req clock_time 60, id 9939978422402668152, size 25568, op nop, valid 1
+[0m[32m[INFO]  03-06-2026 01:00:38    sim.c:61   (tid=138823292980544): meta_reag.oracleGeneral.zst Belady 24.00 hour: 5518404 requests, miss ratio 0.3470, interval miss ratio 0.3470
+[0m[32m[INFO]  03-06-2026 01:00:50    sim.c:61   (tid=138823292980544): meta_reag.oracleGeneral.zst Belady 48.00 hour: 11176128 requests, miss ratio 0.3213, interval miss ratio 0.2962
+[0m[32m[INFO]  03-06-2026 01:01:01    sim.c:61   (tid=138823292980544): meta_reag.oracleGeneral.zst Belady 72.00 hour: 16602126 requests, miss ratio 0.3108, interval miss ratio 0.2891
+[0m[32m[INFO]  03-06-2026 01:01:11    sim.c:61   (tid=138823292980544): meta_reag.oracleGeneral.zst Belady 96.00 hour: 22193191 requests, miss ratio 0.3032, interval miss ratio 0.2809
+[0m[32m[INFO]  03-06-2026 01:01:47    sim.c:61   (tid=138823292980544): meta_reag.oracleGeneral.zst Belady 120.00 hour: 28036259 requests, miss ratio 0.2935, interval miss ratio 0.2565
+[0m[32m[INFO]  03-06-2026 01:01:51    sim.c:61   (tid=138823292980544): meta_reag.oracleGeneral.zst Belady 144.00 hour: 33615787 requests, miss ratio 0.2842, interval miss ratio 0.2375
+[0m

@@ -1,0 +1,52 @@
+=== LOH + stable-baselines3 RL Integration Test ===
+
+[config] LOH_SCORE_USE_IRT=<unset>
+[config] LOH_SCORE_USE_COMPOUND=<unset>
+[config] LOH_FEATURE_LOG1P=0
+[config] LOH_DUAL_CHANNEL=0
+[config] CACHESIM_NUM_REQ=3000000
+[pre-stop] Parallel-safe mode: skip global cleanup
+State dimension controlled by LOH_INCLUDE_* environment variables
+状态向量维度由环境变量控制（默认：GLOBAL(2)+SAMPLE(192)=194维）
+Using trace file: test_loh_comprehensive_10k.csv
+Error: cache_size must be between 0 and 1, got: 1000
+Usage: scripts/test_loh_rl_sb3.sh [trace_file] [cache_size]
+  trace_file:  Path to trace file (optional, default: data/MetaCDN/meta_reag.oracleGeneral.zst)
+  cache_size:  Cache size as ratio (optional, default: 0.1)
+
+Environment Variables (all optional):
+
+  === Algorithm Selection ===
+  LOH_RL_ALGO:                     RL algorithm: PPO, SAC, TD3 (default: SAC)
+
+  === State Dimension (C compile-time) ===
+  Note: First 2 dims (hit_ratio, byte_hit_ratio) always passed for reward calculation
+  LOH_INCLUDE_TOPK_CANDIDATE_FEATURES: Include TopK candidate features, 192 dims (default: 0)
+  LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES: Include AvgTopK average features, 24 dims (default: 1)
+  LOH_INCLUDE_REQUEST:              Include recent request history (REQUEST_HISTORY_LEN×6 dims, default: 0)
+  LOH_INCLUDE_CACHE_FEATURES:      Include cache features, 12 dims (default: 0)
+  LOH_INCLUDE_CANDIDATE_FEATURES:  Include candidate statistics, 72 dims (default: 0)
+  LOH_INCLUDE_HIT_MISS_FEATURES:   Include hit/miss features, 24 dims (default: 0)
+
+  === RL Observation (Python runtime) ===
+  RL_STATE_USE_MISSRATIO:          Include first 2 dims in RL observation (default: 1)
+                                   Set to 0 to exclude hit_ratio, byte_hit_ratio from RL obs
+
+  === Reward/Penalty ===
+  LOH_MISS_RATIO_WEIGHT:           Weight for object miss ratio (default: 1.0)
+  LOH_ENABLE_PENALTY:              Enable penalty mechanism (default: 0, requires rebuild)
+                                   ⚠️ This affects C compilation - will trigger auto rebuild
+
+  === Misc ===
+  RL_UPDATE_INTERVAL:              RL update interval (optional)
+  CACHESIM_NUM_REQ:                Number of requests to process (optional)
+  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 1)
+  LOH_ENABLE_PROFILING:            Enable profiling timer stats (default: 0)
+
+Examples:
+  scripts/test_loh_rl_sb3.sh
+  scripts/test_loh_rl_sb3.sh /path/to/trace.gz
+  scripts/test_loh_rl_sb3.sh /path/to/trace.gz 0.2
+  LOH_RL_ALGO=PPO scripts/test_loh_rl_sb3.sh /path/to/trace.gz
+  RL_STATE_USE_MISSRATIO=0 scripts/test_loh_rl_sb3.sh /path/to/trace.gz   # RL obs excludes miss ratios
+  LOH_ENABLE_PENALTY=1 scripts/test_loh_rl_sb3.sh /path/to/trace.gz       # Enable penalty (triggers rebuild)

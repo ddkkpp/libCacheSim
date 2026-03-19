@@ -1,0 +1,7 @@
+trace,config,status,rc,mr24,imr24,mr48,imr48,mr72,imr72,mr96,imr96,final_mr,final_bmr,final_mqps,log_path
+meta,lo01_hi100,ok,0,0.3471,0.3471,0.3214,0.2964,0.3109,0.2893,0.3034,0.2812,0.269066,0.154950,0.42,tmp/bound_extra3_alltraces_0316/meta_lo01_hi100.log
+meta,lo00_hi100,ok,0,0.3471,0.3471,0.3214,0.2964,0.3110,0.2894,0.3035,0.2812,0.269165,0.153907,0.32,tmp/bound_extra3_alltraces_0316/meta_lo00_hi100.log
+meta,lo00_hi099,ok,0,0.3471,0.3471,0.3214,0.2964,0.3110,0.2894,0.3035,0.2812,0.269186,0.153837,0.30,tmp/bound_extra3_alltraces_0316/meta_lo00_hi099.log
+wiki,lo00_hi099,ok,0,NA,NA,NA,NA,NA,NA,0.1988,0.1755,0.170127,0.134009,0.05,tmp/bound_extra3_alltraces_0316/wiki_lo00_hi099.log
+wiki,lo00_hi100,ok,0,NA,NA,NA,NA,NA,NA,0.2001,0.1782,0.171618,0.138154,0.05,tmp/bound_extra3_alltraces_0316/wiki_lo00_hi100.log
+wiki,lo01_hi100,ok,0,NA,NA,NA,NA,NA,NA,0.2002,0.1813,0.175036,0.139154,0.05,tmp/bound_extra3_alltraces_0316/wiki_lo01_hi100.log

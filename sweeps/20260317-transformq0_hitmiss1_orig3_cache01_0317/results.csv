@@ -1,0 +1,4 @@
+trace,status,rc,final_mr,final_bmr,final_mqps,log_path
+meta,ok,0,0.269184,0.153634,0.31,tmp/transformq0_hitmiss1_orig3_cache01_0317/meta_transformq0_hitmiss1_cache01_0317_234326.log
+1063,ok,0,0.022819,0.024138,0.36,tmp/transformq0_hitmiss1_orig3_cache01_0317/1063_transformq0_hitmiss1_cache01_0317_234326.log
+wiki,ok,0,0.172417,0.137832,0.07,tmp/transformq0_hitmiss1_orig3_cache01_0317/wiki_transformq0_hitmiss1_cache01_0317_234326.log

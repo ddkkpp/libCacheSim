@@ -1,0 +1,13 @@
+trace,config,status,rc,mr24,imr24,mr48,imr48,mr72,imr72,mr96,imr96,final_mr,final_bmr,final_mqps,log_path
+meta,adapt_q05_q95_w32768,ok,0,0.3471,0.3471,0.3214,0.2964,0.3110,0.2894,0.3035,0.2812,0.269165,0.154793,0.31,tmp/log1p_adaptive_tune_0316/meta_adapt_q05_q95_w32768.log
+meta,adapt_q05_q95_w16384,ok,0,0.3471,0.3471,0.3214,0.2964,0.3109,0.2894,0.3035,0.2812,0.269175,0.155170,0.29,tmp/log1p_adaptive_tune_0316/meta_adapt_q05_q95_w16384.log
+meta,adapt_q10_q90_w32768,ok,0,0.3471,0.3471,0.3215,0.2965,0.3110,0.2894,0.3035,0.2812,0.269510,0.154961,0.17,tmp/log1p_adaptive_tune_0316/meta_adapt_q10_q90_w32768.log
+meta,adapt_q10_q90_w16384,ok,0,0.3471,0.3471,0.3215,0.2965,0.3110,0.2894,0.3035,0.2812,0.269526,0.155451,0.15,tmp/log1p_adaptive_tune_0316/meta_adapt_q10_q90_w16384.log
+1063,adapt_q05_q95_w16384,ok,0,0.1362,0.1362,0.1194,0.0988,0.0940,0.0614,0.0740,0.0219,0.036966,0.037213,0.24,tmp/log1p_adaptive_tune_0316/1063_adapt_q05_q95_w16384.log
+1063,adapt_q05_q95_w32768,ok,0,0.1383,0.1383,0.1209,0.0995,0.0951,0.0619,0.0749,0.0224,0.037416,0.037670,0.24,tmp/log1p_adaptive_tune_0316/1063_adapt_q05_q95_w32768.log
+1063,adapt_q10_q90_w16384,ok,0,0.1540,0.1540,0.1430,0.1295,0.1240,0.0996,0.1034,0.0499,0.054217,0.052541,0.19,tmp/log1p_adaptive_tune_0316/1063_adapt_q10_q90_w16384.log
+1063,adapt_q10_q90_w32768,ok,0,0.1530,0.1530,0.1425,0.1297,0.1239,0.1000,0.1035,0.0503,0.054333,0.052451,0.19,tmp/log1p_adaptive_tune_0316/1063_adapt_q10_q90_w32768.log
+wiki,adapt_q05_q95_w32768,ok,0,NA,NA,NA,NA,NA,NA,0.2005,0.1801,0.175279,0.140251,0.05,tmp/log1p_adaptive_tune_0316/wiki_adapt_q05_q95_w32768.log
+wiki,adapt_q05_q95_w16384,ok,0,NA,NA,NA,NA,NA,NA,0.2011,0.1827,0.175626,0.142899,0.05,tmp/log1p_adaptive_tune_0316/wiki_adapt_q05_q95_w16384.log
+wiki,adapt_q10_q90_w16384,ok,0,NA,NA,NA,NA,NA,NA,0.2017,0.1854,0.179138,0.136822,0.05,tmp/log1p_adaptive_tune_0316/wiki_adapt_q10_q90_w16384.log
+wiki,adapt_q10_q90_w32768,ok,0,NA,NA,NA,NA,NA,NA,0.2010,0.1821,0.177861,0.137732,0.05,tmp/log1p_adaptive_tune_0316/wiki_adapt_q10_q90_w32768.log

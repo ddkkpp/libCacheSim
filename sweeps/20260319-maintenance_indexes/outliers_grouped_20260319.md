@@ -1,0 +1,259 @@
+]633;E;{   echo '# Outliers Grouped Report'\x3b   echo\x3b   echo "Generated: $(date '+%F %T')"\x3b   echo\x3b   echo '## Status Counts'\x3b   echo\x3b   git status --short | awk '{print $1}' | sort | uniq -c | sort -nr\x3b   echo\x3b   echo '## Outliers By Status (Top 200)'\x3b   echo\x3b   while IFS= read -r p\x3b do     [ -z "$p" ] && continue\x3b     st=$(git status --short -- "$p" | awk '{print $1}' | head -n 1)\x3b     [ -z "$st" ] && st='clean?'\x3b     echo "$st $p"\x3b   done < "$OUTLIERS" | sort | head -n 200\x3b   echo\x3b   echo '## Outliers Top Prefixes'\x3b   while IFS= read -r p\x3b do     [ -z "$p" ] && continue\x3b     echo "$p"\x3b   done < "$OUTLIERS" | awk -F/ '{print ($2==""?$1:$1"/"$2)}' | sort | uniq -c | sort -nr | head -n 60\x3b } > "$REPORT";c33ec03e-1ac9-4c82-9493-813e46b777cd]633;C# Outliers Grouped Report
+
+Generated: 2026-03-19 02:51:03
+
+## Status Counts
+
+   2430 D
+    236 ??
+     28 M
+
+## Outliers By Status (Top 200)
+
+?? 1063.oracleGeneral.zst.popularity
+?? 1063.oracleGeneral.zst.reuse
+?? 1063.oracleGeneral.zst.reuseWindow_w300_rt
+?? 1063.oracleGeneral.zst.reuseWindow_w300_vt
+?? 1063.oracleGeneral.zst.size
+?? 1063.oracleGeneral.zst.sizeWindow_w300_obj
+?? 1063.oracleGeneral.zst.sizeWindow_w300_req
+?? 12041008.txt
+?? 12041016.txt
+?? 12041143.txt
+?? 12041158.txt
+?? 1535.txt
+?? 1559.txt
+?? 1626.txt
+?? 1638.txt
+?? 1639.txt
+?? 1.txt
+?? 20251101prompt
+?? 20251101work
+?? 2139_loh.txt
+?? 2145_loh.txt
+?? 2159_loh.txt
+?? 2206.txt
+?? 2212_loh.txt
+?? 2248.txt
+?? 2254.txt
+?? a.txt
+clean? "copilot\345\216\206\345\217\26203142303"
+clean? "docs/20260215_1063_to032_\351\230\266\346\256\265\346\200\273\347\273\223\344\270\216\345\256\214\346\210\220\345\272\246.md"
+clean? "docs/20260215-20260215_1063_to032_\351\230\266\346\256\265\346\200\273\347\273\223\344\270\216\345\256\214\346\210\220\345\272\246.md"
+clean? "Out\345\222\214norm\345\210\227"
+?? com_08071442.txt
+?? com_08071447.txt
+?? com_08071451.txt
+?? com_2210.txt
+?? configs/
+D data/
+?? docs/20250704-references.md
+?? docs/20250729-loh_file_shm_patch.md
+?? docs/20250729-LOH_SHARED_MEMORY_FIX.md
+?? docs/20250807-LOH_IMPROVEMENTS_SUMMARY.md
+?? docs/20250808-LOH_DEEP_ANALYSIS_FIXES.md
+?? docs/20250814-LOH_Algorithm_Architecture.md
+?? docs/20250902-LOH_FIX_SUMMARY.md
+?? docs/20250925-LOH_REWARD_WEIGHTS_FEATURE.md
+?? docs/20251016-LOH_INFERENCE_GUIDE.md
+?? docs/20251022-SAC_RETROSPECTIVE_GUIDE.md
+?? docs/20251022-TEST_RETROSPECTIVE_PENALTY.md
+?? docs/20251023-EVICTION_TIMESTAMP_IMPROVEMENT.md
+?? docs/20251023-PENALTY_FIXES_SUMMARY.md
+?? docs/20251023-PENALTY_FIX_SUMMARY.md
+?? docs/20251023-PENALTY_MECHANISM_REDESIGN.md
+?? docs/20251023-SAMPLING_EXCLUSION_STRATEGY.md
+?? docs/20251023-TUNING_GUIDE.md
+?? docs/20251023-TWO_COMPONENT_PENALTY_IMPLEMENTATION.md
+?? docs/20251023-TWO_COMPONENT_PENALTY_TEST_REPORT.md
+?? docs/20251024-CTRL_C_BEHAVIOR.md
+?? docs/20251024-LOH_GRACEFUL_SHUTDOWN.md
+?? docs/20251027-PENALTY_QUEUE_OPTIMIZATION.md
+?? docs/20251028-DOC_INDEX.md
+?? docs/20251028-README.md
+?? docs/20251028-REWARD_IMPROVEMENT_PLAN.md
+?? docs/20251029-PICKLE_FIX_SUMMARY.md
+?? docs/20251029-WHY_SACBLOCKED_WORKS.md
+?? docs/20251107-RL_CacheSim_Run_Summary_by_Trace.md
+?? docs/20251114-LOH_ENV_VARS.md
+?? docs/20251117-LOH_EXP_HISTORY.md
+?? docs/20251117-LOH_Framework_and_Experiments_Summary.md
+?? docs/20251117-Scripts_and_Docs_Files_Summary.md
+?? docs/20251125-LOH_CLEANUP_SUMMARY.md
+?? docs/20251203-LOH_SCRIPTS_INTEGRATION_GUIDE.md
+?? docs/20251205-sweep_results.md
+?? docs/20260129-_generated_LOH_TESTED_CONFIGS_SUMMARY.md
+?? docs/20260129-LOH_TESTED_CONFIGS_SUMMARY.md
+?? docs/20260131-LOH_CONSTANT_WEIGHTS_BEST_3M_WIKI2019T_1063.md
+?? docs/20260131-LOH_PARAM_COVERAGE_SUMMARY.md
+?? docs/20260205-_generated_ac_reward_signal_report_0204_3m.md
+?? docs/20260205-_generated_ac_reward_signal_report_0204_all.md
+?? docs/20260205-LOH_PENALTY_ANALYSIS_cross_date.md
+?? docs/20260205-LOH_PENALTY_ANALYSIS_ignore_formula.md
+?? docs/20260205-LOH_PENALTY_ANALYSIS.md
+?? docs/20260205-LOH_PENALTY_COVERAGE.md
+?? docs/20260205-LOH_PENALTY_RUNS_0203_PLUS.md
+?? docs/20260206-_generated_ac_reward_signal_report_0204_3m_pen1_final.md
+?? docs/20260206-_generated_ac_reward_signal_report_0204_3m_pen1_final_with_manifest.md
+?? docs/20260206-_generated_ac_reward_signal_report_0204_pen1_final_combined.md
+?? docs/20260206-_generated_ac_reward_signal_report_0204_pen1_final_config_rich.md
+?? docs/20260206-_generated_ac_reward_signal_report_0204_pen1_final.md
+?? docs/20260303-COMPREHENSIVE_EXPERIMENT_SUMMARY.md
+?? docs/20260305-LOH_1063_8M_RL_RESULTS.md
+?? docs/20260313-_generated_metakv_and_original3_all_algorithms.md
+?? docs/20260317-FULL_EXPERIMENT_RESULTS.md
+?? docs/20260319-EXPERIMENT_ASSET_INDEX.md
+?? driver_0203_ft_meta_cpd_on_meta_tf256_nosoftmax_r03.pid
+?? evict_vals.txt
+?? final_test.txt
+?? ipc_keeper_pid.txt
+?? logs/
+?? loh_shm_fix.c
+?? LOH_TESTED_CONFIGS_SUMMARY.cleaned2.tmp
+?? LOH_TESTED_CONFIGS_SUMMARY.cleaned3.tmp
+?? LOH_TESTED_CONFIGS_SUMMARY.cleaned.tmp
+?? loh_victims.txt
+?? lrutest_1m.csv.reuseWindow_w300_vt
+?? lrutest_1m.csv.sizeWindow_w300_obj
+?? lrutest_1m.csv.sizeWindow_w300_req
+?? manual_sync_errors.txt
+M doc/advanced_lib_extend.md
+M doc/quickstart_mrcProfiler.md
+?? meta_2147.txt
+?? meta_3lcache.txt
+?? meta_LRU.txt
+?? meta_reag.oracleGeneral.zst.popularityDecay_w300_obj
+M .gitignore
+M libCacheSim/cache/eviction/LOH.c
+M libCacheSim-node/package.json
+?? modes3_batch_last.pid
+?? mr_blocked_victims.txt
+M result/1063.oracleGeneral.zst.cachesim
+M result/meta_reag.oracleGeneral.zst.cachesim
+M result/wiki_2019t.oracleGeneral.zst.cachesim
+M scripts/analyze_loh_penalty_runs.py
+M scripts/append_sweep_results_to_summary.py
+M scripts/append_sweep_to_results_md.py
+M scripts/batch_experiment.sh
+M scripts/collect_root_logs_into_summary.py
+M scripts/gen_report.sh
+M scripts/run_loh_phase_ab_experiments.sh
+M scripts/run_nonblocked36.sh
+M scripts/summarize_logs_by_trace.py
+M scripts/summarize_penalty_runs_0203_plus.py
+M scripts/test_loh_rl_sb3.sh
+M scripts/wait_and_append_sweep.sh
+M test/CMakeLists.txt
+M test_scripts/10230213-analyze_training.sh
+M test/test_evictionAlgo.c
+?? multi_size_test.txt
+M .vscode/settings.json
+M .vscode/tasks.json
+?? no_manual_sync_errors.txt
+?? output/
+?? runs/
+?? sb3_checkpoints/
+?? sb3_logs/
+?? stat
+?? tb_report/
+?? tb_report_0203_probe/
+?? temp1.txt
+?? temp_trace.txt
+?? test/CMakeLists_LOH.txt
+?? test_config.txt
+?? test_irt_demo.txt
+?? test_irt_features.txt
+?? test_irt_fixed.txt
+?? test_loh_features_long.txt
+?? test_loh_features.txt
+?? test_loh_large_clean.txt
+?? test_loh_large.txt
+?? test_loh_vtime.txt
+?? test_perf.txt
+?? test_repeat_trace.txt
+?? test_simple_irt.txt
+?? test_simple.txt
+?? test_single.txt
+?? test/test_LOH_modules.c
+?? time_1423.txt
+?? time_1446.txt
+?? time-col=1,obj-id-col=2,obj-size-col=3
+?? time_compre_10k_detail.txt
+?? time_meta_reset_24_2103.txt
+?? time_reset_24_2103.txt
+?? .tmp/
+?? tmp/
+?? .tmp_1063_req3000000_table.md
+?? .tmp_meta_reag_req3000000_table_mirror.md
+?? .tmp_missing_root_rows_desc.md
+?? .tmp_missing_root_rows.md
+?? tmp_pid2.txt
+?? tmp_pid.txt
+?? .tmp_wiki_2019t_req3000000_table_mirror.md
+?? traceStat
+?? training_logs/
+?? .venv/
+?? wiki_2019t.oracleGeneral.zst.popularityDecay_w300_obj
+?? zz_testfile
+
+## Outliers Top Prefixes
+      1 zz_testfile
+      1 wiki_2019t.oracleGeneral.zst.popularityDecay_w300_obj
+      1 .vscode/tasks.json
+      1 .vscode/settings.json
+      1 .venv
+      1 training_logs
+      1 traceStat
+      1 .tmp_wiki_2019t_req3000000_table_mirror.md
+      1 tmp_pid.txt
+      1 tmp_pid2.txt
+      1 .tmp_missing_root_rows.md
+      1 .tmp_missing_root_rows_desc.md
+      1 .tmp_meta_reag_req3000000_table_mirror.md
+      1 .tmp_1063_req3000000_table.md
+      1 .tmp
+      1 tmp
+      1 time_reset_24_2103.txt
+      1 time_meta_reset_24_2103.txt
+      1 time_compre_10k_detail.txt
+      1 time-col=1,obj-id-col=2,obj-size-col=3
+      1 time_1446.txt
+      1 time_1423.txt
+      1 test/test_LOH_modules.c
+      1 test/test_evictionAlgo.c
+      1 test_single.txt
+      1 test_simple.txt
+      1 test_simple_irt.txt
+      1 test_scripts/10230213-analyze_training.sh
+      1 test_repeat_trace.txt
+      1 test_perf.txt
+      1 test_loh_vtime.txt
+      1 test_loh_large.txt
+      1 test_loh_large_clean.txt
+      1 test_loh_features.txt
+      1 test_loh_features_long.txt
+      1 test_irt_fixed.txt
+      1 test_irt_features.txt
+      1 test_irt_demo.txt
+      1 test_config.txt
+      1 test/CMakeLists.txt
+      1 test/CMakeLists_LOH.txt
+      1 temp_trace.txt
+      1 temp1.txt
+      1 tb_report_0203_probe
+      1 tb_report
+      1 stat
+      1 scripts/wait_and_append_sweep.sh
+      1 scripts/test_loh_rl_sb3.sh
+      1 scripts/summarize_penalty_runs_0203_plus.py
+      1 scripts/summarize_logs_by_trace.py
+      1 scripts/run_nonblocked36.sh
+      1 scripts/run_loh_phase_ab_experiments.sh
+      1 scripts/gen_report.sh
+      1 scripts/collect_root_logs_into_summary.py
+      1 scripts/batch_experiment.sh
+      1 scripts/append_sweep_to_results_md.py
+      1 scripts/append_sweep_results_to_summary.py
+      1 scripts/analyze_loh_penalty_runs.py
+      1 sb3_logs
+      1 sb3_checkpoints

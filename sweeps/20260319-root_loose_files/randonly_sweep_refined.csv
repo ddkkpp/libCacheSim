@@ -1,0 +1,10 @@
+trace,max_cand,raw_result
+meta,64,data/MetaCDN/meta_reag.oracleGeneral.zst LOH-OMR cache size     3TiB,          8000000 req, miss ratio 0.333076, byte miss ratio 0.185323, throughput 0.75 MQPS
+1063,64,data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     3GiB,          8000000 req, miss ratio 0.170964, byte miss ratio 0.213877, throughput 0.44 MQPS
+wiki,64,data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     5GiB,          8000000 req, miss ratio 0.469257, byte miss ratio 0.372844, throughput 0.14 MQPS
+meta,128,data/MetaCDN/meta_reag.oracleGeneral.zst LOH-OMR cache size     3TiB,          8000000 req, miss ratio 0.326020, byte miss ratio 0.181948, throughput 0.60 MQPS
+1063,128,data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     3GiB,          8000000 req, miss ratio 0.168146, byte miss ratio 0.211871, throughput 0.31 MQPS
+wiki,128,data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     5GiB,          8000000 req, miss ratio 0.469652, byte miss ratio 0.373011, throughput 0.08 MQPS
+meta,192,data/MetaCDN/meta_reag.oracleGeneral.zst LOH-OMR cache size     3TiB,          8000000 req, miss ratio 0.325674, byte miss ratio 0.181185, throughput 0.88 MQPS
+1063,192,data/TencentCBS/1063.oracleGeneral.zst LOH-OMR cache size     3GiB,          8000000 req, miss ratio 0.167233, byte miss ratio 0.212812, throughput 0.25 MQPS
+wiki,192,data/WikiCDN/wiki_2019t.oracleGeneral.zst LOH-OMR cache size     5GiB,          8000000 req, miss ratio 0.469668, byte miss ratio 0.375660, throughput 0.06 MQPS

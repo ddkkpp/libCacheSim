@@ -1,0 +1,14 @@
+phase,trace,method,status,rc,mr,bmr,log_path
+no_norm,meta,alpha_mix,ok,0,0.269081,0.156254,tmp/unified_method_compare_0315/no_norm_meta_alpha_mix.log
+no_norm,meta,asym,ok,0,0.269085,0.156210,tmp/unified_method_compare_0315/no_norm_meta_asym.log
+topup_adaptive,meta,alpha_mix,ok,0,0.269082,0.156081,tmp/unified_method_compare_0315/topup_adaptive_meta_alpha_mix.log
+topup_adaptive,meta,asym,ok,0,0.269891,0.156629,tmp/unified_method_compare_0315/topup_adaptive_meta_asym.log
+no_norm,1063,asym,ok,0,0.132992,0.127533,tmp/unified_method_compare_0315/no_norm_1063_asym.log
+no_norm,1063,alpha_mix,ok,0,0.134434,0.128907,tmp/unified_method_compare_0315/no_norm_1063_alpha_mix.log
+no_norm,wiki,alpha_mix,ok,0,0.176646,0.139419,tmp/unified_method_compare_0315/no_norm_wiki_alpha_mix.log
+no_norm,wiki,asym,ok,0,0.176602,0.139435,tmp/unified_method_compare_0315/no_norm_wiki_asym.log
+topup_adaptive,1063,asym,ok,0,0.134970,0.129449,tmp/unified_method_compare_0315/topup_adaptive_1063_asym.log
+topup_adaptive,1063,alpha_mix,ok,0,0.136134,0.130421,tmp/unified_method_compare_0315/topup_adaptive_1063_alpha_mix.log
+topup_adaptive,wiki,asym,ok,0,0.176515,0.139302,tmp/unified_method_compare_0315/topup_adaptive_wiki_asym.log
+topup_adaptive,wiki,alpha_mix,ok,0,0.176443,0.139017,tmp/unified_method_compare_0315/topup_adaptive_wiki_alpha_mix.log
+log1p_baseline,1063,async,ok,0,0.022307,0.025468,tmp/unified_method_compare_0315/log1p_baseline_1063_async.log

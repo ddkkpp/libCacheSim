@@ -1,0 +1,8 @@
+trace,q_input,status,rc,final_mr,final_bmr,final_mqps,log_path
+meta,log1p,ok,0,0.269190,0.153539,0.35,tmp/adaptive_quantile_input_3trace_0316/meta_qinput_log1p.log
+1063,log1p,ok,0,0.022865,0.024220,0.26,tmp/adaptive_quantile_input_3trace_0316/1063_qinput_log1p.log
+meta,raw,ok,0,0.368989,0.189888,0.03,tmp/adaptive_quantile_input_3trace_0316/meta_qinput_raw.log
+wiki,raw,ok,0,0.191845,0.132577,0.05,tmp/adaptive_quantile_input_3trace_0316/wiki_qinput_raw.log
+wiki,log1p,ok,0,0.171714,0.137750,0.05,tmp/adaptive_quantile_input_3trace_0316/wiki_qinput_log1p.log
+1063,raw,failed,143,NA,NA,NA,tmp/adaptive_quantile_input_3trace_0316/1063_qinput_raw_rerun_0317.log
+1063,raw,ok,0,0.519859,0.519291,0.04,cachesim_sb3_0317_1063_qinput_raw_rerun.log

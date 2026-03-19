@@ -1,0 +1,8 @@
+queue_root=tmp/phase_ab_0312_223925
+total=133
+done=22
+failed=4
+running=3
+pending=104
+updated_at=2026-03-13 08:23:14
+current=phaseB_rl_1063_0p001_log1p_w0,phaseB_rl_TencentPhoto-1_0p1_log1p_w0,phaseB_rl_TencentPhoto-1_0p1_reciprocal_w0

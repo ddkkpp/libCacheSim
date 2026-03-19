@@ -1,0 +1,5 @@
+]633;E;{   echo "plan_total=$(($(wc -l < \\"$PLAN\\")-1))"\x3b   echo "plan_rename=$(awk -F'\\t' 'NR>1 && $3==\\"rename\\" {c++} END{print c+0}' \\"$PLAN\\")"\x3b   echo "plan_skip=$(awk -F'\\t' 'NR>1 && $3==\\"skip\\" {c++} END{print c+0}' \\"$PLAN\\")"\x3b   echo "exec_renamed=$(awk -F'\\t' '$1==\\"RENAMED\\" {c++} END{print c+0}' \\"$LOG\\")"\x3b   echo "exec_failed=$(awk -F'\\t' '$1==\\"FAILED\\" {c++} END{print c+0}' \\"$LOG\\")"\x3b } > tmp/20260319-maintenance_indexes/sweeps_prefix_rename_summary_20260319.txt;41c0ab9c-1ae2-468d-8b5d-9e812f4dd434]633;Cplan_total=-1
+plan_rename=
+plan_skip=
+exec_renamed=
+exec_failed=

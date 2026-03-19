@@ -1,0 +1,4 @@
+trace,status,rc,final_mr,final_bmr,final_mqps,log_path
+meta,ok,0,0.269099,0.161177,0.54,tmp/hitmiss_lo00_hi100_full_0316/meta_hitmiss_lo00_hi100.log
+1063,ok,0,0.035074,0.034376,0.19,tmp/hitmiss_lo00_hi100_full_0316/1063_hitmiss_lo00_hi100.log
+wiki,ok,0,0.174636,0.148169,0.05,tmp/hitmiss_lo00_hi100_full_0316/wiki_hitmiss_lo00_hi100.log
