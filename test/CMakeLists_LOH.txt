@@ -1,0 +1,27 @@
+# Add LOH module tests
+add_executable(testLOHModules
+    test_LOH_modules.c
+)
+
+target_link_libraries(testLOHModules
+    ${GLIB_LIBRARIES}
+    ${GLIB_GIO_LIBRARIES}
+    m
+)
+
+target_include_directories(testLOHModules PRIVATE
+    ${CMAKE_SOURCE_DIR}/libCacheSim/include
+    ${CMAKE_SOURCE_DIR}/libCacheSim/utils/include
+    ${CMAKE_SOURCE_DIR}/libCacheSim
+    ${GLIB_INCLUDE_DIRS}
+)
+
+target_compile_definitions(testLOHModules PRIVATE
+    -DLOGLEVEL=6
+    -DOS_LINUX
+    -DSUPPORT_ZSTD_TRACE=1
+    -DUSE_HUGEPAGE=1
+)
+
+# Add test
+add_test(NAME LOH_modules COMMAND testLOHModules)

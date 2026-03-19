@@ -140,6 +140,7 @@
         "**/*.code-search": true
     },
     "git.ignoreLimitWarning": true,
+    "git.showUntrackedFiles": true,
     "terminal.integrated.cwd": "${workspaceFolder}",
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.pythonProjects": []

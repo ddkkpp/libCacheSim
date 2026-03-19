@@ -1,4 +1,0 @@
-trace,mode,include_hit_miss,include_cache,include_candidate,include_topk,include_avgtopk,include_request,rl_state_use_missratio,miss_ratio,byte_miss_ratio,throughput_mqps,exit_code,run_timestamp,base_config
-1063,"compound=0,irt=0",1,1,0,0,0,1,1,0.364452,0.348691,0.01,0,bestcfg_statecombo_3t_3m_20260207_000001__1063__c040_001_r01,LOH_SCORE_USE_COMPOUND=0 LOH_SCORE_USE_IRT=0 LOH_USE_SOFTMAX=0 LOH_USE_HEURISTIC_SIGNS=0
-meta_reag,compound=1,0,0,0,1,0,1,0,0.36812,0.225812,0.01,0,bestcfg_statecombo_3t_3m_20260207_000001__meta_reag__c005_002_r01,LOH_SCORE_USE_COMPOUND=1 LOH_SCORE_USE_IRT=1 LOH_USE_SOFTMAX=1 LOH_USE_HEURISTIC_SIGNS=0
-wiki_2019t,"compound=0,irt=0",0,1,1,0,1,0,0,0.594221,0.490887,0.01,0,bestcfg_statecombo_3t_3m_20260207_000001__wiki_2019t__c021_002_r01,LOH_SCORE_USE_COMPOUND=0 LOH_SCORE_USE_IRT=0 LOH_USE_SOFTMAX=1 LOH_USE_HEURISTIC_SIGNS=0

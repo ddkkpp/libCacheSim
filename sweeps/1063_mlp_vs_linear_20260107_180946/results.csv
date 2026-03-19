@@ -1,3 +1,0 @@
-idx,rep,seed,run_timestamp,exit_code,miss_ratio,byte_miss_ratio,throughput_mqps,trace_file,cache_ratio,config
-1,1,101,1063_mlp_vs_linear_20260107_180946_001_r01,130,NA,NA,NA,"data/TencentCBS/1063.oracleGeneral.zst",0.1,"LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=50 LOH_SCORE_MODEL=linear"
-2,1,201,1063_mlp_vs_linear_20260107_180946_002_r01,0,0.365308,0.357196,0.00,"data/TencentCBS/1063.oracleGeneral.zst",0.1,"LOH_RL_ALGO=SAC LOH_USE_SOFTMAX=0 LOH_ACTION_SCALE=1.0 RL_UPDATE_INTERVAL=50 LOH_SCORE_MODEL=mlp LOH_MLP_HIDDEN=16"
