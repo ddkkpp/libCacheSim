@@ -194,9 +194,12 @@ pip install -q stable-baselines3 gymnasium torch
 echo "Ensuring proper permissions..."
 umask 0  # Set umask to allow full permissions
 
+LOG_DIR="logs"
+mkdir -p "${LOG_DIR}"
+
 
 # 先启动Python脚本，由其主动创建共享内存文件（开启无缓冲输出便于实时观测日志）
-PYTHON_LOG_FILE="ac_sb3_${RUN_TIMESTAMP}.log"
+PYTHON_LOG_FILE="${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log"
 export PYTHONUNBUFFERED=1
 echo -e "${YELLOW}Starting stable-baselines3 training script... (Log: ${PYTHON_LOG_FILE})${NC}"
 python3 scripts/loh_actor_critic_sb3.py --miss-ratio-weight "$MISS_RATIO_WEIGHT" > "${PYTHON_LOG_FILE}" 2>&1 &
@@ -254,7 +257,7 @@ echo "  Eviction: LOH (with SB3 RL)"
 echo "  Processing all requests in trace file"
 
 # 执行缓存模拟
-CACHESIM_LOG_FILE="cachesim_sb3_${RUN_TIMESTAMP}.log"
+CACHESIM_LOG_FILE="${LOG_DIR}/cachesim_sb3_${RUN_TIMESTAMP}.log"
 echo -e "${BLUE}Running cachesim... (Log: ${CACHESIM_LOG_FILE})${NC}"
 echo "  Miss ratio weight: $MISS_RATIO_WEIGHT"
 echo "  Byte miss ratio weight: $BYTE_MISS_RATIO_WEIGHT"

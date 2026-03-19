@@ -4,9 +4,9 @@ import os, sys
 
 def _resolve_debug_level() -> int:
     try:
-        return int(os.environ.get("LOH_DEBUG_LEVEL", "2").strip())
+        return int(os.environ.get("LOH_DEBUG_LEVEL", "0").strip())
     except Exception:
-        return 1
+        return 0
 
 
 LOH_DEBUG_LEVEL = _resolve_debug_level()
@@ -125,8 +125,8 @@ import glob
 #   - LOH_MISS_RATIO_WEIGHT               : miss_ratio vs byte_miss_ratio 权重
 #
 # 6) RL 算法选择与超参
-#   - LOH_RL_ALGO                         : 选择 RL 算法 (SAC/PPO/PPO_LSTM/TD3)
-#   - LOH_EXCLUDE_RECENT_STEPS            : SAC 训练时排除最近样本
+#   - LOH_RL_ALGO                         : 选择 RL 算法 (SAC/PPO/PPO_LSTM/A2C/TD3/DDPG/TQC/DQN)
+#   - LOH_EXCLUDE_RECENT_STEPS            : off-policy 训练采样时排除最近样本
 #   - PPO_* / SAC_* / TD3_*               : 各算法超参覆盖（buffer_size 等）
 #   - LOH_SOFT_PRIOR                      : 是否启用动作头软先验（所有算法通用）
 #   - LOH_SOFT_PRIOR_BIAS                 : 软先验强度
@@ -141,7 +141,7 @@ import glob
 #
 # 说明：
 #   1) 上述变量仅概括本脚本中通过 os.environ / _env_flag 显式读取的键；
-#   2) 更完整的说明（含 C 端/其它脚本）见 docs/LOH_ENV_VARS.md。
+#   2) 更完整的说明（含 C 端/其它脚本）见 docs/20260319-LOH_ENV_VARS.md。
 # ============================================================
 
 # ============================================================
@@ -152,7 +152,7 @@ import glob
 # ============================================================
 
 # 1) 调试 / Profiling
-DEFAULT_LOH_ENABLE_PROFILING = "1"   # 1=启用profiling, 0=关闭（默认开启）
+DEFAULT_LOH_ENABLE_PROFILING = "0"   # 1=启用profiling, 0=关闭（默认关闭，降低运行开销）
 
 # 2) IPC 与共享内存
 DEFAULT_LOH_SHM_KEY = "9876"
@@ -167,11 +167,11 @@ DEFAULT_LOH_INCLUDE_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_TOPK_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES = "0"
 DEFAULT_LOH_INCLUDE_REQUEST = "0"
-DEFAULT_LOH_INCLUDE_WEIGHTS_IN_OBS = "0"
+DEFAULT_LOH_INCLUDE_WEIGHTS_IN_OBS = "1"
 DEFAULT_RL_STATE_USE_MISSRATIO = "1"
 
 # 4) 观测 / 动作空间 与评分模式
-DEFAULT_LOH_FEATURE_LOG1P = "0"
+DEFAULT_LOH_FEATURE_LOG1P = "1"
 DEFAULT_LOH_DUAL_CHANNEL = "0" # 是否启用正负双通道动作空间
 DEFAULT_LOH_USE_SOFTMAX = "1" # 是否对动作 logits 做 softmax
 DEFAULT_LOH_ACTION_BOUND = "1.0"        # 动作空间 bounds: [-bound, bound]
@@ -179,8 +179,9 @@ DEFAULT_LOH_ACTION_SCALE = "1.0"        # 动作 logits 缩放（softmax 锐化/
 DEFAULT_LOH_WEIGHT_EMA = "0.0"          # 写回权重 EMA 平滑系数（0=关闭）
 DEFAULT_LOH_WEIGHT_CLIP = "0.0"         # 写回权重幅度裁剪（0=关闭）
 DEFAULT_LOH_FIXED_OBS = "0"
-DEFAULT_LOH_SCORE_USE_IRT = "1"
-DEFAULT_LOH_SCORE_USE_COMPOUND = "0"
+DEFAULT_LOH_SCORE_USE_IRT = "0"
+DEFAULT_LOH_SCORE_USE_COMPOUND = "1"
+DEFAULT_LOH_ASYNC_TRAIN = "1"
 DEFAULT_LOH_USE_HEURISTIC_SIGNS = "1"
 
 # 5) 奖励 / 惩罚与趋势
@@ -560,6 +561,7 @@ from stable_baselines3 import PPO
 from stable_baselines3 import SAC
 from stable_baselines3 import TD3
 from stable_baselines3 import DDPG
+from stable_baselines3 import DQN
 from stable_baselines3 import A2C
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.utils import set_random_seed
@@ -598,7 +600,7 @@ class ProfiledSAC(SAC):
 # 可以消费更多 C 端 state, 预期 step 数提升 5-7 倍.
 # ============================================================
 
-LOH_ASYNC_TRAIN = os.environ.get("LOH_ASYNC_TRAIN", "0").strip().lower() in {"1", "true", "yes", "on"}
+LOH_ASYNC_TRAIN = os.environ.get("LOH_ASYNC_TRAIN", DEFAULT_LOH_ASYNC_TRAIN).strip().lower() in {"1", "true", "yes", "on"}
 
 
 class AsyncProfiledSAC(ProfiledSAC):
@@ -843,6 +845,15 @@ class ProfiledDDPG(DDPG):
             return super().train(gradient_steps, batch_size)
 
 
+class ProfiledDQN(DQN):
+    """DQN 带全局计时的子类"""
+
+    def train(self, gradient_steps: int, batch_size: int = 100):
+        """Measure total DQN.train time."""
+        with GLOBAL_TIMER.time_function("DQN.train_total"):
+            return super().train(gradient_steps, batch_size)
+
+
 if TQC is not None:
     class ProfiledTQC(TQC):
         """TQC 带全局计时的子类（sb3-contrib）"""
@@ -893,6 +904,40 @@ if hasattr(libc, "sem_unlink"):
 def get_monotonic_time():
     """获取单调时钟时间，与C端CLOCK_MONOTONIC一致"""
     return time.clock_gettime(time.CLOCK_MONOTONIC)
+
+
+class DiscreteActionLohWrapper(gym.ActionWrapper):
+    """将连续动作空间映射为离散动作集合，供 DQN 使用。"""
+
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        if not isinstance(env.action_space, spaces.Box):
+            raise TypeError("DiscreteActionLohWrapper requires Box action space")
+
+        self._action_dim = int(np.prod(env.action_space.shape))
+        self._action_bound = float(np.max(np.abs(env.action_space.high)))
+        if not np.isfinite(self._action_bound) or self._action_bound <= 0:
+            self._action_bound = 1.0
+
+        # 原型集合：zero + 每维正/负单位向量。
+        prototypes = [np.zeros(self._action_dim, dtype=np.float32)]
+        for i in range(self._action_dim):
+            pos = np.zeros(self._action_dim, dtype=np.float32)
+            neg = np.zeros(self._action_dim, dtype=np.float32)
+            pos[i] = self._action_bound
+            neg[i] = -self._action_bound
+            prototypes.append(pos)
+            prototypes.append(neg)
+
+        self._action_prototypes = np.asarray(prototypes, dtype=np.float32)
+        self.action_space = spaces.Discrete(int(self._action_prototypes.shape[0]))
+        self.observation_space = env.observation_space
+
+    def action(self, action):
+        idx = int(action)
+        if idx < 0 or idx >= self.action_space.n:
+            idx = max(0, min(idx, self.action_space.n - 1))
+        return self._action_prototypes[idx].copy()
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -986,7 +1031,7 @@ if LOH_MLP_HIDDEN > LOH_MLP_MAX_HIDDEN:
 LOH_MLP_PARAM_DIM = loh_mlp_param_len(LOH_MLP_HIDDEN)
 
 # 评分特征模式（需与 C 端 LOH_SCORE_USE_IRT / LOH_SCORE_USE_COMPOUND 保持一致）：
-#   - 默认：LOH_SCORE_USE_IRT=1, LOH_SCORE_USE_COMPOUND=0 → 使用 6 维基础特征
+#   - 默认：LOH_SCORE_USE_IRT=0, LOH_SCORE_USE_COMPOUND=1 → 使用 rec/freq/size + 3 个 compound
 #   - LOH_SCORE_USE_IRT=0, LOH_SCORE_USE_COMPOUND=0       → 仅使用 3 维基础特征
 #   - LOH_SCORE_USE_COMPOUND=1                            → 使用 rec/freq/size + 3 个 compound
 def _env_int_flag(name: str, default: int) -> int:
@@ -4497,7 +4542,7 @@ class LOHTrainingCallback(BaseCallback):
                     # 从 env 记录基础统计（适用于所有算法，包括 PPO）
                     self._record_env_stats_to_tb()
 
-                    # 针对 off-policy 算法（SAC/TD3/DDPG）的 replay buffer 记录
+                    # 针对 off-policy 算法（SAC/TD3/DDPG/TQC/DQN）的 replay buffer 记录
                     buffer = getattr(self.model, 'replay_buffer', None)
                     if buffer is not None and hasattr(buffer, 'rewards'):
                         # 计算最近100个样本的reward统计
@@ -4910,7 +4955,7 @@ def _apply_soft_prior_to_linear_layer(layer: Optional[torch.nn.Module], tag: str
 
 
 def main():
-    """主函数 - 支持 PPO/PPO_LSTM/A2C/SAC/TD3/DDPG/TQC + 事后奖励修正"""
+    """主函数 - 支持 PPO/PPO_LSTM/A2C/SAC/TD3/DDPG/TQC/DQN + 事后奖励修正"""
     # 统一使用单调时钟，避免 clock 源差异导致 program.total 与各分项存在微小偏差
     _prog_t0 = get_monotonic_time()
 
@@ -4944,8 +4989,8 @@ def main():
 
     # 读取算法选择（默认 SAC）
     algo_name = os.environ.get("LOH_RL_ALGO", DEFAULT_LOH_RL_ALGO).strip().upper()
-    # 支持: SAC, PPO (MLP), PPO_LSTM (RecurrentPPO), A2C, TD3, DDPG, TQC
-    if algo_name not in {"PPO", "PPO_LSTM", "A2C", "SAC", "TD3", "DDPG", "TQC"}:
+    # 支持: SAC, PPO (MLP), PPO_LSTM (RecurrentPPO), A2C, TD3, DDPG, TQC, DQN
+    if algo_name not in {"PPO", "PPO_LSTM", "A2C", "SAC", "TD3", "DDPG", "TQC", "DQN"}:
         print(f"Warning: Unknown LOH_RL_ALGO='{algo_name}', defaulting to SAC")
         algo_name = "SAC"
 
@@ -5193,6 +5238,14 @@ def main():
             byte_miss_ratio_weight=byte_miss_ratio_weight,
             obs_keep_indices=None,
         )
+        env_for_model = env
+
+        if algo_name == "DQN":
+            env_for_model = DiscreteActionLohWrapper(env)
+            print(
+                "[LOH DQN] discrete action wrapper enabled: "
+                f"n_actions={env_for_model.action_space.n}, mapped_continuous_dim={ACTION_DIM}"
+            )
 
         if seed is not None:
             try:
@@ -5275,13 +5328,13 @@ def main():
 
             model = AsyncProfiledSAC(
                 "MlpPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 **sac_config,
             ) if LOH_ASYNC_TRAIN else ProfiledSAC(
                 "MlpPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 **sac_config,
@@ -5321,7 +5374,7 @@ def main():
 
             model = ProfiledPPO(
                 "MlpPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 n_steps=ppo_n_steps,
@@ -5382,7 +5435,7 @@ def main():
 
             model = ProfiledA2C(
                 "MlpPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 n_steps=a2c_n_steps,
@@ -5434,7 +5487,7 @@ def main():
 
             model = RecurrentPPO(
                 "MlpLstmPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 n_steps=ppo_n_steps,
@@ -5494,7 +5547,7 @@ def main():
 
             model = ProfiledTD3(
                 "MlpPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 buffer_size=td3_buffer_size,
@@ -5562,7 +5615,7 @@ def main():
 
             model = ProfiledDDPG(
                 "MlpPolicy",
-                env,
+                env_for_model,
                 verbose=1,
                 seed=seed,
                 buffer_size=ddpg_buffer_size,
@@ -5598,6 +5651,54 @@ def main():
                 except Exception as e:
                     if LOH_DEBUG_BASIC():
                         print("[LOH DDPG soft prior] failed to apply:", e)
+
+        elif algo_name == "DQN" and model is None:
+            # ------------------ DQN 超参数（离散动作，通过 wrapper 映射到连续动作原型） ------------------
+            dqn_buffer_size = _env_int("DQN_BUFFER_SIZE", 50000)
+            dqn_batch_size = _env_int("DQN_BATCH_SIZE", 256)
+            dqn_learning_rate = _env_float_local("DQN_LEARNING_RATE", 1e-4)
+            dqn_tau = _env_float_local("DQN_TAU", 1.0)
+            dqn_gamma = _env_float_local("DQN_GAMMA", 0.99)
+            dqn_train_freq = _env_int("DQN_TRAIN_FREQ", 16)
+            dqn_gradient_steps = _env_int("DQN_GRADIENT_STEPS", 1)
+            dqn_learning_starts = _env_int("DQN_LEARNING_STARTS", 3000)
+            dqn_target_update_interval = _env_int("DQN_TARGET_UPDATE_INTERVAL", 1000)
+            dqn_exploration_fraction = _env_float_local("DQN_EXPLORATION_FRACTION", 0.2)
+            dqn_exploration_initial_eps = _env_float_local("DQN_EXPLORATION_INITIAL_EPS", 1.0)
+            dqn_exploration_final_eps = _env_float_local("DQN_EXPLORATION_FINAL_EPS", 0.05)
+
+            dqn_net_arch = _parse_net_arch("DQN_NET_ARCH", [256, 256])
+            dqn_activation_fn = _parse_activation_fn("DQN_ACTIVATION_FN", "ReLU")
+
+            model = ProfiledDQN(
+                "MlpPolicy",
+                env_for_model,
+                verbose=1,
+                seed=seed,
+                buffer_size=dqn_buffer_size,
+                batch_size=dqn_batch_size,
+                learning_rate=dqn_learning_rate,
+                tau=dqn_tau,
+                gamma=dqn_gamma,
+                train_freq=(dqn_train_freq, "step"),
+                gradient_steps=dqn_gradient_steps,
+                learning_starts=dqn_learning_starts,
+                target_update_interval=dqn_target_update_interval,
+                exploration_fraction=dqn_exploration_fraction,
+                exploration_initial_eps=dqn_exploration_initial_eps,
+                exploration_final_eps=dqn_exploration_final_eps,
+                tensorboard_log=tensorboard_log,
+                policy_kwargs=dict(
+                    net_arch=dqn_net_arch,
+                    activation_fn=dqn_activation_fn,
+                ),
+                replay_buffer_class=RetrospectiveReplayBuffer,
+                replay_buffer_kwargs=dict(
+                    exclude_recent_steps=exclude_recent_steps,
+                    obj_penalty_weight=obj_penalty_weight,
+                    byte_penalty_weight=byte_penalty_weight,
+                ),
+            )
 
         elif algo_name == "TQC" and model is None:
             # ------------------ TQC（sb3-contrib）超参数 ------------------
@@ -5669,13 +5770,13 @@ def main():
                 pass
 
             try:
-                model = ProfiledTQC("MlpPolicy", env, **tqc_kwargs)
+                model = ProfiledTQC("MlpPolicy", env_for_model, **tqc_kwargs)
             except TypeError as e:
                 msg = str(e)
                 if "unexpected keyword argument" in msg:
                     # 最常见的不兼容点：n_quantiles
                     tqc_kwargs.pop("n_quantiles", None)
-                    model = ProfiledTQC("MlpPolicy", env, **tqc_kwargs)
+                    model = ProfiledTQC("MlpPolicy", env_for_model, **tqc_kwargs)
                 else:
                     raise
 
@@ -5866,6 +5967,35 @@ def main():
                 print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
             except Exception:
                 pass
+        elif algo_name == "DQN":
+            tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
+            try:
+                print(f"   - buffer_size: {getattr(model.replay_buffer, 'buffer_size', 'N/A')}")
+            except Exception:
+                print(f"   - buffer_size: N/A")
+            print(f"   - batch_size: {getattr(model, 'batch_size', 'N/A')}")
+            print(f"   - learning_rate: {resolved_lr if resolved_lr is not None else 'N/A'}")
+            print(f"   - tau: {getattr(model, 'tau', 'N/A')}")
+            print(f"   - gamma: {getattr(model, 'gamma', 'N/A')}")
+            print(f"   - train_freq: {tfmt}")
+            print(f"   - gradient_steps: {getattr(model, 'gradient_steps', 'N/A')}")
+            print(f"   - learning_starts: {getattr(model, 'learning_starts', 'N/A')}")
+            print(f"   - target_update_interval: {getattr(model, 'target_update_interval', 'N/A')}")
+            print(f"   - exploration_fraction: {getattr(model, 'exploration_fraction', 'N/A')}")
+            print(f"   - exploration_initial_eps: {getattr(model, 'exploration_initial_eps', 'N/A')}")
+            print(f"   - exploration_final_eps: {getattr(model, 'exploration_final_eps', 'N/A')}")
+            try:
+                print(f"   - discrete_action_count: {getattr(model.action_space, 'n', 'N/A')}")
+            except Exception:
+                pass
+            # 自定义回放缓冲区参数
+            try:
+                rb = model.replay_buffer
+                print(f"   - replay_buffer.exclude_recent_steps: {getattr(rb, 'exclude_recent_steps', 'N/A')}")
+                print(f"   - replay_buffer.obj_penalty_weight: {getattr(rb, 'obj_penalty_weight', 'N/A')}")
+                print(f"   - replay_buffer.byte_penalty_weight: {getattr(rb, 'byte_penalty_weight', 'N/A')}")
+            except Exception:
+                pass
         elif algo_name == "TQC":
             tfmt = _fmt_train_freq(getattr(model, 'train_freq', 'N/A'))
             try:
@@ -5933,7 +6063,7 @@ def main():
         if activ is not None:
             print(f"   - policy.activation_fn: {activ}")
 
-        if algo_name in ["SAC", "TD3", "DDPG", "TQC"]:
+        if algo_name in ["SAC", "TD3", "DDPG", "TQC", "DQN"]:
             print(f"   - retrospective correction: ENABLED")
 
         # 记录训练开始时间
@@ -6003,8 +6133,8 @@ def main():
             print(f"⏰ training interrupted time: {interrupt_time.strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"⌛ actual running time: {str(duration).split('.')[0]}")
 
-        if LOH_DEBUG_BASIC():
-            print(f"⚠️  Training interrupted: {exc}")
+        # Always emit the interrupt reason so batch logs remain diagnosable even with LOH_DEBUG_LEVEL=0.
+        print(f"[LOH-INTERRUPT] Training interrupted: {exc}")
 
         # 停止异步训练线程 (如果启用)
         if LOH_ASYNC_TRAIN and 'model' in locals() and model is not None and hasattr(model, 'stop_async_training'):

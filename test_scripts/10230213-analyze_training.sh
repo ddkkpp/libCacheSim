@@ -3,7 +3,7 @@
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <python_log> <cachesim_log>"
-    echo "Example: $0 ac_sb3_1023_143000.log cachesim_sb3_1023_143000.log"
+    echo "Example: $0 logs/ac_sb3_1023_143000.log logs/cachesim_sb3_1023_143000.log"
     exit 1
 fi
 
@@ -184,7 +184,7 @@ elif [ "$SCORE" -ge 3 ]; then
     echo
     echo "调参建议："
     echo "  1. 检查上述问题的具体原因"
-    echo "  2. 参考 TUNING_GUIDE.md 进行调整"
+    echo "  2. 参考 20251023-TUNING_GUIDE.md 进行调整"
 else
     echo -e "${RED}✗ 测试失败 ($SCORE/$MAX_SCORE)${NC}"
     echo

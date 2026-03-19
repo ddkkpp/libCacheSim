@@ -60,7 +60,9 @@ fi
 
 SWEEP_ID=${SWEEP_ID:-"sweep_$(date +%Y%m%d_%H%M%S)"}
 OUT_DIR=${SWEEP_OUTDIR:-"sweeps/${SWEEP_ID}"}
+LOG_DIR=${LOH_LOG_DIR:-"logs"}
 mkdir -p "${OUT_DIR}"
+mkdir -p "${LOG_DIR}"
 
 # 断点续跑：
 # - SWEEP_RESUME=1：若 results.csv 里已经存在“成功完成”的 (idx,rep)，则跳过该 run；否则重跑。
@@ -232,8 +234,8 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
     exit_code=$?
     set -e
 
-    cachesim_log="cachesim_sb3_${run_ts}.log"
-    py_log="ac_sb3_${run_ts}.log"
+    cachesim_log="${LOG_DIR}/cachesim_sb3_${run_ts}.log"
+    py_log="${LOG_DIR}/ac_sb3_${run_ts}.log"
 
     mr="NA"; bmr="NA"; thr="NA"
     if [[ -f "${cachesim_log}" ]]; then
@@ -323,7 +325,7 @@ echo "[sweep] Runs:    ${RUNS_TXT}"
 # 可选：自动把本次 sweep 的 results.csv 追加到测试汇总（按 trace 分组）
 # 默认开启；如不需要可设 SWEEP_APPEND_TO_MD=0
 SWEEP_APPEND_TO_MD=${SWEEP_APPEND_TO_MD:-1}
-SUMMARY_MD=${SUMMARY_MD:-LOH_TESTED_CONFIGS_SUMMARY.md}
+SUMMARY_MD=${SUMMARY_MD:-20260129-LOH_TESTED_CONFIGS_SUMMARY.md}
 if [[ "${SWEEP_APPEND_TO_MD}" == "1" && -f "${SUMMARY_MD}" ]]; then
   python3 scripts/append_sweep_results_to_summary.py \
     --summary-md "${SUMMARY_MD}" \

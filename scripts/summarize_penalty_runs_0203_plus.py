@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Summarize penalty-enabled LOH RL runs from ac_sb3_0203+ logs.
 
-This script scans repo root for ac_sb3_020[3-9]*.log, picks runs that
-actually enabled penalty (marker: "LOH_ENABLE_PENALTY=1"), pairs them
-with cachesim logs, and emits a Markdown summary.
+This script scans logs/ac_sb3_020[3-9]*.log, picks runs that actually
+enabled penalty (marker: "LOH_ENABLE_PENALTY=1"), pairs them with
+cachesim logs, and emits a Markdown summary.
 
 Designed to be fast on huge logs:
 - Reads only the first N lines from ac_sb3 logs.
@@ -21,6 +21,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
+LOG_ROOT = ROOT / "logs"
 
 
 @dataclass
@@ -208,11 +209,11 @@ def compute_ratio(out: RunSummary) -> None:
 
 def find_penalty_runs() -> List[RunSummary]:
     # use filename heuristics to avoid scanning huge logs: look for *_p1_* or *pen*
-    candidates = sorted(ROOT.glob("ac_sb3_020[3-9]*p1*.log"))
+    candidates = sorted(LOG_ROOT.glob("ac_sb3_020[3-9]*p1*.log"))
     runs: List[RunSummary] = []
     for ac in candidates:
         run_id = ac.name[len("ac_sb3_") : -len(".log")]
-        cachesim = ROOT / f"cachesim_sb3_{run_id}.log"
+        cachesim = ac.parent / f"cachesim_sb3_{run_id}.log"
         runs.append(RunSummary(run_id=run_id, ac_log=ac, cachesim_log=cachesim if cachesim.exists() else None))
     return runs
 
@@ -251,7 +252,7 @@ def baseline_candidates(run: RunSummary) -> List[str]:
 
     cand: List[Path] = []
     for g in globs:
-        cand.extend(ROOT.glob(g))
+        cand.extend(LOG_ROOT.glob(g))
 
     # filter out self (if any) and dedupe
     uniq: Dict[str, Path] = {}
@@ -278,7 +279,7 @@ def parse_run(run: RunSummary, head_lines: int, tail_bytes: int) -> None:
 
 
 def load_baseline_metrics(run_id: str, tail_bytes: int) -> Tuple[Optional[float], Optional[float]]:
-    path = ROOT / f"cachesim_sb3_{run_id}.log"
+    path = LOG_ROOT / f"cachesim_sb3_{run_id}.log"
     if not path.exists():
         return None, None
     text = read_tail_text(path, tail_bytes)
@@ -368,7 +369,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--head-lines", type=int, default=260)
     ap.add_argument("--tail-bytes", type=int, default=2_000_000)
-    ap.add_argument("--out", type=str, default=str(ROOT / "LOH_PENALTY_RUNS_0203_PLUS.md"))
+    ap.add_argument("--out", type=str, default=str(ROOT / "20260205-LOH_PENALTY_RUNS_0203_PLUS.md"))
     args = ap.parse_args()
 
     runs = find_penalty_runs()

@@ -384,6 +384,11 @@ static void test_WTinyLFU(gconstpointer user_data) {
   // TODO: to be implemented
 }
 
+static void test_LOH(gconstpointer user_data) {
+  // We can use LRU as a baseline since LOH is new
+  test_cache_algorithm(user_data, &test_data_truth[15]);
+}
+
 static void empty_test(gconstpointer user_data) { ; }
 
 int main(int argc, char *argv[]) {
@@ -439,6 +444,7 @@ int main(int argc, char *argv[]) {
   g_test_add_data_func("/libCacheSim/cacheAlgo_Belady", reader, test_Belady);
   g_test_add_data_func("/libCacheSim/cacheAlgo_BeladySize", reader,
                        test_BeladySize);
+  g_test_add_data_func("/libCacheSim/cacheAlgo_LOH", reader, test_LOH);
 
   g_test_add_data_func_full("/libCacheSim/empty", reader, empty_test,
                             test_teardown);

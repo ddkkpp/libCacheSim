@@ -88,7 +88,11 @@
         "vscsi.h": "c",
         "libcsv.h": "c",
         "lcs.h": "c",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "valarray": "cpp",
+        "charconv": "cpp",
+        "forward_list": "cpp",
+        "stdlib.h": "c"
     },
     "C_Cpp.errorSquiggles": "enabled",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
@@ -108,7 +112,10 @@
     "editor.formatOnSave": true,
     "editor.insertSpaces": true,
     "editor.detectIndentation": true,
-    "editor.rulers": [80, 100],
+    "editor.rulers": [
+        80,
+        100
+    ],
     "editor.wordWrap": "wordWrapColumn",
     "editor.wordWrapColumn": 100,
     "files.trimTrailingWhitespace": true,
@@ -133,5 +140,7 @@
         "**/*.code-search": true
     },
     "git.ignoreLimitWarning": true,
-    "terminal.integrated.cwd": "${workspaceFolder}"
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.pythonProjects": []
 }

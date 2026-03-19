@@ -6,7 +6,7 @@ and generate a Markdown summary that lists for each group: model, key parameters
 observation view, first N weight vectors, and notes about initial states (if unavailable).
 
 Usage:
-  python3 scripts/summarize_logs_by_trace.py --output docs/RL_CacheSim_Run_Summary_by_Trace.md --weights 5
+  python3 scripts/summarize_logs_by_trace.py --output docs/20251107-RL_CacheSim_Run_Summary_by_Trace.md --weights 5
 """
 import argparse
 import glob
@@ -191,15 +191,16 @@ def parse_python_log(path: str, weights_limit: int, states_limit: int) -> Tuple[
 
 def build_summary(weights_limit: int, states_limit: int, max_logs: Optional[int] = None, progress: bool = True) -> Dict[Tuple[str, int], List[RunInfo]]:
     groups: Dict[Tuple[str, int], List[RunInfo]] = defaultdict(list)
-    cs_logs = sorted(glob.glob('cachesim_sb3_*.log'))
+    cs_logs = sorted(glob.glob('logs/cachesim_sb3_*.log'))
     if max_logs is not None:
         cs_logs = cs_logs[:max_logs]
     for i, cs in enumerate(cs_logs, 1):
-        ts = cs.replace('cachesim_sb3_', '').replace('.log', '')
+        cs_base = os.path.basename(cs)
+        ts = cs_base.replace('cachesim_sb3_', '').replace('.log', '')
         trace_path, threads, req, miss, byte_miss = parse_cachesim_log(cs)
         if not trace_path or req is None:
             continue
-        ac = f'ac_sb3_{ts}.log'
+        ac = os.path.join(os.path.dirname(cs), f'ac_sb3_{ts}.log')
         observation_view = None
         config_lines: List[str] = []
         first_weights: List[str] = []
@@ -365,7 +366,7 @@ def merge_runs_into_cache(cache: Dict[str, Any], groups: Dict[Tuple[str, int], L
 
 def main():
     parser = argparse.ArgumentParser(description='Summarize RL + CacheSim logs by trace and request count.')
-    parser.add_argument('--output', default='docs/RL_CacheSim_Run_Summary_by_Trace.md', help='Output markdown file path')
+    parser.add_argument('--output', default='docs/20251107-RL_CacheSim_Run_Summary_by_Trace.md', help='Output markdown file path')
     parser.add_argument('--weights', type=int, default=5, help='Number of initial weight lines to include')
     parser.add_argument('--max-logs', type=int, default=None, help='Limit number of cachesim logs processed (for quick trial).')
     parser.add_argument('--no-progress', action='store_true', help='Disable periodic progress output.')
@@ -378,8 +379,11 @@ def main():
         cache = load_cache(args.cache)
         existing_ts = set(cache.get("runs", {}).keys())
         # 识别所有 cachesim 日志并过滤掉已处理的时间戳
-        cs_logs = sorted(glob.glob('cachesim_sb3_*.log'))
-        new_cs_logs = [cs for cs in cs_logs if cs.replace('cachesim_sb3_', '').replace('.log', '') not in existing_ts]
+        cs_logs = sorted(glob.glob('logs/cachesim_sb3_*.log'))
+        new_cs_logs = [
+            cs for cs in cs_logs
+            if os.path.basename(cs).replace('cachesim_sb3_', '').replace('.log', '') not in existing_ts
+        ]
         if not new_cs_logs:
             # 无新日志，直接从缓存重建文档
             groups_cached = groups_from_cache(cache)
@@ -395,11 +399,12 @@ def main():
         groups_new: Dict[Tuple[str, int], List[RunInfo]] = defaultdict(list)
         total = len(new_cs_logs)
         for i, cs in enumerate(new_cs_logs, 1):
-            ts = cs.replace('cachesim_sb3_', '').replace('.log', '')
+            cs_base = os.path.basename(cs)
+            ts = cs_base.replace('cachesim_sb3_', '').replace('.log', '')
             trace_path, threads, req, miss, byte_miss = parse_cachesim_log(cs)
             if not trace_path or req is None:
                 continue
-            ac = f'ac_sb3_{ts}.log'
+            ac = os.path.join(os.path.dirname(cs), f'ac_sb3_{ts}.log')
             observation_view = None
             config_lines: List[str] = []
             first_weights: List[str] = []

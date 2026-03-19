@@ -43,6 +43,9 @@ add_test_executable(testPrefetchAlgo test_prefetchAlgo.c)
 add_test_executable(testDataStructure test_dataStructure.c)
 add_test_executable(testUtils test_utils.c)
 
+# LOH Module Tests
+add_test_executable(testLOHModules test_LOH_modules.c)
+
 # Create C++ test executable (mrcProfiler test)
 # add_test_executable(testMrcProfiler test_mrcProfiler.cpp)
 # target_link_libraries(testMrcProfiler mrcProfiler_lib)

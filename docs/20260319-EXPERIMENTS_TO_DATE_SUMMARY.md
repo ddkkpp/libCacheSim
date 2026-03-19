@@ -1,0 +1,264 @@
+# 20260319 Experiments To Date Summary
+
+更新时间：2026-03-19
+
+## 1. 时间段概括
+
+- 统计口径：sweeps/ 一级目录（目录名含日期前缀）。
+- 实验目录总数：198。
+
+### 阶段A（2025-12 到 2026-01）
+- 重点：meta/1063 基线建立、smoke 与参数初筛、reward 与 algo 初步联调。
+
+### 阶段B（2026-02）
+- 重点：1063 breakthrough、guided/scale/temp 网格、penalty 与 state-combo 批次。
+
+### 阶段C（2026-03-10 到 2026-03-18）
+- 重点：blocked vs nonblocked/async、phase A/B、feature norm/quantile、reward path、算法排除与 follow-up。
+
+### 阶段D（2026-03-19）
+- 重点：资产治理（tmp->sweeps、analysis 命名收敛）与历史批次索引化。
+
+## 2. 按日期统计
+
+- 20251212: 9
+- 20251213: 4
+- 20251214: 5
+- 20251215: 3
+- 20251217: 2
+- 20251218: 1
+- 20251222: 3
+- 20251223: 1
+- 20251224: 2
+- 20251225: 5
+- 20251226: 2
+- 20251229: 1
+- 20251231: 2
+- 20260106: 2
+- 20260107: 2
+- 20260108: 1
+- 20260110: 1
+- 20260128: 1
+- 20260129: 9
+- 20260130: 2
+- 20260202: 8
+- 20260203: 4
+- 20260206: 4
+- 20260207: 2
+- 20260211: 1
+- 20260213: 4
+- 20260215: 5
+- 20260216: 2
+- 20260310: 14
+- 20260311: 23
+- 20260312: 2
+- 20260313: 4
+- 20260314: 8
+- 20260315: 1
+- 20260316: 10
+- 20260317: 9
+- 20260318: 10
+- 20260319: 29
+
+## 3. 每个实验详细说明
+
+说明：以下每条对应一个实验目录；“做什么”由目录关键词自动归纳（用于索引与检索）。
+
+- 20251212-meta_3m_1212_152109：目标trace专项实验
+- 20251212-meta_refine_user_3m_1212_160647：目标trace专项实验
+- 20251212-meta_smoke_1212_144755：稳定性/诊断验证；目标trace专项实验
+- 20251212-meta_smoke_1212_150755：稳定性/诊断验证；目标trace专项实验
+- 20251212-meta_smoke_fix_1212_151230：稳定性/诊断验证；目标trace专项实验
+- 20251212-rec3m_1212_133521：通用批次实验（按目录名归档）
+- 20251212-seedfocus3m_1212_143747：通用批次实验（按目录名归档）
+- 20251212-seedfocus3m_1212_144046：通用批次实验（按目录名归档）
+- 20251212-smoke_1212_132049：稳定性/诊断验证
+- 20251213-meta_lower_omr_3m_v2_1213_135303：目标trace专项实验
+- 20251213-meta_lower_omr_500k_1213_032629：目标trace专项实验
+- 20251213-meta_refine6_3m_v3_1213_214805：目标trace专项实验
+- 20251213-meta_try_cachefeat_3m_1213_234146：目标trace专项实验
+- 20251214-meta_precision_refine_v5_1214_212442：目标trace专项实验
+- 20251214-meta_reward_algo_v4_1214_014136：奖励与惩罚机制实验；RL算法对比或配置扫描；目标trace专项实验
+- 20251214-meta_reward_algo_v4_fix_1214_014409：奖励与惩罚机制实验；RL算法对比或配置扫描；目标trace专项实验
+- 20251214-meta_try_cachefeat_3m_fix_1214_000103：目标trace专项实验
+- 20251214-meta_try_candfeat_3m_1214_005451：目标trace专项实验
+- 20251215-meta_algo_expand_v6_1215_011924：RL算法对比或配置扫描；目标trace专项实验
+- 20251215-meta_reward_algo_v4_20251215_145147：奖励与惩罚机制实验；RL算法对比或配置扫描；目标trace专项实验
+- 20251215-meta_reward_algo_v4_tqc_only_fix_20251215_211951：奖励与惩罚机制实验；RL算法对比或配置扫描；目标trace专项实验
+- 20251217-meta_best_grid_interval_temp_r2_20251217_234028：目标trace专项实验；参数网格或配方迭代
+- 20251217-meta_best_v5_idx6_repeat5_20251217_182945：目标trace专项实验
+- 20251218-meta_best_grid_interval_temp_r2_20251217_234028：目标trace专项实验；参数网格或配方迭代
+- 20251222-meta_best_action_scale_r2_20251222_183925：目标trace专项实验；参数网格或配方迭代
+- 20251222-meta_best_action_scale_winner_repeat5_20251222_201349：目标trace专项实验；参数网格或配方迭代
+- 20251222-meta_best_grid_winner_repeat5_20251222_102624：目标trace专项实验；参数网格或配方迭代
+- 20251223-meta_best_scale_fine_r2_20251223_110142：目标trace专项实验；参数网格或配方迭代
+- 20251224-meta_temp_interval_scale_aggr_r2_20251224_205809：目标trace专项实验；参数网格或配方迭代
+- 20251224-meta_temp_scale_grid_r2_20251224_142147：目标trace专项实验；参数网格或配方迭代
+- 20251225-1063_best_20251225_100313：目标trace专项实验
+- 20251225-1063_quick_r1_20251225_110318：目标trace专项实验
+- 20251225-1063_reward_penalty_r1_20251225_163358：奖励与惩罚机制实验；目标trace专项实验
+- 20251225-1063_wide_r1_20251225_215654：目标trace专项实验
+- 20251225-meta_temp_interval_scale_aggr_r2_20251224_205809：目标trace专项实验；参数网格或配方迭代
+- 20251226-1063_wide_r1_20251225_215654：目标trace专项实验
+- 20251226-1063_wide_r2_20251226_112012：目标trace专项实验
+- 20251229-1063_featnorm_r1_20251229_140452：特征变换与归一化实验；目标trace专项实验
+- 20251231-1063_cachefeat_r1_20251231_112906：目标trace专项实验
+- 20251231-1063_kitchensink_r1_20251231_144653：目标trace专项实验
+- 20260106-1063_core_rl_nowait_20260106_215817：同步模式与并发行为实验；目标trace专项实验
+- 20260106-sweep_20260106_153622：通用批次实验（按目录名归档）
+- 20260107-1063_core_rl_nowait_20260106_215817：同步模式与并发行为实验；目标trace专项实验
+- 20260107-1063_mlp_vs_linear_20260107_180946：目标trace专项实验
+- 20260108-1063_linear_only_20260108_115104：目标trace专项实验
+- 20260110-meta_mlp_vs_linear_20260110_181300：目标trace专项实验
+- 20260128-meta_mlp_vs_linear_20260110_181300：目标trace专项实验
+- 20260129-meta_algo_expand_v6_1215_011924：RL算法对比或配置扫描；目标trace专项实验
+- 20260129-next_1063_localgrid_nosem_3m_20260129_184141：目标trace专项实验；参数网格或配方迭代
+- 20260129-next_1063_localgrid_req1_3m_20260129_184633：目标trace专项实验；参数网格或配方迭代
+- 20260129-next_meta_modes_3m_20260129_183751：目标trace专项实验
+- 20260129-next_meta_modes_3m_20260129_183812：目标trace专项实验
+- 20260129-next_meta_modes_nosem_3m_20260129_184111：目标trace专项实验
+- 20260129-next_meta_modes_req1_3m_20260129_184621：目标trace专项实验
+- 20260129-next_wiki_bootstrap_nosem_3m_20260129_184204：目标trace专项实验
+- 20260129-next_wiki_bootstrap_req1_3m_20260129_184646：目标trace专项实验
+- 20260130-modes2_mrw0_0130_112123：奖励与惩罚机制实验
+- 20260130-modes3_batch_0130_021623：通用批次实验（按目录名归档）
+- 20260202-1063_breakthrough_compound_scale3：目标trace专项实验；参数网格或配方迭代
+- 20260202-1063_breakthrough_compound_scale3_v2：目标trace专项实验；参数网格或配方迭代
+- 20260202-1063_guided_scale10_flip_20260202：目标trace专项实验；参数网格或配方迭代
+- 20260202-1063_guided_signflip_20260202：目标trace专项实验
+- 20260202-1063_guided_softmax_scale5：目标trace专项实验；参数网格或配方迭代
+- 20260202-1063_linear_breakthrough_ctx：目标trace专项实验
+- 20260202-1063_linear_guided_v3：目标trace专项实验
+- 20260202-1063_softmax_ctx_bound5：目标trace专项实验；参数网格或配方迭代
+- 20260203-1063_guided_scale10_flip_20260202：目标trace专项实验；参数网格或配方迭代
+- 20260203-1063_guided_signflip_20260202：目标trace专项实验
+- 20260203-1063_scalegrid_noprior_20260203：目标trace专项实验；参数网格或配方迭代
+- 20260203-1063_tempgrid_noprior_20260203：目标trace专项实验；参数网格或配方迭代
+- 20260206-1063_penalty_3m_20260206_030550：奖励与惩罚机制实验；目标trace专项实验
+- 20260206-modes_cpd_soft_sign_3m_20260206_141233：通用批次实验（按目录名归档）
+- 20260206-modes_cpd_soft_sign_3m_20260206_145822：通用批次实验（按目录名归档）
+- 20260206-sweep_20260106_153622：通用批次实验（按目录名归档）
+- 20260207-bestcfg_penalty_3t_3m_20260207_000001：奖励与惩罚机制实验
+- 20260207-bestcfg_statecombo_3t_3m_20260207_000001：参数网格或配方迭代；离线分析与统计
+- 20260211-bestcfg_penalty_3t_3m_20260207_000001：奖励与惩罚机制实验
+- 20260213-1063_to032_20260213_2325：目标trace专项实验
+- 20260213-1063_to032_dryrun_20260213：稳定性/诊断验证；目标trace专项实验
+- 20260213-1063_to032_fixcheck_20260213：稳定性/诊断验证；目标trace专项实验
+- 20260213-bestcfg_statecombo_3t_3m_20260207_000001：参数网格或配方迭代；离线分析与统计
+- 20260215-1063_stage2_upgrade_single_seed_20260215_123602：目标trace专项实验；参数网格或配方迭代
+- 20260215-1063_stage2_upgrade_single_seed_20260215_123619：目标trace专项实验；参数网格或配方迭代
+- 20260215-1063_stage2_upgrade_single_seed_20260215_rebuild_dbg0：目标trace专项实验；参数网格或配方迭代
+- 20260215-1063_stage2_upgrade_single_seed_20260215_restart_debug0：目标trace专项实验；参数网格或配方迭代
+- 20260215-1063_to032_20260213_2325：目标trace专项实验
+- 20260216-1063_3m_cache_ratio_20260216_cont：目标trace专项实验
+- 20260216-1063_stage2_upgrade_single_seed_20260215_rebuild_dbg0：目标trace专项实验；参数网格或配方迭代
+- 20260310-async_nb_full：同步模式与并发行为实验；参数网格或配方迭代
+- 20260310-async_nb_full_v2：同步模式与并发行为实验；参数网格或配方迭代
+- 20260310-nb36_1063_full：目标trace专项实验；参数网格或配方迭代
+- 20260310-nb36_1063_log1p1：特征变换与归一化实验；目标trace专项实验
+- 20260310-nb36_1063_rsc64：目标trace专项实验
+- 20260310-nb36_meta_full：目标trace专项实验；参数网格或配方迭代
+- 20260310-nb36_wiki_rsc64：目标trace专项实验
+- 20260310-nonblocked36_1063_8m_smoke：稳定性/诊断验证；同步模式与并发行为实验；目标trace专项实验
+- 20260310-nonblocked36_wiki_full：同步模式与并发行为实验；目标trace专项实验；参数网格或配方迭代
+- 20260310-nonblocked36_wiki_rsc64：同步模式与并发行为实验；目标trace专项实验
+- 20260310-nonblocked36_wiki_rsc64_v2：同步模式与并发行为实验；目标trace专项实验
+- 20260310-rl_wiki_blocked_0310_113234：目标trace专项实验
+- 20260310-rl_wiki_blocked_0310_113913：目标trace专项实验
+- 20260310-rl_wiki_nothreads1_0310_111641：同步模式与并发行为实验；目标trace专项实验
+- 20260311-1063_async_decay：同步模式与并发行为实验；目标trace专项实验
+- 20260311-batch_0311_020224：通用批次实验（按目录名归档）
+- 20260311-diag10：稳定性/诊断验证
+- 20260311-diag11：稳定性/诊断验证
+- 20260311-diag12：稳定性/诊断验证
+- 20260311-diag13：稳定性/诊断验证
+- 20260311-diag14：稳定性/诊断验证
+- 20260311-diag15：稳定性/诊断验证
+- 20260311-diag16_fix：稳定性/诊断验证
+- 20260311-diag2：稳定性/诊断验证
+- 20260311-diag3：稳定性/诊断验证
+- 20260311-diag4：稳定性/诊断验证
+- 20260311-diag5：稳定性/诊断验证
+- 20260311-diag6：稳定性/诊断验证
+- 20260311-diag7：稳定性/诊断验证
+- 20260311-diag8：稳定性/诊断验证
+- 20260311-diag9：稳定性/诊断验证
+- 20260311-diag_test：稳定性/诊断验证
+- 20260311-meta_async_decay：同步模式与并发行为实验；目标trace专项实验
+- 20260311-verify_fix：稳定性/诊断验证
+- 20260311-wiki_async_decay：同步模式与并发行为实验；目标trace专项实验
+- 20260311-wiki_rl_decay：目标trace专项实验
+- 20260311-wiki_rl_nodecay：目标trace专项实验
+- 20260312-penalty_sweep：奖励与惩罚机制实验
+- 20260312-penalty_verify：稳定性/诊断验证；奖励与惩罚机制实验
+- 20260313-adaptive_budget_orig3_0313_184729：特征变换与归一化实验
+- 20260313-full_default_netbuf_0313_221624：参数网格或配方迭代
+- 20260313-full_default_netbuf_full_0313_221815：参数网格或配方迭代
+- 20260313-phase_ab_0312_223925：通用批次实验（按目录名归档）
+- 20260314-adaptive_feature_norm_matrix_0314：特征变换与归一化实验；参数网格或配方迭代
+- 20260314-sec20_bestcfg_0314_run：通用批次实验（按目录名归档）
+- 20260314-sec20_full_matrix_0314_033143：参数网格或配方迭代
+- 20260314-sec20_full_matrix_0314_4way：参数网格或配方迭代
+- 20260314-sec20_full_matrix_0314_4way_default：参数网格或配方迭代
+- 20260314-sec20_matrix_0314_run：参数网格或配方迭代
+- 20260314-trace_dist_probe_0313：稳定性/诊断验证；离线分析与统计
+- 20260314-trace_dist_stats_0314：离线分析与统计
+- 20260315-unified_variants_full_0315：参数网格或配方迭代
+- 20260316-1063_bound_effect_0316：目标trace专项实验；参数网格或配方迭代
+- 20260316-1063_bound_effect_0316_w0：目标trace专项实验；参数网格或配方迭代
+- 20260316-1063_bound_effect_0316_w0_identity：目标trace专项实验；参数网格或配方迭代
+- 20260316-bound_extra3_alltraces_0316：参数网格或配方迭代
+- 20260316-hitmiss_lo00_hi100_full_0316：参数网格或配方迭代
+- 20260316-log1p_adaptive_tune_0316：特征变换与归一化实验
+- 20260316-penalty_ablation_pair_0316：奖励与惩罚机制实验
+- 20260316-penalty_no_penalty_0316：奖励与惩罚机制实验
+- 20260316-unified_method_compare_0315：参数网格或配方迭代
+- 20260316-unified_three_cfg_0316：通用批次实验（按目录名归档）
+- 20260317-adaptive_quantile_input_3trace_0316：特征变换与归一化实验
+- 20260317-log1p_qinput_276_3trace_0317：特征变换与归一化实验
+- 20260317-log1p_qinput_4trace_0317：特征变换与归一化实验
+- 20260317-log1p_qinput_hitmiss_3trace_0317：特征变换与归一化实验
+- 20260317-log1p_qinput_orig3_cache0001_0317：特征变换与归一化实验
+- 20260317-transformq0_hitmiss1_orig3_cache01_0317：特征变换与归一化实验
+- 20260317-transformq0_orig3_cache01_0317：特征变换与归一化实验
+- 20260317-transformq1_orig3_cache0001_0317：特征变换与归一化实验
+- 20260317-transformq1_orig3_cache01_0317：特征变换与归一化实验
+- 20260318-reward_paths_nondefault_orig3_cache01_0318：奖励与惩罚机制实验
+- 20260318-rl_algo_exclude_sweep_orig3_cache01_0318：RL算法对比或配置扫描
+- 20260318-rl_algo_followup_ppolstm_tqc_orig3_cache01_0318：RL算法对比或配置扫描
+- 20260318-rl_algo_smoke_sac_dqn_1063_0318：稳定性/诊断验证；RL算法对比或配置扫描；目标trace专项实验
+- 20260318-sac_ex0_orig3_seed42_3407_0318：RL算法对比或配置扫描
+- 20260318-td3_ex0_lru_lfu_10m_0318：RL算法对比或配置扫描
+- 20260318-td3_ex0_retest_0318：RL算法对比或配置扫描
+- 20260318-td3_ex0_retest_full_0318：RL算法对比或配置扫描；参数网格或配方迭代
+- 20260318-transformq0_mrw_sweep_orig3_cache01_0318：奖励与惩罚机制实验；特征变换与归一化实验
+- 20260318-transformq0_wobs0_orig3_cache01_0317：特征变换与归一化实验
+- 20260319-1063_breakthrough_compound_scale3：目标trace专项实验；参数网格或配方迭代
+- 20260319-1063_breakthrough_compound_scale3_v2：目标trace专项实验；参数网格或配方迭代
+- 20260319-1063_guided_softmax_scale5：目标trace专项实验；参数网格或配方迭代
+- 20260319-1063_linear_breakthrough_ctx：目标trace专项实验
+- 20260319-1063_linear_guided_v3：目标trace专项实验
+- 20260319-1063_softmax_ctx_bound5：目标trace专项实验；参数网格或配方迭代
+- 20260319-maintenance_indexes：资产治理与目录整理
+- 20260319-meta_3m_1212_152109：目标trace专项实验
+- 20260319-meta_lower_omr_3m_v2_1213_135303：目标trace专项实验
+- 20260319-meta_lower_omr_500k_1213_032629：目标trace专项实验
+- 20260319-meta_precision_refine_v5_1214_212442：目标trace专项实验
+- 20260319-meta_refine6_3m_v3_1213_214805：目标trace专项实验
+- 20260319-meta_refine_user_3m_1212_160647：目标trace专项实验
+- 20260319-meta_reward_algo_v4_1214_014136：奖励与惩罚机制实验；RL算法对比或配置扫描；目标trace专项实验
+- 20260319-meta_reward_algo_v4_fix_1214_014409：奖励与惩罚机制实验；RL算法对比或配置扫描；目标trace专项实验
+- 20260319-meta_smoke_1212_144755：稳定性/诊断验证；目标trace专项实验
+- 20260319-meta_smoke_1212_150755：稳定性/诊断验证；目标trace专项实验
+- 20260319-meta_smoke_fix_1212_151230：稳定性/诊断验证；目标trace专项实验
+- 20260319-meta_try_cachefeat_3m_1213_234146：目标trace专项实验
+- 20260319-meta_try_cachefeat_3m_fix_1214_000103：目标trace专项实验
+- 20260319-meta_try_candfeat_3m_1214_005451：目标trace专项实验
+- 20260319-modes2_mrw0_0130_112123：奖励与惩罚机制实验
+- 20260319-modes3_batch_0130_021623：通用批次实验（按目录名归档）
+- 20260319-rec3m_1212_133521：通用批次实验（按目录名归档）
+- 20260319-root_loose_files：资产治理与目录整理
+- 20260319-seedfocus3m_1212_143747：通用批次实验（按目录名归档）
+- 20260319-seedfocus3m_1212_144046：通用批次实验（按目录名归档）
+- 20260319-smoke_1212_132049：稳定性/诊断验证
+- 20260319-traceanalyzer：离线分析与统计

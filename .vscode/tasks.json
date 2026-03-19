@@ -1,15 +1,283 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "build-debug",
-            "type": "shell",
-            "command": "bash scripts/debug.sh -c",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "rebuild-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"group": "build"
+		},
+		{
+			"label": "build-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-debug (Copilot)",
+			"type": "shell",
+			"command": "bash scripts/debug.sh -c",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "gated-1063-full",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"mkdir -p tmp && cd /home/dingkp/libCacheSim && LOH_BUILD_RELEASE=1 LOH_ENABLE_PENALTY=1 LOH_DEBUG_LEVEL=0 LOH_PERF_PROFILING=0 LOH_ENABLE_PROFILING=0 CACHESIM_VERBOSE=0 LOH_FEATURE_LOG1P=1 LOH_RANDOM_CANDIDATES=96 LOH_STRUCTURED_CANDIDATES=96 LOH_TAIL_SAMPLE=1 LOH_TAIL_SAMPLE_DECAY=0.99 LOH_ADAPTIVE_BUDGET=1 LOH_ASYNC_TRAIN=1 LOH_WAIT_MODE=nonblocked LOH_SCORE_USE_COMPOUND=1 LOH_SCORE_USE_IRT=0 LOH_SKIP_BUILD=1 LOH_PENALTY_SCALE=log LOH_PENALTY_REWARD_FORMULA=centered LOH_PENALTY_SEND_POSITIVE=1 LOH_PENALTY_CUTOFF=20000 LOH_REWARD_USE_ORIGINAL=1 LOH_REWARD_USE_MISSRATIO=1 LOH_REWARD_W_BASE_ORIG=0.7 LOH_REWARD_W_BASE_MISS=0.3 LOH_REWARD_W_BASE_TREND=0.0 LOH_REWARD_W_PENALTY_DELTA=0.35 LOH_PENALTY_GATE_MINCOUNT=8 LOH_PENALTY_GATE_GOODRATE=0.15 LOH_PENALTY_GATE_PENALTYSCALE=1.0 LOH_PENALTY_GATE_NO_CUTOFF_SCALE=0.5 LOH_PENALTY_DELTA_SCALE=1.0 LOH_REWARD_MIX_MODE=gated_penalty_mix CACHESIM_NUM_REQ=0 bash scripts/test_loh_rl_sb3.sh data/TencentCBS/1063.oracleGeneral.zst 0.1 > tmp/gated_1063_full_all.log 2>&1"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "manual-python-1063-full-gated",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/dingkp/libCacheSim && env PYTHONUNBUFFERED=1 LOH_SHM_KEY=312213900 LOH_BUILD_RELEASE=1 LOH_ENABLE_PENALTY=1 LOH_DEBUG_LEVEL=0 LOH_PERF_PROFILING=0 LOH_ENABLE_PROFILING=0 CACHESIM_VERBOSE=0 LOH_FEATURE_LOG1P=1 LOH_RANDOM_CANDIDATES=96 LOH_STRUCTURED_CANDIDATES=96 LOH_TAIL_SAMPLE=1 LOH_TAIL_SAMPLE_DECAY=0.99 LOH_ADAPTIVE_BUDGET=1 LOH_ASYNC_TRAIN=1 LOH_WAIT_MODE=nonblocked LOH_SCORE_USE_COMPOUND=1 LOH_SCORE_USE_IRT=0 LOH_SKIP_BUILD=1 LOH_PENALTY_SCALE=log LOH_PENALTY_REWARD_FORMULA=centered LOH_PENALTY_SEND_POSITIVE=1 LOH_PENALTY_CUTOFF=20000 LOH_REWARD_USE_ORIGINAL=1 LOH_REWARD_USE_MISSRATIO=1 LOH_REWARD_W_BASE_ORIG=0.7 LOH_REWARD_W_BASE_MISS=0.3 LOH_REWARD_W_BASE_TREND=0.0 LOH_REWARD_W_PENALTY_DELTA=0.35 LOH_PENALTY_GATE_MINCOUNT=8 LOH_PENALTY_GATE_GOODRATE=0.15 LOH_PENALTY_GATE_PENALTYSCALE=1.0 LOH_PENALTY_GATE_NO_CUTOFF_SCALE=0.5 LOH_PENALTY_DELTA_SCALE=1.0 LOH_REWARD_MIX_MODE=gated_penalty_mix LOH_MISS_RATIO_WEIGHT=1.0 /bin/python3 scripts/loh_actor_critic_sb3.py > tmp/manual_full_1063_gated_python.log 2>&1"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "run-unified-three-with-replays",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"tmp/unified_three_cfg_0316/run.sh"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "run-1063-bound-effect-0316",
+			"type": "shell",
+			"command": "bash tmp/1063_bound_effect_0316/run.sh",
+			"isBackground": true
+		},
+		{
+			"label": "run-1063-bound-effect-w0-0316",
+			"type": "shell",
+			"command": "bash tmp/1063_bound_effect_0316_w0/run.sh",
+			"isBackground": true
+		},
+		{
+			"label": "run-1063-bound-extra3-0316",
+			"type": "shell",
+			"command": "bash tmp/1063_bound_effect_0316_w0/run_extra3.sh",
+			"isBackground": true
+		},
+		{
+			"label": "run-extra3-meta-wiki-0316",
+			"type": "shell",
+			"command": "bash tmp/bound_extra3_alltraces_0316/run.sh",
+			"isBackground": true
+		}
+	]
 }
-

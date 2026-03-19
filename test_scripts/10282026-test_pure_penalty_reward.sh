@@ -17,6 +17,8 @@ sleep 1
 # 设置环境
 export LOH_STATE_DIM=26
 export RUN_TIMESTAMP=$(date +%m%d_%H%M%S)
+LOG_DIR="logs"
+mkdir -p "${LOG_DIR}"
 
 echo "📋 New Configuration:"
 echo "  ✅ Reward: (baseline - current) / baseline (pure penalty-based)"
@@ -31,7 +33,7 @@ echo "🐍 Starting Python RL agent..."
 python3 scripts/loh_actor_critic_sb3.py \
     --learning-starts 1000 \
     --exclude-recent-steps 100 \
-    > ac_sb3_${RUN_TIMESTAMP}.log 2>&1 &
+    > "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" 2>&1 &
 
 PYTHON_PID=$!
 echo "  Python PID: $PYTHON_PID"
@@ -63,7 +65,7 @@ _build_dbg/bin/cachesim \
     --trace-format-fields=time,id,size \
     --num-req=100000 \
     --cache-size=1GB \
-    > cachesim_${RUN_TIMESTAMP}.log 2>&1 &
+    > "${LOG_DIR}/cachesim_${RUN_TIMESTAMP}.log" 2>&1 &
 
 CACHESIM_PID=$!
 echo "  Cachesim PID: $CACHESIM_PID"
@@ -86,7 +88,7 @@ echo "==========="
 
 echo ""
 echo "🎁 Reward Distribution:"
-grep "reward (before clip):" ac_sb3_${RUN_TIMESTAMP}.log | tail -50 | awk -F': ' '{print $NF}' | awk '
+grep "reward (before clip):" "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" | tail -50 | awk -F': ' '{print $NF}' | awk '
 BEGIN {min=999; max=-999; sum=0; count=0}
 {
     val=$1
@@ -120,7 +122,7 @@ END {
 
 echo ""
 echo "📐 Penalty Baseline:"
-grep "penalty_baseline:" ac_sb3_${RUN_TIMESTAMP}.log | tail -20 | awk -F': ' '{print $NF}' | awk '
+grep "penalty_baseline:" "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" | tail -20 | awk -F': ' '{print $NF}' | awk '
 BEGIN {sum=0; count=0}
 {sum+=$1; count++; last=$1}
 END {
@@ -132,7 +134,7 @@ END {
 
 echo ""
 echo "🔢 Penalty Count:"
-grep "penalty_sum:" ac_sb3_${RUN_TIMESTAMP}.log | tail -50 | awk -F': ' '{print $NF}' | awk '
+grep "penalty_sum:" "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" | tail -50 | awk -F': ' '{print $NF}' | awk '
 BEGIN {zero=0; nonzero=0; sum=0}
 {
     if($1 < 0.001) zero++
@@ -150,8 +152,8 @@ END {
 
 echo ""
 echo "📝 Log files:"
-echo "  - Python: ac_sb3_${RUN_TIMESTAMP}.log"
-echo "  - Cachesim: cachesim_${RUN_TIMESTAMP}.log"
+echo "  - Python: ${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log"
+echo "  - Cachesim: ${LOG_DIR}/cachesim_${RUN_TIMESTAMP}.log"
 
 echo ""
 echo "💡 To view TensorBoard:"

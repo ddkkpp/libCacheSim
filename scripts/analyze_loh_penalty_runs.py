@@ -2,8 +2,8 @@
 """Analyze LOH penalty-related runs from markdown summaries.
 
 Inputs:
-  - LOH_TESTED_CONFIGS_SUMMARY.md (main source of metrics)
-  - LOH_PENALTY_RUNS_0203_PLUS.md (optional: curated penalty table; used for coverage only)
+  - 20260129-LOH_TESTED_CONFIGS_SUMMARY.md (main source of metrics)
+  - 20260205-LOH_PENALTY_RUNS_0203_PLUS.md (optional: curated penalty table; used for coverage only)
 
 Outputs:
   - Markdown report to stdout.
@@ -561,7 +561,7 @@ def _str_disp(x: Optional[str]) -> str:
 
 
 def load_penalty_0203_plus(path: Path) -> List[PenaltyRunView]:
-    """Load penalty-enabled rows from LOH_PENALTY_RUNS_0203_PLUS.md.
+    """Load penalty-enabled rows from 20260205-LOH_PENALTY_RUNS_0203_PLUS.md.
 
     This table is curated and includes columns like use_pen/pen_mode/w_pen.
     We only keep rows where use_pen==1.
@@ -1044,8 +1044,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--tested",
         type=Path,
-        default=Path("LOH_TESTED_CONFIGS_SUMMARY.md"),
-        help="Path to LOH_TESTED_CONFIGS_SUMMARY.md",
+        default=Path("20260129-LOH_TESTED_CONFIGS_SUMMARY.md"),
+        help="Path to 20260129-LOH_TESTED_CONFIGS_SUMMARY.md",
     )
     ap.add_argument(
         "--coverage-only",
@@ -1083,7 +1083,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     views: List[PenaltyRunView] = []
     views.extend(build_penalty_views_from_tested(rows))
-    views.extend(load_penalty_0203_plus(Path("LOH_PENALTY_RUNS_0203_PLUS.md")))
+    views.extend(load_penalty_0203_plus(Path("20260205-LOH_PENALTY_RUNS_0203_PLUS.md")))
     # default behavior: all-penalty report unless user explicitly wants deltas
     if args.all_penalty or True:
         print(render_all_penalty_runs(views, tested_rows=rows), end="")

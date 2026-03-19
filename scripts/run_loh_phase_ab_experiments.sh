@@ -254,8 +254,8 @@ run_rl_case() {
   size_tag="$(sanitize_size "$size")"
   task_id="${phase}_rl_${trace_name}_${size_tag}_${mode}_w${weights_obs}"
   task_log="${LOG_DIR}/${task_id}.log"
-  python_log="ac_sb3_${task_id}.log"
-  cachesim_log="cachesim_sb3_${task_id}.log"
+  python_log="${LOG_DIR}/ac_sb3_${task_id}.log"
+  cachesim_log="${LOG_DIR}/cachesim_sb3_${task_id}.log"
 
   register_task "$task_id" "$phase" "rl" "$trace_name" "$size" "$mode" "$weights_obs" "LOH"
   if [ -f "${STATUS_DIR}/${task_id}.done" ]; then
@@ -288,13 +288,6 @@ run_rl_case() {
   ) > "$task_log" 2>&1
   rc=$?
   set -e
-
-  if [ -f "$python_log" ]; then
-    mv -f "$python_log" "$LOG_DIR/"
-  fi
-  if [ -f "$cachesim_log" ]; then
-    mv -f "$cachesim_log" "$LOG_DIR/"
-  fi
 
   result_line="$(latest_metric_line "$task_log")"
   record_result "$task_id" "$phase" "rl" "$trace_name" "$size" "$mode" "$weights_obs" "LOH" "$rc" "$result_line" "$task_log"

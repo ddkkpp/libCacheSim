@@ -9,6 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
+LOG_ROOT="${LOH_LOG_DIR:-$PROJECT_ROOT/logs}"
 
 RESULT_DIR="tmp/batch_$(date +%m%d_%H%M%S)"
 mkdir -p "$RESULT_DIR"
@@ -73,7 +74,7 @@ run_one_test() {
   local wall=$((end_ts - start_ts))
 
   # Extract results from cachesim log (latest)
-  local cslog=$(ls -1t cachesim_sb3_*.log 2>/dev/null | head -1)
+  local cslog=$(ls -1t "${LOG_ROOT}"/cachesim_sb3_*.log 2>/dev/null | head -1)
   if [[ -n "$cslog" ]]; then
     local line=$(grep "miss ratio" "$cslog" | tail -1)
     local mr=$(echo "$line" | grep -oP 'miss ratio \K[0-9.]+' | head -1)
@@ -83,7 +84,7 @@ run_one_test() {
     echo "${step},${config_name},${tname},${req:-0},${mr:-N/A},${bmr:-N/A},${mqps:-N/A},${wall}" >> "$SUMMARY"
     log "DONE  $tag -> MR=${mr:-N/A} BMR=${bmr:-N/A} MQPS=${mqps:-N/A} (${wall}s)"
     mv "$cslog" "$RESULT_DIR/${tag}_cachesim.log" 2>/dev/null || true
-    local pylog=$(ls -1t ac_sb3_*.log 2>/dev/null | head -1)
+    local pylog=$(ls -1t "${LOG_ROOT}"/ac_sb3_*.log 2>/dev/null | head -1)
     [[ -n "$pylog" ]] && mv "$pylog" "$RESULT_DIR/${tag}_python.log" 2>/dev/null || true
   else
     echo "${step},${config_name},${tname},0,FAIL,FAIL,FAIL,${wall}" >> "$SUMMARY"

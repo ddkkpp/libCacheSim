@@ -115,8 +115,8 @@ static double loh_byte_miss_ratio_weight = 0.0;  // 默认不看字节 miss rati
 //       这里只保留影响逻辑分支的全局等待模式开关。
 
 // 等待模式：blocked（阻塞等待）/ nonblocked（非阻塞，使用旧权重）
-// 运行时从环境变量 LOH_WAIT_MODE 读取；默认 blocked
-static int loh_wait_mode_blocked = 1;  // 1=BLOCKED, 0=NON-BLOCKED
+// 运行时从环境变量 LOH_WAIT_MODE 读取；默认 nonblocked（27.10）
+static int loh_wait_mode_blocked = 0;  // 1=BLOCKED, 0=NON-BLOCKED
 
 // Size 候选收集方式：0=size_heap (Top-K堆), 1=size_buckets (全量分桶)
 // 运行时从环境变量 LOH_USE_SIZE_BUCKETS 读取；默认 0 (使用 size_heap)
@@ -172,8 +172,8 @@ static int loh_penalty_send_positive = 0;  // ← LOH_PENALTY_SEND_POSITIVE
 //              - LOH_FEATURE_LOG1P=0 时：freq * recency * size
 //        目的：显式引入 recency/freq/size 的三者乘除关系，保持原 6 项不变。
 //      - 在该模式下，LOH_USE_HEURISTIC_SIGNS 对评分符号不再生效。
-static int loh_score_use_irt = 1;       // 默认评分包含 IRT 特征
-static int loh_score_use_compound = 0;  // 默认关闭 compound 评分模式
+static int loh_score_use_irt = 0;       // 默认关闭 IRT 评分（27.10）
+static int loh_score_use_compound = 1;  // 默认启用 compound 评分模式（27.10）
 static int loh_score_compound_v2 =
     0;  // 对应环境 LOH_SCORE_COMPOUND_V2：compound 升级版（7权重）
 
@@ -189,8 +189,8 @@ static int loh_irt_heap_enabled = 1;  // 默认启用，compound 模式下自动
 //   - loh_feature_reciprocal=1:    走 reciprocal 家族
 //       * loh_feature_log1p_reciprocal=1 -> reciprocal(log1p(x))
 //       * loh_feature_log1p_reciprocal=0 -> reciprocal(raw x)
-static int loh_feature_log1p = 0;       // 对应环境 LOH_FEATURE_LOG1P
-static int loh_feature_reciprocal = 1;  // 对应环境 LOH_FEATURE_RECIPROCAL
+static int loh_feature_log1p = 1;       // 对应环境 LOH_FEATURE_LOG1P
+static int loh_feature_reciprocal = 0;  // 对应环境 LOH_FEATURE_RECIPROCAL
 static int loh_feature_log1p_reciprocal =
     0;                                // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
 static int loh_feature_identity = 0;  // 对应环境 LOH_FEATURE_IDENTITY
@@ -199,7 +199,7 @@ static int loh_feature_identity = 0;  // 对应环境 LOH_FEATURE_IDENTITY
 //   - recency/size/IRT: 1 / (1 + log1p(x))
 // 该模式下不再根据 trace 在 LOG1P/RECIPROCAL 之间切换。
 static int loh_feature_unified_formula =
-    1;  // 对应环境 LOH_FEATURE_UNIFIED_FORMULA
+    0;  // 对应环境 LOH_FEATURE_UNIFIED_FORMULA
 // 统一公式变体（默认 1）：
 //   1: baseline      g=log1p(x)/(1+log1p(x))
 //   2: aggressive    g=log1p(x)/(beta+log1p(x))
@@ -223,15 +223,26 @@ static int loh_feature_normalize =
 // 自适应特征归一化（默认关闭）：
 // 对“变换后的特征值”维护在线分位数区间 [lo_q, hi_q]，预热后映射到 [0,1]。
 static int loh_adaptive_feature_normalize =
-    0;  // 对应环境 LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION
-static double loh_adaptive_norm_lo_q = 0.01;  // 对应环境 LOH_ADAPTIVE_NORM_LO_Q
-static double loh_adaptive_norm_hi_q = 0.99;  // 对应环境 LOH_ADAPTIVE_NORM_HI_Q
+    1;  // 对应环境 LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION
+static double loh_adaptive_norm_lo_q = 0.0;  // 对应环境 LOH_ADAPTIVE_NORM_LO_Q
+static double loh_adaptive_norm_hi_q = 1.0;  // 对应环境 LOH_ADAPTIVE_NORM_HI_Q
 static uint64_t loh_adaptive_norm_warmup =
-    4096;  // 对应环境 LOH_ADAPTIVE_NORM_WARMUP
-// 自适应分位统计输入空间：
-//   0=out(默认，当前行为)  1=raw  2=log1p(raw)
-// 对应环境变量：LOH_ADAPTIVE_NORM_QUANTILE_INPUT
-static int loh_adaptive_norm_quantile_input = 0;
+    0;  // 对应环境 LOH_ADAPTIVE_NORM_WARMUP
+// 自适应分位变换开关（默认 0）：
+//   0: 使用原始 quantile 边界 [q_lo, q_hi]
+//   1: 使用 log1p(q) 边界，即 [log1p(q_lo), log1p(q_hi)]
+// 对应环境变量：LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE
+// 说明（历史）：
+//   LOH_ADAPTIVE_NORM_QUANTILE_INPUT=out/raw/log1p
+//   历史上分别对应 0/1/2，用于选择 quantile 统计输入空间。
+//   其历史公式为：
+//     q_input=out   -> q_obs = out
+//     q_input=raw   -> q_obs = raw
+//     q_input=log1p -> q_obs = log1p(raw)
+//   然后使用 q_obs 在线更新 q_lo/q_hi，再对 out 做归一化。
+//   由于归一化分子始终使用 out，该变量易引入尺度不一致，
+//   现已停用（代码不再读取），仅在注释/文档中保留语义说明。
+static int loh_adaptive_norm_transform_quantile = 0;
 
 // =============================
 // 3.5) 自动特征模式检测
@@ -285,7 +296,7 @@ static double loh_tail_sample_decay = 0.99;
   7  // recency=0, freq=1, size=2, irt1=3, irt2=4, irt3=5,
      // random/tail=6
 #define LOH_ADAPTIVE_REBALANCE_PERIOD 10000
-static int loh_adaptive_budget = 0;
+static int loh_adaptive_budget = 1;
 static uint64_t loh_source_evict_count[LOH_MAX_SOURCES];  // 各源驱逐贡献计数
 static int loh_source_budget[LOH_MAX_SOURCES];  // 自适应预算（初始=均分）
 static uint64_t loh_adaptive_total_evict = 0;   // 自适应重平衡计数器
@@ -340,14 +351,9 @@ static int loh_use_score_rebalance = 0;
 #define SAMPLES_PER_EVICTION 4  // 每次驱逐时采样的对象数
 
 // LOH 调试模式控制
-// 如果未在编译命令中显式定义 LOH_DEBUG_LEVEL，则根据编译模式自动确定
+// 27.10 基线：若未显式设置，默认关闭调试输出
 #ifndef LOH_DEBUG_LEVEL
-#ifdef NDEBUG
-#define LOH_DEBUG_LEVEL 0  // 发布模式：不输出调试信息
-#else
-
-#define LOH_DEBUG_LEVEL 1
-#endif
+#define LOH_DEBUG_LEVEL 0
 #endif
 
 // 调试输出宏定义
@@ -1324,26 +1330,32 @@ static inline double loh_apply_feature_normalization(LOH_params_t *params,
   params->feature_sample_count[idx]++;
 
   if (loh_adaptive_feature_normalize) {
+    (void)raw_for_quantile;
     double q_obs = out;
-    if (loh_adaptive_norm_quantile_input == 1) {
-      q_obs = raw_for_quantile;
-    } else if (loh_adaptive_norm_quantile_input == 2) {
-      q_obs = (raw_for_quantile > 0.0) ? log1p(raw_for_quantile) : 0.0;
-    }
 
     // 以请求时间戳作为统一进度：同一时间基准用于 warmup 与在线分位学习率。
     uint64_t t = (params->current_timestamp > 0)
                      ? (uint64_t)params->current_timestamp
                      : 1;
 
+    const int full_range_mode = (loh_adaptive_norm_lo_q <= 0.0 + 1e-12) &&
+                                (loh_adaptive_norm_hi_q >= 1.0 - 1e-12);
     if (t == 1) {
       params->adaptive_q_lo[idx] = q_obs;
       params->adaptive_q_hi[idx] = q_obs;
     } else {
-      loh_online_quantile_update(&params->adaptive_q_lo[idx], q_obs,
-                                 loh_adaptive_norm_lo_q, t);
-      loh_online_quantile_update(&params->adaptive_q_hi[idx], q_obs,
-                                 loh_adaptive_norm_hi_q, t);
+      if (full_range_mode) {
+        // lo=0,hi=1 时退化为运行中 min/max，避免不必要的在线分位更新。
+        if (q_obs < params->adaptive_q_lo[idx])
+          params->adaptive_q_lo[idx] = q_obs;
+        if (q_obs > params->adaptive_q_hi[idx])
+          params->adaptive_q_hi[idx] = q_obs;
+      } else {
+        loh_online_quantile_update(&params->adaptive_q_lo[idx], q_obs,
+                                   loh_adaptive_norm_lo_q, t);
+        loh_online_quantile_update(&params->adaptive_q_hi[idx], q_obs,
+                                   loh_adaptive_norm_hi_q, t);
+      }
       if (params->adaptive_q_lo[idx] > params->adaptive_q_hi[idx]) {
         double mid =
             0.5 * (params->adaptive_q_lo[idx] + params->adaptive_q_hi[idx]);
@@ -1356,8 +1368,12 @@ static inline double loh_apply_feature_normalization(LOH_params_t *params,
       return out;
     }
 
-    const double lo = params->adaptive_q_lo[idx];
-    const double hi = params->adaptive_q_hi[idx];
+    double lo = params->adaptive_q_lo[idx];
+    double hi = params->adaptive_q_hi[idx];
+    if (loh_adaptive_norm_transform_quantile) {
+      lo = (lo > 0.0) ? log1p(lo) : 0.0;
+      hi = (hi > 0.0) ? log1p(hi) : 0.0;
+    }
     const double denom = hi - lo;
     if (denom <= 1e-12) return 0.5;
 
@@ -4612,7 +4628,8 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     const char *adaptive_lo_q = getenv("LOH_ADAPTIVE_NORM_LO_Q");
     const char *adaptive_hi_q = getenv("LOH_ADAPTIVE_NORM_HI_Q");
     const char *adaptive_warmup = getenv("LOH_ADAPTIVE_NORM_WARMUP");
-    const char *adaptive_q_input = getenv("LOH_ADAPTIVE_NORM_QUANTILE_INPUT");
+    const char *adaptive_q_transform =
+        getenv("LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE");
 
     loh_feature_unified_formula =
         loh_parse_bool_env(unified, loh_feature_unified_formula);
@@ -4678,16 +4695,13 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       long long w = atoll(adaptive_warmup);
       if (w >= 0) loh_adaptive_norm_warmup = (uint64_t)w;
     }
-    if (adaptive_q_input && adaptive_q_input[0] != '\0') {
-      if (strcmp(adaptive_q_input, "raw") == 0) {
-        loh_adaptive_norm_quantile_input = 1;
-      } else if (strcmp(adaptive_q_input, "log1p") == 0 ||
-                 strcmp(adaptive_q_input, "log1p_raw") == 0) {
-        loh_adaptive_norm_quantile_input = 2;
-      } else {
-        loh_adaptive_norm_quantile_input = 0;
-      }
+    if (adaptive_q_transform && adaptive_q_transform[0] != '\0') {
+      loh_adaptive_norm_transform_quantile = loh_parse_bool_env(
+          adaptive_q_transform, loh_adaptive_norm_transform_quantile);
     }
+
+    // 历史变量 LOH_ADAPTIVE_NORM_QUANTILE_INPUT(out/raw/log1p)
+    // 已停用：不再参与运行期逻辑。
 
     if (loh_adaptive_norm_lo_q < 0.0) loh_adaptive_norm_lo_q = 0.0;
     if (loh_adaptive_norm_hi_q > 1.0) loh_adaptive_norm_hi_q = 1.0;
@@ -4700,7 +4714,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         "[LOH INIT] feature mode: UNIFIED=%d, IDENTITY=%d, LOG1P=%d, "
         "RECIPROCAL=%d, LOG1P_RECIPROCAL=%d, "
         "NORMALIZE=%d, "
-        "ADAPTIVE_NORM=%d (lo_q=%.3f, hi_q=%.3f, warmup=%llu, q_input=%d), "
+        "ADAPTIVE_NORM=%d (lo_q=%.3f, hi_q=%.3f, warmup=%llu, q_log1p=%d), "
         "UNIFIED_VARIANT=%d (beta=%.3f, gamma=%.3f), "
         "UNIFIED_METHOD=%d (alpha=%.3f, freq_cap=%.1f)\n",
         loh_feature_unified_formula, loh_feature_identity, loh_feature_log1p,
@@ -4708,9 +4722,9 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         loh_feature_normalize, loh_adaptive_feature_normalize,
         loh_adaptive_norm_lo_q, loh_adaptive_norm_hi_q,
         (unsigned long long)loh_adaptive_norm_warmup,
-        loh_adaptive_norm_quantile_input, loh_unified_variant, loh_unified_beta,
-        loh_unified_gamma, loh_unified_method, loh_unified_alpha,
-        loh_unified_freq_cap);
+        loh_adaptive_norm_transform_quantile, loh_unified_variant,
+        loh_unified_beta, loh_unified_gamma, loh_unified_method,
+        loh_unified_alpha, loh_unified_freq_cap);
   }
 
   // 3.1.5) 自动特征模式检测（LOH_AUTO_FEATURE_MODE）

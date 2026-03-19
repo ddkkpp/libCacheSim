@@ -2,6 +2,8 @@
 // Created by Juncheng Yang on 5/9/21.
 //
 
+#include <filesystem>
+
 #include "../cli_reader_utils.h"
 #include "internal.h"
 #include "traceAnalyzer/analyzer.h"
@@ -16,7 +18,8 @@ int main(int argc, char *argv[]) {
       args.reader, args.ofilepath, args.analysis_option, args.analysis_param);
   stat->run();
 
-  ofstream ofs("traceStat", ios::out | ios::app);
+  std::filesystem::create_directories("analysis");
+  ofstream ofs("analysis/traceStat", ios::out | ios::app);
   ofs << *stat << endl;
   ofs.close();
   cout << *stat;

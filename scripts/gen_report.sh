@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 cd /home/dingkp/libCacheSim
 
-OUT="runs/sweep_results.md"
+OUT="runs/20251205-sweep_results.md"
 
 cat > "$OUT" << 'HEADER'
 # LOH-mr-blocked 权重 Sweep 结果汇总

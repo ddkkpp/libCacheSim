@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Collect root-level cachesim/ac sb3 logs and inject them into LOH_TESTED_CONFIGS_SUMMARY.md.
+"""Collect logs/cachesim_sb3_* and logs/ac_sb3_* and inject them into 20260129-LOH_TESTED_CONFIGS_SUMMARY.md.
 
 This script is intentionally conservative:
-- Considers root-level files matching cachesim_sb3_*.log
+- Considers files in logs/ matching cachesim_sb3_*.log
 - Extracts metrics from the *final* 'LOH-OMR ... miss ratio ... byte miss ratio ... throughput ... MQPS' line
 - Extracts a small set of config lines from the head of cachesim/ac logs
 - Filters to req>=3,000,000 (to avoid tiny sanity runs dominating the summary)
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SUMMARY_MD = REPO_ROOT / "LOH_TESTED_CONFIGS_SUMMARY.md"
+SUMMARY_MD = REPO_ROOT / "20260129-LOH_TESTED_CONFIGS_SUMMARY.md"
 
 
 @dataclass(frozen=True)
@@ -381,7 +381,8 @@ def parse_ac_cfg(lines: list[str]) -> tuple[
 
 def collect_root_runs() -> list[RootRun]:
     root = REPO_ROOT
-    cachesim_logs = sorted(root.glob("cachesim_sb3_*.log"))
+    log_root = REPO_ROOT / "logs"
+    cachesim_logs = sorted(log_root.glob("cachesim_sb3_*.log"))
 
     runs: list[RootRun] = []
     for log_path in cachesim_logs:
@@ -423,7 +424,7 @@ def collect_root_runs() -> list[RootRun]:
         ) = parse_cachesim_cfg(cachesim_head)
 
         ac_name = f"ac_sb3_{run_id}.log"
-        ac_path = root / ac_name
+        ac_path = log_path.parent / ac_name
         algo: str | None = None
         batch_size: int | None = None
         learning_rate: str | None = None
@@ -455,8 +456,8 @@ def collect_root_runs() -> list[RootRun]:
                 req_count=req_count,
                 omr=omr,
                 bmr=bmr,
-                cachesim_log=log_path.name,
-                ac_log=ac_path.name if ac_path.exists() else None,
+                cachesim_log=str(log_path.relative_to(REPO_ROOT)),
+                ac_log=str(ac_path.relative_to(REPO_ROOT)) if ac_path.exists() else None,
                 rl_update_interval=rl_update_interval,
                 miss_ratio_weight=mr_w,
                 byte_miss_ratio_weight=bmr_w,
@@ -531,8 +532,8 @@ def build_cfg_short(r: RootRun) -> str:
 def build_index_block(runs: list[RootRun]) -> str:
     lines: list[str] = []
     lines.append("\n<!-- ROOT_LOG_INDEX_BEGIN -->")
-    lines.append("\n### 根目录日志索引（cachesim_sb3_MMDD_HHMMSS.log）\n")
-    lines.append("说明：扫描仓库根目录下 `cachesim_sb3_*.log` / `ac_sb3_*.log`，按文件名推断日期（基于当前日期跨年；或回退到文件 mtime），并从日志末尾的 `LOH-OMR ... miss ratio ... byte miss ratio ... throughput ... MQPS` 汇总行提取 OMR/BMR。\n")
+    lines.append("\n### 日志索引（优先 logs/cachesim_sb3_MMDD_HHMMSS.log）\n")
+    lines.append("说明：扫描 `logs/cachesim_sb3_*.log` / `logs/ac_sb3_*.log`；按文件名推断日期（基于当前日期跨年；或回退到文件 mtime），并从日志末尾的 `LOH-OMR ... miss ratio ... byte miss ratio ... throughput ... MQPS` 汇总行提取 OMR/BMR。\n")
     lines.append("只保留 `req>=3000000` 的 runs；trace 内再按 `req` 分组。\n")
     lines.append("| date | run | trace | req | OMR | BMR | cfg | ref | note |")
     lines.append("| ---: | --- | --- | ---: | ---: | ---: | --- | --- | --- |")

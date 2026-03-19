@@ -10,6 +10,8 @@ echo ""
 # 设置环境变量
 export LOH_STATE_DIM=26
 export RUN_TIMESTAMP=$(date +%m%d_%H%M%S)
+LOG_DIR="logs"
+mkdir -p "${LOG_DIR}"
 
 # 配置参数
 LEARNING_STARTS=1000       # 从100增加到1000
@@ -34,7 +36,7 @@ echo "🐍 Starting Python RL agent..."
 python3 scripts/loh_actor_critic_sb3.py \
     --learning-starts $LEARNING_STARTS \
     --exclude-recent-steps $EXCLUDE_RECENT_STEPS \
-    > ac_sb3_${RUN_TIMESTAMP}.log 2>&1 &
+    > "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" 2>&1 &
 
 PYTHON_PID=$!
 echo "  Python PID: $PYTHON_PID"
@@ -66,7 +68,7 @@ _build_dbg/bin/cachesim \
     --trace-format-fields=time,id,size \
     --num-req=50000 \
     --cache-size=1GB \
-    > cachesim_${RUN_TIMESTAMP}.log 2>&1 &
+    > "${LOG_DIR}/cachesim_${RUN_TIMESTAMP}.log" 2>&1 &
 
 CACHESIM_PID=$!
 echo "  Cachesim PID: $CACHESIM_PID"
@@ -89,7 +91,7 @@ echo "======================="
 # 提取reward统计
 echo ""
 echo "🎁 Reward Distribution:"
-grep "final_reward" ac_sb3_${RUN_TIMESTAMP}.log | tail -20 | grep -oP "final_reward.*?:\s*\K[-+]?[0-9]*\.?[0-9]+" | awk '
+grep "final_reward" "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" | tail -20 | grep -oP "final_reward.*?:\s*\K[-+]?[0-9]*\.?[0-9]+" | awk '
 BEGIN {
     min = 999
     max = -999
@@ -139,7 +141,7 @@ END {
 
 echo ""
 echo "🔍 Penalty Statistics:"
-grep "penalty_data:" ac_sb3_${RUN_TIMESTAMP}.log | tail -20 | grep -oP "penalty_data:\s*\K[0-9]+" | awk '
+grep "penalty_data:" "${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log" | tail -20 | grep -oP "penalty_data:\s*\K[0-9]+" | awk '
 BEGIN {
     sum = 0
     count = 0
@@ -162,8 +164,8 @@ END {
 
 echo ""
 echo "📝 Log files:"
-echo "  - Python: ac_sb3_${RUN_TIMESTAMP}.log"
-echo "  - Cachesim: cachesim_${RUN_TIMESTAMP}.log"
+echo "  - Python: ${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log"
+echo "  - Cachesim: ${LOG_DIR}/cachesim_${RUN_TIMESTAMP}.log"
 
 echo ""
 echo "✅ Test completed"

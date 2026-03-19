@@ -25,7 +25,7 @@ First, [build libCacheSim](/doc/install.md). After building libCacheSim, `mrcPro
 
 Use ./mrcProfiler --help for more details.
 
-Plot scripts are provided in `scripts/profile_mrc.py`. See [here](/scripts/README.md) for more details.
+Plot scripts are provided in `scripts/profile_mrc.py`. See [here](/scripts/20251028-README.md) for more details.
 
 ### Profiling LRU with SHARDS
 

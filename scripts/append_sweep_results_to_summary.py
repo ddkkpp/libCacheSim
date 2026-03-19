@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Append sweep results (results.csv) into LOH_TESTED_CONFIGS_SUMMARY.md under the matching "## Trace: ..." section.
+# Append sweep results (results.csv) into 20260129-LOH_TESTED_CONFIGS_SUMMARY.md under the matching "## Trace: ..." section.
 # Design goals:
 # - Only add tests (markdown table rows). No narrative.
 # - Idempotent: avoid inserting duplicate rows for the same results file + idx.

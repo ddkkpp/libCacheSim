@@ -3,7 +3,7 @@ set -euo pipefail
 
 SWEEP_DIR=${1:?Usage: wait_and_append_sweep.sh <sweep_dir> [configs_file] [md_file]}
 CONFIGS_FILE=${2:-}
-MD_FILE=${3:-sweep_results.md}
+MD_FILE=${3:-20251205-sweep_results.md}
 
 SUMMARY_CSV="${SWEEP_DIR%/}/summary.csv"
 

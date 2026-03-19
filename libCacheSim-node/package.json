@@ -47,7 +47,7 @@
     "cli.js",
     "binding.cc",
     "binding.gyp",
-    "README.md",
+    "20251028-README.md",
     "vendor"
   ],
   "binary": {

@@ -8,6 +8,7 @@ CACHE_SIZE="${2:-0.1}"
 NUM_REQ="${3:-8000000}"
 TAG="${4:-nonblocked36_$(date +%m%d_%H%M%S)}"
 LOG_DIR="tmp/${TAG}"
+LOG_ROOT="${LOH_LOG_DIR:-logs}"
 mkdir -p "$LOG_DIR"
 
 export LOH_WAIT_MODE=nonblocked
@@ -35,8 +36,8 @@ bash scripts/test_loh_rl_sb3.sh "$TRACE" "$CACHE_SIZE" > "$LOG_DIR/run.log" 2>&1
 
 echo "[run_nonblocked36] done"
 echo "[run_nonblocked36] main log: $LOG_DIR/run.log"
-LATEST_PY_LOG=$(ls -1t ac_sb3_*.log 2>/dev/null | head -1 || true)
-LATEST_CS_LOG=$(ls -1t cachesim_sb3_*.log 2>/dev/null | head -1 || true)
+LATEST_PY_LOG=$(ls -1t "${LOG_ROOT}"/ac_sb3_*.log 2>/dev/null | head -1 || true)
+LATEST_CS_LOG=$(ls -1t "${LOG_ROOT}"/cachesim_sb3_*.log 2>/dev/null | head -1 || true)
 if [[ -n "$LATEST_PY_LOG" ]]; then
   echo "[run_nonblocked36] python log: $LATEST_PY_LOG"
 fi

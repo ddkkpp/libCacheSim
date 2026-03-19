@@ -1,11 +1,12 @@
 #!/bin/bash
 # ============================================================================
 # 全量实验批处理脚本
-# 按照 FULL_EXPERIMENT_RESULTS.md §19 配置作为基线
+# 按照 docs/20260317-FULL_EXPERIMENT_RESULTS.md §19 配置作为基线
 # ============================================================================
 set -euo pipefail
 PROJECT_ROOT="/home/dingkp/libCacheSim"
 cd "$PROJECT_ROOT"
+LOG_ROOT="${LOH_LOG_DIR:-$PROJECT_ROOT/logs}"
 
 TS=$(date +%m%d_%H%M%S)
 RESULT_DIR="$PROJECT_ROOT/tmp/batch_all_${TS}"
@@ -85,7 +86,7 @@ run_loh_test() {
   local end_ts=$(date +%s)
   local wall=$((end_ts - start_ts))
 
-  local cslog=$(ls -1t cachesim_sb3_*.log 2>/dev/null | head -1)
+  local cslog=$(ls -1t "${LOG_ROOT}"/cachesim_sb3_*.log 2>/dev/null | head -1)
   if [[ -n "$cslog" ]]; then
     local line=$(grep "miss ratio" "$cslog" | tail -1)
     local mr=$(echo "$line" | grep -oP 'miss ratio \K[0-9.]+' | head -1)
@@ -95,7 +96,7 @@ run_loh_test() {
     echo "${task},${config},${tname},${fmode},${req:-0},${mr:-N/A},${bmr:-N/A},${mqps:-N/A},${wall}" >> "$SUMMARY"
     log "DONE  $tag -> MR=${mr:-N/A} BMR=${bmr:-N/A} MQPS=${mqps:-N/A} (${wall}s)"
     mv "$cslog" "$RESULT_DIR/${tag}_cachesim.log" 2>/dev/null || true
-    local pylog=$(ls -1t ac_sb3_*.log 2>/dev/null | head -1)
+    local pylog=$(ls -1t "${LOG_ROOT}"/ac_sb3_*.log 2>/dev/null | head -1)
     [[ -n "$pylog" ]] && mv "$pylog" "$RESULT_DIR/${tag}_python.log" 2>/dev/null || true
   else
     echo "${task},${config},${tname},${fmode},0,FAIL,FAIL,FAIL,${wall}" >> "$SUMMARY"

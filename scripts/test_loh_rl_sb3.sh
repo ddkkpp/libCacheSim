@@ -16,7 +16,7 @@ usage() {
     echo "  === State Dimension (C compile-time) ==="
     echo "  Note: First 2 dims (hit_ratio, byte_hit_ratio) always passed for reward calculation"
     echo "  LOH_INCLUDE_TOPK_CANDIDATE_FEATURES: Include TopK candidate features, 192 dims (default: 0)"
-    echo "  LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES: Include AvgTopK average features, 24 dims (default: 1)"
+    echo "  LOH_INCLUDE_AVGTOPK_CANDIDATE_FEATURES: Include AvgTopK average features, 24 dims (default: 0)"
     echo "  LOH_INCLUDE_REQUEST:              Include recent request history (REQUEST_HISTORY_LEN×6 dims, default: 0)"
     echo "  LOH_INCLUDE_CACHE_FEATURES:      Include cache features, 12 dims (default: 0)"
     echo "  LOH_INCLUDE_CANDIDATE_FEATURES:  Include candidate statistics, 72 dims (default: 0)"
@@ -33,10 +33,10 @@ usage() {
     echo
     echo "  === Misc ==="
     echo "  RL_UPDATE_INTERVAL:              RL update interval (optional)"
-    echo "  LOH_RANDOM_CANDIDATES:         Additional random hash-table candidates (default: 0, recommended: 32)"
+    echo "  LOH_RANDOM_CANDIDATES:         Additional random hash-table candidates (default: 96)"
     echo "  CACHESIM_NUM_REQ:                Limit number of requests to simulate (default: all)"
     echo "  CACHESIM_NUM_THREAD:             cachesim worker threads (passed as --num-thread, default: cachesim built-in)"
-    echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 1)"
+    echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 0)"
     echo "  LOH_ENABLE_PROFILING:            Enable profiling timer stats (default: 0)"
     echo
     echo "  === Online Finetune (Resume) ==="
@@ -77,15 +77,50 @@ echo
 # 仅当用户未显式设置时才生效
 export LOH_SCORE_USE_COMPOUND="${LOH_SCORE_USE_COMPOUND:-1}"
 export LOH_SCORE_USE_IRT="${LOH_SCORE_USE_IRT:-0}"
+export LOH_FEATURE_UNIFIED_FORMULA="${LOH_FEATURE_UNIFIED_FORMULA:-0}"
+export LOH_FEATURE_IDENTITY="${LOH_FEATURE_IDENTITY:-0}"
+export LOH_FEATURE_LOG1P="${LOH_FEATURE_LOG1P:-1}"
+export LOH_FEATURE_LOG1P_RECIPROCAL="${LOH_FEATURE_LOG1P_RECIPROCAL:-0}"
+export LOH_DEBUG_LEVEL="${LOH_DEBUG_LEVEL:-0}"
+export LOH_RANDOM_CANDIDATES="${LOH_RANDOM_CANDIDATES:-96}"
+export LOH_STRUCTURED_CANDIDATES="${LOH_STRUCTURED_CANDIDATES:-96}"
+export LOH_WAIT_MODE="${LOH_WAIT_MODE:-nonblocked}"
+export LOH_ASYNC_TRAIN="${LOH_ASYNC_TRAIN:-1}"
+export LOH_MISS_RATIO_WEIGHT="${LOH_MISS_RATIO_WEIGHT:-1.0}"
+export LOH_INCLUDE_WEIGHTS_IN_OBS="${LOH_INCLUDE_WEIGHTS_IN_OBS:-1}"
+export LOH_ADAPTIVE_BUDGET="${LOH_ADAPTIVE_BUDGET:-1}"
+export LOH_USE_SCORE_REBALANCE="${LOH_USE_SCORE_REBALANCE:-0}"
+export LOH_ENABLE_FEATURE_NORMALIZATION="${LOH_ENABLE_FEATURE_NORMALIZATION:-0}"
+export LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION="${LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION:-1}"
+export LOH_ADAPTIVE_NORM_LO_Q="${LOH_ADAPTIVE_NORM_LO_Q:-0.0}"
+export LOH_ADAPTIVE_NORM_HI_Q="${LOH_ADAPTIVE_NORM_HI_Q:-1.0}"
+export LOH_ADAPTIVE_NORM_WARMUP="${LOH_ADAPTIVE_NORM_WARMUP:-0}"
+export LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE="${LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE:-0}"
 
 # 打印与评分模式相关的核心环境变量，便于区分本次运行属于哪种模式
 echo "[config] LOH_SCORE_USE_IRT=${LOH_SCORE_USE_IRT}"
 echo "[config] LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND}"
 echo "[config] LOH_SCORE_MODEL=${LOH_SCORE_MODEL:-<unset>}"
 echo "[config] LOH_MLP_HIDDEN=${LOH_MLP_HIDDEN:-<unset>}"
-echo "[config] LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
+echo "[config] LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P}"
+echo "[config] LOH_FEATURE_RECIPROCAL=${LOH_FEATURE_RECIPROCAL:-1}"
+echo "[config] LOH_FEATURE_LOG1P_RECIPROCAL=${LOH_FEATURE_LOG1P_RECIPROCAL}"
+echo "[config] LOH_FEATURE_IDENTITY=${LOH_FEATURE_IDENTITY}"
+echo "[config] LOH_FEATURE_UNIFIED_FORMULA=${LOH_FEATURE_UNIFIED_FORMULA}"
 echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-0}"
-echo "[config] LOH_RANDOM_CANDIDATES=${LOH_RANDOM_CANDIDATES:-0}"
+echo "[config] LOH_RANDOM_CANDIDATES=${LOH_RANDOM_CANDIDATES}"
+echo "[config] LOH_STRUCTURED_CANDIDATES=${LOH_STRUCTURED_CANDIDATES}"
+echo "[config] LOH_WAIT_MODE=${LOH_WAIT_MODE}"
+echo "[config] LOH_ASYNC_TRAIN=${LOH_ASYNC_TRAIN}"
+echo "[config] LOH_INCLUDE_WEIGHTS_IN_OBS=${LOH_INCLUDE_WEIGHTS_IN_OBS}"
+echo "[config] LOH_ADAPTIVE_BUDGET=${LOH_ADAPTIVE_BUDGET}"
+echo "[config] LOH_USE_SCORE_REBALANCE=${LOH_USE_SCORE_REBALANCE}"
+echo "[config] LOH_ENABLE_FEATURE_NORMALIZATION=${LOH_ENABLE_FEATURE_NORMALIZATION}"
+echo "[config] LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION=${LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION}"
+echo "[config] LOH_ADAPTIVE_NORM_LO_Q=${LOH_ADAPTIVE_NORM_LO_Q}"
+echo "[config] LOH_ADAPTIVE_NORM_HI_Q=${LOH_ADAPTIVE_NORM_HI_Q}"
+echo "[config] LOH_ADAPTIVE_NORM_WARMUP=${LOH_ADAPTIVE_NORM_WARMUP}"
+echo "[config] LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE=${LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE}"
 echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
 echo "[config] LOH_RESUME_DIR=${LOH_RESUME_DIR:-./runs}"
 echo "[config] LOH_RESUME_PATH=${LOH_RESUME_PATH:-<unset>}"
@@ -175,6 +210,11 @@ if [ -z "${RUN_TIMESTAMP:-}" ]; then
     RUN_TIMESTAMP=$(date +%m%d_%H%M%S) # 例如: 0730_173500
 fi
 export RUN_TIMESTAMP  # 导出供Python脚本使用
+
+# 默认将运行日志写入 logs/，可通过 LOH_LOG_DIR 覆盖。
+LOG_DIR="${LOH_LOG_DIR:-logs}"
+mkdir -p "${LOG_DIR}"
+export LOH_LOG_DIR="${LOG_DIR}"
 
 # 默认冷启动：只有显式设置 LOH_RESUME_PATH 才会加载模型继续训练
 export LOH_RESUME_DIR="${LOH_RESUME_DIR:-./runs}"
@@ -334,52 +374,15 @@ trap cleanup_on_exit INT TERM EXIT
 ) 9>/tmp/libcachesim_build.lock
 
 # ========================================================================
-# 【预检测】自动特征模式检测（解耦自 LOH.c，在仿真前完成）
+# 【特征模式来源】
 # ========================================================================
-# 仅在用户未显式设置 LOH_FEATURE_LOG1P 时自动检测。
-# 如果用户已设置，则跳过检测，直接使用用户的设置。
-# 检测结果通过 export 传递给后续的 Python 和 C 进程。
-#
-# 防止环境变量泄漏：如果 _LOH_DETECT_APPLIED 标记存在，说明当前 shell
-# 中的 LOG1P/RECIPROCAL 是上一次 detect 自动设置的（非用户显式），
-# 必须清除以允许本次重新检测（不同 trace 可能需要不同的特征模式）。
-if [ -n "${_LOH_DETECT_APPLIED:-}" ]; then
-    unset LOH_FEATURE_LOG1P LOH_FEATURE_LOG1P_RECIPROCAL _LOH_DETECT_APPLIED
+# 按当前实验要求，特征模式仅由外部显式环境变量控制。
+echo "[feature] 特征模式由显式环境变量控制"
+echo "[feature] 当前特征模式(来自环境变量): LOG1P=${LOH_FEATURE_LOG1P:-0}, RECIPROCAL=${LOH_FEATURE_LOG1P_RECIPROCAL:-0}"
+if [ "${LOH_FEATURE_UNIFIED_FORMULA:-1}" = "1" ]; then
+    echo "[feature] NOTE: LOH_FEATURE_UNIFIED_FORMULA=1 时优先走 UNIFIED 路径（不改写 LOG1P/RECIPROCAL 变量值）"
 fi
-if [ -z "${LOH_FEATURE_LOG1P:-}" ] && [ -z "${LOH_FEATURE_LOG1P_RECIPROCAL:-}" ]; then
-    if [ -f "scripts/loh_detect.sh" ]; then
-        echo -e "${BLUE}[detect] 运行预检测以确定最优特征模式...${NC}"
-        DETECT_REQS="${LOH_DETECT_REQS:-500000}"
-        DETECT_OUTPUT=$(bash scripts/loh_detect.sh "$TRACE_FILE" "$CACHE_SIZE" "$DETECT_REQS" 2>&1) || {
-            echo -e "${YELLOW}[detect] 预检测失败，将回退到仿真内 auto-detect${NC}"
-            echo "$DETECT_OUTPUT" | tail -5
-            DETECT_OUTPUT=""
-        }
-        if [ -n "$DETECT_OUTPUT" ]; then
-            # 提取 export 语句并执行（过滤掉注释和 stderr 输出）
-            EXPORTS=$(echo "$DETECT_OUTPUT" | grep "^export ")
-            if [ -n "$EXPORTS" ]; then
-                eval "$EXPORTS"
-                export _LOH_DETECT_APPLIED=1  # 标记本次 LOG1P/RECIPROCAL 由 detect 设置
-                echo -e "${GREEN}[detect] 预检测完成:${NC}"
-                echo "$DETECT_OUTPUT" | grep "^#" | head -5
-                echo "  LOH_FEATURE_LOG1P=${LOH_FEATURE_LOG1P:-0}"
-                echo "  LOH_SCORE_USE_COMPOUND=${LOH_SCORE_USE_COMPOUND:-0}"
-                echo "  LOH_RANDOM_CANDIDATES=${LOH_RANDOM_CANDIDATES:-0}"
-            else
-                echo -e "${YELLOW}[detect] 无法解析预检测输出，将回退到仿真内 auto-detect${NC}"
-                export LOH_AUTO_FEATURE_MODE=1
-            fi
-        fi
-    else
-        echo "[detect] scripts/loh_detect.sh 不存在，将使用仿真内 auto-detect"
-        export LOH_AUTO_FEATURE_MODE=1
-    fi
-else
-    echo "[detect] 用户已显式设置特征模式: LOG1P=${LOH_FEATURE_LOG1P:-0}, RECIPROCAL=${LOH_FEATURE_LOG1P_RECIPROCAL:-0}"
-    echo "[detect] 跳过预检测"
-    export LOH_AUTO_FEATURE_MODE=0
-fi
+export LOH_AUTO_FEATURE_MODE=0
 
 # 设置Python环境 (stable-baselines3 / gymnasium / torch)
 if [ "${LOH_SKIP_PIP_INSTALL:-0}" = "1" ]; then
@@ -395,7 +398,7 @@ umask 0  # Set umask to allow full permissions
 
 
 # 先启动Python脚本，由其主动创建共享内存文件（开启无缓冲输出便于实时观测日志）
-PYTHON_LOG_FILE="ac_sb3_${RUN_TIMESTAMP}.log"
+PYTHON_LOG_FILE="${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log"
 export PYTHONUNBUFFERED=1
 
 # Python 脚本不再需要命令行参数，全部通过环境变量配置
@@ -495,7 +498,7 @@ echo "  LOH_FIXED_WEIGHTS: ${LOH_FIXED_WEIGHTS:-<unset>}"
 export LOH_ENABLE_RL=1
 
 # 执行缓存模拟
-CACHESIM_LOG_FILE="cachesim_sb3_${RUN_TIMESTAMP}.log"
+CACHESIM_LOG_FILE="${LOG_DIR}/cachesim_sb3_${RUN_TIMESTAMP}.log"
 echo -e "${BLUE}Running cachesim... (Log: ${CACHESIM_LOG_FILE})${NC}"
 echo "  Miss ratio weight: $MISS_RATIO_WEIGHT"
 echo "  Byte miss ratio weight: $BYTE_MISS_RATIO_WEIGHT"
@@ -574,6 +577,15 @@ CACHESIM_PID=$!
 (
     while ps -p "${CACHESIM_PID}" > /dev/null 2>&1; do
         if [ -n "${PYTHON_PID:-}" ] && ! ps -p "${PYTHON_PID}" > /dev/null 2>&1; then
+            # 若 Python 因收到 terminate 信号而退出（正常收敛路径），先给 cachesim 自然退出窗口。
+            if [ -f "${PYTHON_LOG_FILE}" ] && grep -q "\[LOH-INTERRUPT\].*Terminate signal received" "${PYTHON_LOG_FILE}"; then
+                echo "[watch] Python exited after terminate signal; wait cachesim natural exit (pid=${CACHESIM_PID})"
+                sleep 10
+                if ! ps -p "${CACHESIM_PID}" > /dev/null 2>&1; then
+                    break
+                fi
+            fi
+
             echo "[watch] Python exited early; signal cachesim to stop (pid=${CACHESIM_PID})"
             write_terminate_flag || true
             kill -INT "${CACHESIM_PID}" 2>/dev/null || true

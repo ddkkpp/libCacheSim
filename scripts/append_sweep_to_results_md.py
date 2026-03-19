@@ -50,10 +50,10 @@ def _pick_best(rows) -> Tuple[Optional[dict], list]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Append a sweep summary into sweep_results.md")
+    ap = argparse.ArgumentParser(description="Append a sweep summary into 20251205-sweep_results.md")
     ap.add_argument("--sweep-dir", required=True, help="Path like sweeps/<SWEEP_ID>")
     ap.add_argument("--configs", default="", help="Optional configs file path")
-    ap.add_argument("--md", default="sweep_results.md", help="Markdown file to append")
+    ap.add_argument("--md", default="20251205-sweep_results.md", help="Markdown file to append")
     args = ap.parse_args()
 
     sweep_dir = Path(args.sweep_dir)
