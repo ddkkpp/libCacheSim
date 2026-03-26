@@ -1077,6 +1077,8 @@ else:
 STATE_OBJ_FEATURE_DIM = STATE_OBJ_FEATURE_CAP_DIM if LOH_SCORE_USE_IRT else 3
 
 LOH_DUAL_CHANNEL = _env_flag("LOH_DUAL_CHANNEL", DEFAULT_LOH_DUAL_CHANNEL == "1")
+LOH_SEGMENT_MODE = int(os.getenv('LOH_SEGMENT_MODE', '0'))
+LOH_NUM_SEGMENTS = int(os.getenv('LOH_NUM_SEGMENTS', '2'))
 # Softmax default: True (always enabled by default unless explicitly disabled)
 LOH_USE_SOFTMAX = _env_flag("LOH_USE_SOFTMAX", DEFAULT_LOH_USE_SOFTMAX == "1")
 
@@ -1093,6 +1095,8 @@ if LOH_SCORE_MODEL in {"mlp", "nn"}:
         LOH_USE_SOFTMAX = False
 else:
     ACTION_DIM = 2 * SCORE_FEATURE_DIM if LOH_DUAL_CHANNEL else SCORE_FEATURE_DIM
+    if LOH_SEGMENT_MODE > 0:
+        ACTION_DIM *= LOH_NUM_SEGMENTS
 
 loh_print_config(
     f"[LOH CONFIG] Score model: {LOH_SCORE_MODEL} (ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, STATE_OBJ_FEATURE_CAP_DIM={STATE_OBJ_FEATURE_CAP_DIM}, SHM_WEIGHT_DIM={SHM_WEIGHT_DIM}, MLP_HIDDEN={LOH_MLP_HIDDEN})"
@@ -1229,6 +1233,9 @@ class SharedMemoryData(ctypes.Structure):
         ("mlp_hidden", ctypes.c_int),
         ("mlp_param_len", ctypes.c_int),
         ("mlp_params", ctypes.c_double * LOH_MLP_MAX_PARAMS),
+        ('segment_mode', ctypes.c_int),
+        ('num_segments', ctypes.c_int),
+        ('segmented_weights', (ctypes.c_double * SHM_WEIGHT_DIM) * 8),
     ]
 
 # 运行时校验 sizeof 与字段偏移（可选，首次导入即打印）
@@ -3056,6 +3063,7 @@ class LohEnv(gym.Env):
 
         返回: List[PenaltyEntry] 或 []
         """
+        # NOTE(20260326): penalty 读取路径已回滚为逐条 read + 逐条解析（保持旧语义）。
         try:
             # 1. 先读取 shm_data_t 获取 pending_penalty_count（如果未提供）
             if data is None:
@@ -3075,7 +3083,6 @@ class LohEnv(gym.Env):
             if LOH_DEBUG_BASIC():
                 print(f"[Python←C] 📥 Reading {penalty_count} penalties from offset {offset} "
                       f"(shm_data_size={shm_data_size}, penalty_entry_size={penalty_entry_size})")
-
             # 【关键修复】重新打开文件以获取C端刚写入的扩展数据
             # 原因：文件缓存可能导致无法读取到C端通过fwrite扩展的内容
             # 必须重新打开文件才能看到最新的文件大小和内容
@@ -3548,6 +3555,11 @@ class LohEnv(gym.Env):
                 action_start = get_monotonic_time()
                 action_np = np.asarray(action, dtype=np.float32)
                 action_np_scaled = action_np * float(self._action_scale)
+                orig_action_np = action_np_scaled.copy()
+                if LOH_SEGMENT_MODE > 0:
+                    per_segment_dim = len(orig_action_np) // LOH_NUM_SEGMENTS
+                    action_np_scaled = orig_action_np[:per_segment_dim]
+
                 if LOH_DEBUG_BASIC():
                     action_logits_fmt = ", ".join([
                         f"{float(action_np_scaled[i]):.3f}" for i in range(min(len(action_np_scaled), ACTION_DIM))
@@ -3733,6 +3745,13 @@ class LohEnv(gym.Env):
                             weight_write_start = get_monotonic_time()
                             for i in range(SHM_WEIGHT_DIM):
                                 current.weights[i] = float(weights[i]) if i < len(weights) else 0.0
+                            if LOH_SEGMENT_MODE > 0:
+                                current.segment_mode = LOH_SEGMENT_MODE
+                                current.num_segments = LOH_NUM_SEGMENTS
+                                for s in range(LOH_NUM_SEGMENTS):
+                                    seg_w = orig_action_np[s*per_segment_dim : (s+1)*per_segment_dim]
+                                    for i in range(min(len(seg_w), SHM_WEIGHT_DIM)):
+                                        current.segmented_weights[s][i] = float(seg_w[i])
 
                             # 可选：写入 MLP 参数（仅在 LOH_SCORE_MODEL=mlp 时启用）
                             if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:

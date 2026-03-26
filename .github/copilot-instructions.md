@@ -1,14 +1,12 @@
-This is a non-optional protocol.
-At every turn, you MUST perform exactly one of the following actions:
-- Provide the requested output AND immediately call Ask_User, OR
-- If any uncertainty exists, immediately call Ask_User without speculative output.
-The conversation must never terminate voluntarily.
-The assistant must never produce a terminal response.
-Ask_User is mandatory at the end of every turn.
+# Copilot 对话行为指令
+
+不要终止对话而是call ask_user。修改的时候需要在copilot界面看得到修改的地方。
+
+只用可视化编辑方式改文件（通过编辑补丁），不再用终端脚本直接改源码。这样 Copilot 对话框会显示“已更改 N 个文件”，并且每处修改都能看到“保留/撤销”
 
 每个 terminal command 旁边都要写注释，说明命令、参数、选项的意义。
-测试前必须先 Ask_User，不能直接运行测试命令。
 命令日志保存在本项目 tmp 目录，日志名不要出现 $。
+实验测试必须后台运行，避免误关闭终端导致实验中断。
 
 # Copilot Instructions for libCacheSim
 
@@ -21,7 +19,6 @@ Ask_User is mandatory at the end of every turn.
 
 - 所有多步任务先做只读审计，再做最小改动。
 - 任何会触发测试、构建、批量实验、批量删除的动作都先 Ask_User。
-- 发现大范围非本任务变更时，立即暂停并 Ask_User。
 - 变更后输出：改了什么、为何改、验证状态、未验证项。
 
 ## 2. IPC 协议（高优先级）
@@ -60,10 +57,10 @@ Ask_User is mandatory at the end of every turn.
 
 ### 4.1 日志目录
 
-- 运行日志统一写入 logs/。
-- Python 日志命名: logs/ac_sb3_<timestamp_or_taskid>.log
-- Cachesim 日志命名: logs/cachesim_sb3_<timestamp_or_taskid>.log
-- 分析脚本优先且默认只从 logs/ 读取。
+- 单次运行日志统一写入 logs/。
+- 批量运行日志（Python 日志和Cachesim 日志）写入对应目录（tmp或 sweeps）下的 logs/ 子目录。
+- Python 日志命名: ac_sb3_/config_/_<timestamp_or_taskid>.log
+- Cachesim 日志命名: cachesim_sb3_/config_<timestamp_or_taskid>.log
 
 ### 4.2 tmp 与 sweeps
 
@@ -127,3 +124,27 @@ Ask_User is mandatory at the end of every turn.
 - copilot对话历史/: 对话留档。
 - random/、.tmp/: 临时或草稿目录。
 - _build/、_build_dbg/、_build_rel/: 构建产物目录。
+
+## 10. 本机运行环境注意事项（必须遵守）
+
+- 必须在项目 venv 中运行 Python 相关流程（推荐：`PATH="$PWD/.venv/bin:$PATH"`）。
+	原因：系统 Python 启用 PEP 668 外部管理策略，`pip install --user` 会被拒绝，且易出现依赖版本漂移。
+
+- 必须保证以下 Python 依赖在 venv 可导入：`gymnasium`、`stable-baselines3`、`tensorboard`、`tqdm`、`rich`。
+	原因：缺任一包会导致 AC 进程在启动或 callback 初始化阶段提前退出，C 端随后会误判为通信异常。
+
+- 运行 cachesim 时必须确保动态库搜索路径包含 xgboost/lightgbm 所在目录（本机通常为 `/usr/local/lib`），建议：
+	`LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"`。
+	原因：否则会出现 `libxgboost.so.3` / `lib_lightgbm.so` 加载失败，cachesim 启动即退出。
+
+- 默认构建模式使用 Release（`LOH_BUILD_RELEASE` 默认按 1 处理），并优先使用 `_build_rel/bin/cachesim`。
+	原因：与当前实验基线一致，性能与日志行为更稳定；Debug 构建仅用于问题定位。
+
+- 实验测试统一后台运行，且命令日志写入 `tmp/`。
+	原因：避免终端中断导致长任务丢失，并保留可追溯的完整执行证据。
+
+- 本机常用 trace 绝对路径（优先使用，避免工作区缺少 `data/` 软链接导致路径失效）：
+	- `/mnt/serverpool/dingkp_trace/tencentBlock/v2/else/tencentBlock_1063.oracleGeneral.zst`
+	- `/mnt/serverpool/dingkp_trace/wiki/wiki_2019t.oracleGeneral.zst`
+	- `/mnt/serverpool/dingkp_trace/metaCDN/meta_reag.oracleGeneral.zst`
+	原因：当前机器上多仓库并存，部分仓库不含 `data/` 目录；统一绝对路径可减少“Trace file not found”误报并提高复现实验稳定性。

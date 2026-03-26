@@ -88,18 +88,24 @@ endif()
 
 
 # Define shared compiler flags for all targets
-set(LIBCACHESIM_C_FLAGS 
-    -Wall -Wextra -Werror 
-    -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable 
-    -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings 
+set(LIBCACHESIM_C_FLAGS
+    -Wall -Wextra -Werror
+    -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable
+    -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings
     -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs
 )
 
-set(LIBCACHESIM_CXX_FLAGS 
-    -Wall -Wextra -Werror 
-    -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable 
+set(LIBCACHESIM_CXX_FLAGS
+    -Wall -Wextra -Werror
+    -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable
     -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs
 )
+
+# GCC 14 can emit sparsepp-related false positives under aggressive inlining.
+# Keep -Werror globally, but do not fail build on these two diagnostics.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    list(APPEND LIBCACHESIM_CXX_FLAGS -Wno-error=cast-user-defined -Wno-error=array-bounds)
+endif()
 
 # make sure the symbols are exported so that we can use dlsym
 set(CMAKE_C_VISIBILITY_PRESET default)

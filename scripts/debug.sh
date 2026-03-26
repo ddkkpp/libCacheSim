@@ -134,7 +134,7 @@ if [[ ${BUILD_RELEASE} -eq 1 ]]; then
 	CXX_FLAGS="-O2 -DNDEBUG -DG_DISABLE_ASSERT -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable${LOH_DEFS}"
 else
 	C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs${LOH_DEFS}"
-	CXX_FLAGS="-Wall -Wextra -Werror -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs${LOH_DEFS}"
+	CXX_FLAGS="-Wall -Wextra -Werror -Wno-error=cast-user-defined -Wno-error=array-bounds -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs${LOH_DEFS}"
 fi
 
 cmake -G Ninja -DCMAKE_BUILD_TYPE="${BUILD_MODE}" \

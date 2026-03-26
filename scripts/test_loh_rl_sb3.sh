@@ -121,6 +121,10 @@ echo "[config] LOH_ADAPTIVE_NORM_LO_Q=${LOH_ADAPTIVE_NORM_LO_Q}"
 echo "[config] LOH_ADAPTIVE_NORM_HI_Q=${LOH_ADAPTIVE_NORM_HI_Q}"
 echo "[config] LOH_ADAPTIVE_NORM_WARMUP=${LOH_ADAPTIVE_NORM_WARMUP}"
 echo "[config] LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE=${LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE}"
+echo "[config] LOH_INCLUDE_HIT_MISS_FEATURES=${LOH_INCLUDE_HIT_MISS_FEATURES:-0}"
+echo "[config] LOH_RL_ALGO=${LOH_RL_ALGO:-SAC}"
+echo "[config] LOH_SEED=${LOH_SEED:-<unset>}"
+echo "[config] LOH_MISS_RATIO_WEIGHT=${LOH_MISS_RATIO_WEIGHT}"
 echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
 echo "[config] LOH_RESUME_DIR=${LOH_RESUME_DIR:-./runs}"
 echo "[config] LOH_RESUME_PATH=${LOH_RESUME_PATH:-<unset>}"
@@ -144,7 +148,7 @@ else
 fi
 
 # Python 脚本固定为统一脚本（已整合 PPO/SAC/TD3）
-PYTHON_SCRIPT="loh_actor_critic_sb3.py"
+PYTHON_SCRIPT="${PYTHON_SCRIPT:-loh_actor_critic_sb3.py}"
 
 # Eviction 算法默认 LOH，可通过环境变量覆盖（例如 loh-teacher）
 EVICTION_ALGO="${LOH_EVICTION_ALGO:-LOH}"
@@ -254,6 +258,106 @@ write_terminate_flag() {
     fi
 }
 
+extract_python_state_dims() {
+    local shared_line active_line
+
+    shared_line=$(grep -E "\[LOH CONFIG\] Shared state dims: CONTEXT_DIM=[0-9]+, STATE_DIM=[0-9]+" "${PYTHON_LOG_FILE}" | tail -n 1 || true)
+    if [ -z "${shared_line}" ]; then
+        echo -e "${RED}[precheck] 无法从 Python 日志提取 Shared state dims。${NC}"
+        echo "[precheck] 请检查 ${PYTHON_LOG_FILE}"
+        return 1
+    fi
+
+    PY_CONTEXT_DIM=$(echo "${shared_line}" | sed -nE 's/.*CONTEXT_DIM=([0-9]+), STATE_DIM=([0-9]+).*/\1/p')
+    PY_STATE_DIM=$(echo "${shared_line}" | sed -nE 's/.*CONTEXT_DIM=([0-9]+), STATE_DIM=([0-9]+).*/\2/p')
+
+    active_line=$(grep -E "\[CONTEXT_DIM_CONFIG\]\[ACTIVE\].*TOTAL=[0-9]+" "${PYTHON_LOG_FILE}" | tail -n 1 || true)
+    if [ -n "${active_line}" ]; then
+        PY_ACTIVE_DIM=$(echo "${active_line}" | sed -nE 's/.*TOTAL=([0-9]+).*/\1/p')
+    else
+        PY_ACTIVE_DIM="${PY_STATE_DIM}"
+    fi
+
+    if [ -z "${PY_CONTEXT_DIM}" ] || [ -z "${PY_STATE_DIM}" ] || [ -z "${PY_ACTIVE_DIM}" ]; then
+        echo -e "${RED}[precheck] Python 维度提取失败。${NC}"
+        return 1
+    fi
+
+    echo "[precheck] Python dims: CONTEXT=, STATE=, ACTIVE="
+    echo "[precheck] 含义: CONTEXT=共享内存上下文总维度(含元信息), STATE=策略网络实际观测维度, ACTIVE=当前启用特征维度(通常与STATE一致)"
+    return 0
+}
+
+run_state_dim_precheck() {
+    local precheck_num_req precheck_timeout
+    local c_context_line c_active_line precheck_out
+    local c_context_dim c_active_dim
+
+    precheck_num_req="${LOH_PRECHECK_NUM_REQ:-1}"
+    precheck_timeout="${LOH_PRECHECK_TIMEOUT_S:-45}"
+
+    local precheck_cmd=("${CACHESIM_BIN}" "${TRACE_FILE}" "${TRACE_TYPE}" "${EVICTION_ALGO}" "${CACHE_SIZE}")
+    if [ ${#TRACE_TYPE_PARAMS_ARG[@]} -ne 0 ]; then
+        precheck_cmd+=("${TRACE_TYPE_PARAMS_ARG[@]}")
+    fi
+    if [ -n "${CACHESIM_NUM_THREAD:-}" ]; then
+        precheck_cmd+=("--num-thread=${CACHESIM_NUM_THREAD}")
+    fi
+    precheck_cmd+=("--eviction-params=$EV_PARAMS" "--num-req=${precheck_num_req}" "-v" "0")
+
+    echo "[precheck] Running quick cachesim precheck for state dims (num_req=${precheck_num_req}, timeout=${precheck_timeout}s, no precheck log file)..."
+    if command -v timeout >/dev/null 2>&1; then
+        if command -v stdbuf >/dev/null 2>&1; then
+            precheck_out=$(env LOH_ENABLE_RL=0 timeout "${precheck_timeout}s" stdbuf -oL -eL "${precheck_cmd[@]}" 2>&1 || true)
+        else
+            precheck_out=$(env LOH_ENABLE_RL=0 timeout "${precheck_timeout}s" "${precheck_cmd[@]}" 2>&1 || true)
+        fi
+    else
+        if command -v stdbuf >/dev/null 2>&1; then
+            precheck_out=$(env LOH_ENABLE_RL=0 stdbuf -oL -eL "${precheck_cmd[@]}" 2>&1 || true)
+        else
+            precheck_out=$(env LOH_ENABLE_RL=0 "${precheck_cmd[@]}" 2>&1 || true)
+        fi
+    fi
+
+    c_context_line=$(echo "${precheck_out}" | grep -Ei "CONTEXT(_STATE)?_DIM[[:space:]]*[:=][[:space:]]*[0-9]+|context(_state)?_dim[[:space:]]*[:=][[:space:]]*[0-9]+" | head -n 1 || true)
+    c_active_line=$(echo "${precheck_out}" | grep -Ei -- "ACTIVE(_STATE)?_DIM[[:space:]]*[:=][[:space:]]*[0-9]+|active(_state)?_dim[[:space:]]*[:=][[:space:]]*[0-9]+|Runtime state dims:.*ACTIVE=[0-9]+/[0-9]+" | head -n 1 || true)
+
+    c_context_dim=$(echo "${c_context_line}" | sed -nE 's/.*[Cc][Oo][Nn][Tt][Ee][Xx][Tt](_[Ss][Tt][Aa][Tt][Ee])?_[Dd][Ii][Mm][[:space:]]*[:=][[:space:]]*([0-9]+).*/\2/p')
+    c_active_dim=$(echo "${c_active_line}" | sed -nE 's/.*[Aa][Cc][Tt][Ii][Vv][Ee](_[Ss][Tt][Aa][Tt][Ee])?_[Dd][Ii][Mm][[:space:]]*[:=][[:space:]]*([0-9]+).*/\2/p')
+    if [ -z "${c_active_dim}" ]; then
+        c_active_dim=$(echo "${c_active_line}" | sed -nE 's/.*ACTIVE=([0-9]+)\/[0-9]+.*/\1/p')
+    fi
+
+    if [ -z "${c_context_dim}" ] || [ -z "${c_active_dim}" ]; then
+        echo -e "${YELLOW}[precheck] failed to extract C CONTEXT/ACTIVE dims, skip hard check and continue full run.${NC}"
+        echo "[precheck] key lines from precheck output:"
+        echo "${precheck_out}" | grep -niE "CONTEXT|ACTIVE|state dim|state_dim|Runtime state dims" | tail -n 40 || true
+        echo "[precheck] precheck raw tail (last 40 lines):"
+        echo "${precheck_out}" | tail -n 40 || true
+        return 0
+    fi
+
+    echo "[precheck] C dims: CONTEXT=, ACTIVE="
+    echo "[precheck] 含义: C端 CONTEXT=共享上下文总维度, ACTIVE=当前启用特征维度(用于与Python侧ACTIVE/STATE对齐检查)"
+
+    if [ "${PY_CONTEXT_DIM}" != "${c_context_dim}" ] || [ "${PY_ACTIVE_DIM}" != "${c_active_dim}" ]; then
+        echo -e "${RED}[precheck] state dim mismatch，终止正式运行。${NC}"
+        # 打印 Python 侧维度: CONTEXT(共享长度), STATE(观测长度), ACTIVE(启用特征长度)
+        echo "[precheck] Python dims: CONTEXT=${PY_CONTEXT_DIM}, ACTIVE=${PY_ACTIVE_DIM}"
+        # 打印 C 侧维度: 用于与 Python 侧进行布局与有效维度对齐校验
+        echo "[precheck] C dims: CONTEXT=${c_context_dim}, ACTIVE=${c_active_dim}"
+        echo "[precheck] Python key lines:"
+        grep -nE "Shared state dims|\[CONTEXT_DIM_CONFIG\]\[ACTIVE\]" "${PYTHON_LOG_FILE}" | tail -n 5 || true
+        echo "[precheck] C key lines:"
+        echo "${precheck_out}" | grep -niE "CONTEXT|ACTIVE|state dim|state_dim|Runtime state dims" | tail -n 40 || true
+        return 1
+    fi
+
+    echo -e "${GREEN}[precheck] state dim matched, continue full run.${NC}"
+    return 0
+}
+
 cleanup_on_exit() {
     if [ "${_CLEANUP_DONE}" = "1" ]; then
         return
@@ -336,7 +440,7 @@ trap cleanup_on_exit INT TERM EXIT
 
     # 确定构建模式：release 或 debug
     BUILD_FLAG=""
-    if [ "${LOH_BUILD_RELEASE:-0}" = "1" ]; then
+    if [ "${LOH_BUILD_RELEASE:-1}" = "1" ]; then
         BUILD_FLAG="-r"
         BUILD_DIR="_build_rel"
     else
@@ -544,7 +648,7 @@ fi
 # 优先级：LOH_CACHESIM_BIN > LOH_BUILD_RELEASE 自动选择 > _build_dbg
 if [ -n "${LOH_CACHESIM_BIN:-}" ]; then
     CACHESIM_BIN="${LOH_CACHESIM_BIN}"
-elif [ "${LOH_BUILD_RELEASE:-0}" = "1" ]; then
+elif [ "${LOH_BUILD_RELEASE:-1}" = "1" ]; then
     CACHESIM_BIN="_build_rel/bin/cachesim"
 else
     CACHESIM_BIN="_build_dbg/bin/cachesim"
@@ -566,11 +670,23 @@ fi
 # 控制 cachesim 输出冗余度（默认=1，便于和历史日志一致；sweep 时可设为 0 大幅减少日志体积）
 CACHESIM_CMD+=("-v" "${CACHESIM_VERBOSE:-1}")
 
+if ! extract_python_state_dims; then
+    exit 1
+fi
+
+if ! run_state_dim_precheck; then
+    exit 1
+fi
+
 # 打印并执行命令
 echo "Executing cachesim command:"
 printf ' %q' "${CACHESIM_CMD[@]}"; echo
 
-"${CACHESIM_CMD[@]}" > "${CACHESIM_LOG_FILE}" 2>&1 &
+if command -v stdbuf >/dev/null 2>&1; then
+    stdbuf -oL -eL "${CACHESIM_CMD[@]}" > "${CACHESIM_LOG_FILE}" 2>&1 &
+else
+    "${CACHESIM_CMD[@]}" > "${CACHESIM_LOG_FILE}" 2>&1 &
+fi
 CACHESIM_PID=$!
 
 # 如果 Python 先退出，cachesim 可能卡在等待 ACK；这里做兜底收敛

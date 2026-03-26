@@ -22,12 +22,22 @@ LOH Bandit 权重搜索脚本（epsilon-greedy 版本）：
 import os
 import sys
 import time
+
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from loh_actor_critic_sb3 import SharedMemoryData, CONTEXT_DIM, STATE_DIM, SHM_WEIGHT_DIM, SCORE_FEATURE_DIM
+
+# Map FEATURE_DIM to SHM_WEIGHT_DIM for compatibility with weights array
+FEATURE_DIM = SHM_WEIGHT_DIM
+# Effective arm dimension follows actor_critic score feature dimension.
+ARM_DIM = SCORE_FEATURE_DIM
 import ctypes
 import mmap
 import math
 from typing import List, Tuple
 
-FEATURE_DIM = 6
+
 
 
 def _env_truthy(name: str) -> bool:
@@ -48,9 +58,15 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _normalize_weights(ws: List[float]) -> List[float]:
+    # Keep arm dimensionality aligned with shared-memory weight vector.
+    if len(ws) < ARM_DIM:
+        ws = ws + [0.0] * (ARM_DIM - len(ws))
+    elif len(ws) > ARM_DIM:
+        ws = ws[:ARM_DIM]
+
     s = sum(ws)
     if s <= 0 or not math.isfinite(s):
-        return [1.0 / FEATURE_DIM] * FEATURE_DIM
+        return [1.0 / ARM_DIM] * ARM_DIM
     return [w / s for w in ws]
 
 
@@ -65,41 +81,42 @@ def _parse_arms_from_env() -> List[List[float]]:
             continue
         try:
             vals = [float(x.strip()) for x in arm_str.split(",") if x.strip()]
-            if len(vals) == FEATURE_DIM:
+            if len(vals) == ARM_DIM:
                 arms.append(_normalize_weights(vals))
         except Exception:
             continue
     return arms
 
 
-def get_state_dim() -> int:
-    base = 38
-    cache_flag = os.environ.get("LOH_INCLUDE_CACHE_FEATURES", "").strip().lower()
-    if cache_flag in {"0", "false", "no", "off"}:
-        base = 26
-    cand_flag = os.environ.get("LOH_INCLUDE_CANDIDATE_FEATURES", "0").strip().lower()
-    cand_enabled = cand_flag in {"1", "true", "yes", "on"}
-    return base + (72 if cand_enabled else 0)
+def _to_shm_weights(weights_eff: List[float]) -> List[float]:
+    """Map SCORE_FEATURE_DIM effective weights to SHM_WEIGHT_DIM like actor_critic."""
+    ws = list(weights_eff)
+    if len(ws) > SCORE_FEATURE_DIM:
+        ws = ws[:SCORE_FEATURE_DIM]
+    elif len(ws) < SCORE_FEATURE_DIM:
+        ws = ws + [0.0] * (SCORE_FEATURE_DIM - len(ws))
+
+    out = [0.0] * FEATURE_DIM
+    use_compound = _env_truthy("LOH_SCORE_USE_COMPOUND")
+    use_irt = _env_truthy("LOH_SCORE_USE_IRT")
+
+    if use_compound:
+        n = min(SCORE_FEATURE_DIM, FEATURE_DIM)
+    elif not use_irt:
+        n = min(SCORE_FEATURE_DIM, 3)
+    else:
+        n = min(SCORE_FEATURE_DIM, 6)
+
+    for i in range(n):
+        out[i] = float(ws[i])
+    return out
 
 
-STATE_DIM = get_state_dim()
 
 
-class SharedMemoryData(ctypes.Structure):
-    _fields_ = [
-        ("ready_for_inference", ctypes.c_int),
-        ("weights_updated", ctypes.c_int),
-        ("terminate", ctypes.c_int),
-        ("is_training", ctypes.c_int),
-        ("state", ctypes.c_double * STATE_DIM),
-        ("weights", ctypes.c_double * FEATURE_DIM),
-        ("miss_ratio", ctypes.c_double),
-        ("byte_miss_ratio", ctypes.c_double),
-        ("reward", ctypes.c_double),
-        ("state_version", ctypes.c_uint64),
-        ("ack_version", ctypes.c_uint64),
-        ("timestamp", ctypes.c_int64),
-    ]
+
+
+
 
 
 libc = ctypes.CDLL("libc.so.6", use_errno=True)
@@ -187,7 +204,7 @@ class BanditService:
         self._sem_ready = None
         self._sem_ack = None
         self._sem_enabled = False
-        self._sem_timeout = float(os.environ.get("LOH_SEM_TIMEOUT_S", "1.0"))
+        self._sem_timeout = float(os.environ.get("LOH_SEM_TIMEOUT_S", "0.02"))
 
         self._attach_shared_memory()
         self._init_semaphores()
@@ -269,6 +286,11 @@ class BanditService:
         if self.data is None:
             return False
 
+        if self.data.terminate:
+            return False
+        if self.data.ready_for_inference:
+            return True
+
         if self._sem_enabled:
             ts = Timespec()
             sec = int(self._sem_timeout)
@@ -303,7 +325,8 @@ class BanditService:
 
                 # 选臂并写入对应权重
                 arm = self.bandit.select_arm()
-                weights = self.arms[arm]
+                weights_eff = self.arms[arm]
+                weights = _to_shm_weights(weights_eff)
                 for i in range(FEATURE_DIM):
                     self.data.weights[i] = float(weights[i])
                 self.data.weights_updated = 1
@@ -312,19 +335,25 @@ class BanditService:
                 self.data.ack_version = self.data.state_version
 
                 # 读当前 miss_ratio 计算奖励
-                miss_ratio = float(self.data.miss_ratio)
-                self.bandit.update(arm, miss_ratio)
+                obj_hit = max(0.0, min(1.0, float(self.data.state[0])))
+                byte_hit = max(0.0, min(1.0, float(self.data.state[1])))
+                miss_w = max(0.0, min(1.0, _env_float("LOH_MISS_RATIO_WEIGHT", 1.0)))
+                byte_miss_w = 1.0 - miss_w
+                miss_mix = miss_w * (1.0 - obj_hit) + byte_miss_w * (1.0 - byte_hit)
+                self.bandit.update(arm, miss_mix)
 
                 step += 1
                 if step % 1000 == 0:
                     elapsed = get_monotonic_time() - start
                     print(f"[loh_bandit_weights] step={step}, elapsed={elapsed:.1f}s")
                     for i, (c, v) in enumerate(zip(self.bandit.counts, self.bandit.values)):
-                        print(f"  arm[{i}]: count={c}, avg_reward={v:.6f}")
+                        print(f"  arm[{i}]: count={c}, avg_reward={v:.9e}")
 
                 self._post_ack()
 
         finally:
+            # Release exported pointer created by ctypes.from_buffer before closing mmap.
+            self.data = None
             if self._sem_ready:
                 libc.sem_close(self._sem_ready)
             if self._sem_ack:
@@ -362,7 +391,7 @@ def main():
     if not arms:
         arms = _default_arms()
 
-    print(f"[loh_bandit_weights] STATE_DIM={STATE_DIM}, arms={len(arms)}, epsilon={epsilon}, mode={reward_mode}, SHM_KEY={shm_key}")
+    print(f"[LOH CONFIG] Shared state dims: CONTEXT_DIM=26, STATE_DIM={STATE_DIM}\n"); print(f"[loh_bandit_weights] STATE_DIM={STATE_DIM}, arms={len(arms)}, epsilon={epsilon}, mode={reward_mode}, SHM_KEY={shm_key}")
 
     service = BanditService(arms, epsilon, reward_mode, shm_key)
     service.run()

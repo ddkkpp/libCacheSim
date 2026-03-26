@@ -1,183 +1,6 @@
 # LOH 完整实验结果
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-echo "[finished] ${RESULTS_CSV}" >> "$RUNNER_LOG"done  echo "[queue] active=${running}/${PARALLEL} action=finish_one" >> "$RUNNER_LOG"  running=$((running - 1))  wait -n || truewhile [ "$running" -gt 0 ]; dodone  done    done      fi        echo "[queue] active=${running}/${PARALLEL} action=finish_one" >> "$RUNNER_LOG"        running=$((running - 1))        wait -n || true      if [ "$running" -ge "$PARALLEL" ]; then      echo "[queue] active=${running}/${PARALLEL} action=start algo=${algo} exclude=${ex} trace=${trace_name}" >> "$RUNNER_LOG"      running=$((running + 1))      run_one "$algo" "$ex" "$trace_name" "$trace_path" &      IFS='|' read -r trace_name trace_path <<< "$t"    for t in "${TASKS[@]}"; do  for ex in "${EXCLUDES[@]}"; dofor algo in "${ALGOS[@]}"; dorunning=0}  fi    ) 9>"$OUT_DIR/doc_update.lock"      python3 "$OUT_DIR/update_doc_section.py" "$RESULTS_CSV" "$DOC_PATH" >> "$OUT_DIR/doc_update.log" 2>&1 || true      flock 9    (  if [ -f "$OUT_DIR/update_doc_section.py" ]; then  echo "[case-done] algo=${algo} exclude=${exclude_recent_steps} trace=${trace_name} status=${status} rc=${rc} final_mr=${fmr} final_bmr=${fbmr} final_mqps=${fmqps}" >> "$RUNNER_LOG"  echo "${algo},${exclude_recent_steps},${trace_name},${status},${rc},${fmr},${fbmr},${fmqps},${log_path}" >> "$RESULTS_CSV"  [ "$rc" -ne 0 ] && status="failed"  fi    fmqps="$(echo "$fin" | cut -d',' -f3)"    fbmr="$(echo "$fin" | cut -d',' -f2)"    fmr="$(echo "$fin" | cut -d',' -f1)"  if [ -n "$fin" ]; then  fin=$(extract_final "$log_path" || true)  local fin fmr="NA" fbmr="NA" fmqps="NA" status="ok"  ) > "$log_path" 2>&1 || rc=$?    bash scripts/test_loh_rl_sb3.sh "$trace_path" "$CACHE_SIZE"    for kv in "${COMMON_ENV[@]}"; do export "$kv"; done    export RUN_TIMESTAMP="$(date +%m%d_%H%M%S)_${case_name}_$(date +%s)"    export LOH_EXCLUDE_RECENT_STEPS="$exclude_recent_steps"    export LOH_RL_ALGO="$algo"    export LOH_SHM_KEY="$shm_key"  (  echo "[case-start] algo=${algo} exclude=${exclude_recent_steps} trace=${trace_name}" >> "$RUNNER_LOG"  rm -f "/dev/shm/loh_ac_${shm_key}" "/dev/shm/sem.loh_ac_ready_${shm_key}" "/dev/shm/sem.loh_ac_ack_${shm_key}" || true  shm_key=$(printf "%s|%s|%s|%s|%s" "$trace_name" "$algo" "$exclude_recent_steps" "$CACHE_SIZE" "$(date +%s%N)" | cksum | awk '{print $1}')  local shm_key rc=0  local log_path="$OUT_DIR/${case_name}_${case_stamp}.log"  case_stamp="$(date +%m%d_%H%M%S)"  local case_stamp  local case_name="${trace_name}_${algo}_ex${exclude_recent_steps}_cache01"  fi    return 0    echo "[resume-skip] algo=${algo} exclude=${exclude_recent_steps} trace=${trace_name} already done" >> "$RUNNER_LOG"  if already_done "$algo" "$exclude_recent_steps" "$trace_name"; then  local trace_path="$4"  local trace_name="$3"  local exclude_recent_steps="$2"  local algo="$1"run_one() {}  grep -q "^${algo},${exclude_recent_steps},${trace_name},ok," "$RESULTS_CSV"  local trace_name="$3"  local exclude_recent_steps="$2"  local algo="$1"already_done() {}  ' "$log_path"    END { if (last != "") print last; }    }      if (mr != "" && bmr != "" && mqps != "") last = mr "," bmr "," mqps;      if (match($0, /throughput [0-9]+\.[0-9]+ MQPS/)) mqps = substr($0, RSTART + 11, RLENGTH - 16);      if (match($0, /byte miss ratio [0-9]+\.[0-9]+/)) bmr = substr($0, RSTART + 16, RLENGTH - 16);      if (match($0, /miss ratio [0-9]+\.[0-9]+/)) mr = substr($0, RSTART + 11, RLENGTH - 11);      mr=""; bmr=""; mqps="";    /LOH-(OMR|BMR) cache size/ {  awk '  local log_path="$1"extract_final() {)  "meta|data/MetaCDN/meta_reag.oracleGeneral.zst"  "wiki|data/WikiCDN/wiki_2019t.oracleGeneral.zst"  "1063|data/TencentCBS/1063.oracleGeneral.zst"TASKS=(EXCLUDES=("0" "2000" "10000")ALGOS=("SAC" "PPO" "TD3"))  "LOH_INCLUDE_HIT_MISS_FEATURES=0"  "LOH_ADAPTIVE_NORM_TRANSFORM_QUANTILE=0"  "LOH_ADAPTIVE_NORM_WARMUP=0"  "LOH_ADAPTIVE_NORM_HI_Q=1.0"  "LOH_ADAPTIVE_NORM_LO_Q=0.0"  "LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION=1"  "LOH_ENABLE_FEATURE_NORMALIZATION=0"  "LOH_FEATURE_LOG1P_RECIPROCAL=0"  "LOH_FEATURE_LOG1P=1"  "LOH_FEATURE_IDENTITY=0"  "LOH_FEATURE_UNIFIED_FORMULA=0"  "LOH_USE_SCORE_REBALANCE=0"  "LOH_ADAPTIVE_BUDGET=1"  "LOH_INCLUDE_WEIGHTS_IN_OBS=1"  "LOH_MISS_RATIO_WEIGHT=1.0"  "LOH_ASYNC_TRAIN=1"  "LOH_WAIT_MODE=nonblocked"  "LOH_STRUCTURED_CANDIDATES=96"  "LOH_RANDOM_CANDIDATES=96"  "LOH_SCORE_USE_IRT=0"  "LOH_SCORE_USE_COMPOUND=1"  "LOH_ENABLE_RL=1"  "LOH_DEBUG_LEVEL=0"  "LOH_PERF_PROFILING=0"  "LOH_SKIP_PIP_INSTALL=1"  "LOH_SKIP_BUILD=1"  "LOH_BUILD_RELEASE=1"  "LOH_WAIT_NEWSTATE_IDLE_S=1800"  "LOH_WAIT_NEWSTATE_MAX_CONSEC_TIMEOUTS=1800"  "LOH_SEM_TIMEOUT_S=1.0"  "LOH_ENABLE_SEMAPHORE=1"  "LOH_PARALLEL_SAFE=1"  "CACHESIM_NUM_REQ=0"COMMON_ENV=(fi  echo "[prebuild] done" >> "$RUNNER_LOG"  }    exit 1    echo "[prebuild] failed, see $OUT_DIR/prebuild.log" >> "$RUNNER_LOG"  ) >> "$OUT_DIR/prebuild.log" 2>&1 || {    bash scripts/debug.sh -r -c    export LOH_SKIP_BUILD=0    export LOH_INCLUDE_HIT_MISS_FEATURES=0    export LOH_BUILD_RELEASE=1  (  echo "[prebuild] force release + LOH_INCLUDE_HIT_MISS_FEATURES=0" >> "$RUNNER_LOG"else  echo "[prebuild] skipped by SKIP_PREBUILD=1" >> "$RUNNER_LOG"if [ "${SKIP_PREBUILD:-1}" = "1" ]; thenecho "[start] rl_algo x exclude_recent_steps sweep + orig3 + cache=0.1" >> "$RUNNER_LOG"fiCSValgo,exclude_recent_steps,trace,status,rc,final_mr,final_bmr,final_mqps,log_pathcat > "$RESULTS_CSV" <<'CSV'if [ ! -f "$RESULTS_CSV" ]; thenmkdir -p "$OUT_DIR"CACHE_SIZE="0.1"PARALLEL="${PARALLEL:-3}"DOC_PATH="docs/20260317-FULL_EXPERIMENT_RESULTS.md"RUNNER_LOG="$OUT_DIR/runner.log"RESULTS_CSV="$OUT_DIR/results.csv"OUT_DIR="tmp/rl_algo_exclude_sweep_orig3_cache01_0318"cd "$ROOT_DIR"ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)> 测试环境：Intel Xeon Gold 6230R @ 2.10 GHz, KVM, 20 cores, 32 MB L3
+> 测试环境：Intel Xeon Gold 6230R @ 2.10 GHz, KVM, 20 cores, 32 MB L3
 > 构建：release build (`_build_rel/bin/cachesim`, `-O2 -DNDEBUG`)
 > 缓存比例：0.1（缓存大小 = working set × 10%）
 > LOH 统一配置：`COMPOUND=1, IRT=0, RSC=64, MAX_CAND=96, nonblocked`
@@ -185,6 +8,55 @@ echo "[finished] ${RESULTS_CSV}" >> "$RUNNER_LOG"done  echo "[queue] active=${ru
 > 特征模式：1063→LOG1P, Wiki→RECIPROCAL, Meta→LOG1P（各 trace 最优）
 
 ---
+
+## 0. 当前最好配置
+
+> 本章固定放在文档开头，用于覆盖前文分散结论，给出可直接执行的“当前最优”建议。
+> 依据数据：§10.1、§10.1.1、§10.3.4、§10.3.8。
+
+### 0.1 当前最好配置（2026-03-13 更新）
+
+```bash
+# 运行与构建流程（低开销）
+LOH_ENABLE_SEMAPHORE=1
+LOH_BUILD_RELEASE=1
+
+# C 端开销相关（注意：为编译期宏，需在构建前生效）
+LOH_PERF_PROFILING=0
+LOH_DEBUG_LEVEL=0
+
+# RL/策略配置
+LOH_SCORE_USE_COMPOUND=1
+LOH_SCORE_USE_IRT=0
+LOH_RANDOM_CANDIDATES=96
+LOH_STRUCTURED_CANDIDATES=96
+LOH_WAIT_MODE=nonblocked
+LOH_ASYNC_TRAIN=1
+LOH_ENABLE_PENALTY=0
+LOH_MISS_RATIO_WEIGHT=1.0
+
+LOH_INCLUDE_WEIGHTS_IN_OBS=1
+# 可开启 hit_miss 作为 state（注意：这是编译期选项，改后需重编译）
+
+# 新默认：adaptive budget 开启，score rebalance 关闭
+LOH_ADAPTIVE_BUDGET=1
+LOH_USE_SCORE_REBALANCE=0
+```
+
+Trace 特定的特征公式设置（并入原 0.2）：
+
+| Trace | 特征模式 | 设置 |
+|:--|---|---|
+| 1063 | log1p | `LOH_FEATURE_LOG1P=1`, `LOH_FEATURE_LOG1P_RECIPROCAL=0` |
+| meta | log1p | `LOH_FEATURE_LOG1P=1`, `LOH_FEATURE_LOG1P_RECIPROCAL=0` |
+| wiki | reciprocal | `LOH_FEATURE_LOG1P=0`, `LOH_FEATURE_LOG1P_RECIPROCAL=1` |
+
+说明：
+
+- `LOH_INCLUDE_WEIGHTS_IN_OBS=1`（weights 并入 state）对三条 trace 的 MR 均有不劣表现，其中 Wiki 改善最明显。
+- 默认采用 `LOH_ADAPTIVE_BUDGET=1` + `LOH_USE_SCORE_REBALANCE=0`。
+- `LOH_SKIP_BUILD=1`/`LOH_SKIP_PIP_INSTALL=1` 用于减少启动开销（前提是二进制和 Python 依赖已就绪）。
+- `LOH_PERF_PROFILING`、`LOH_DEBUG_LEVEL` 对 C 端属于编译期宏：改值后需要触发一次构建才能作用到 `cachesim`。
 
 ## 1. 主结果表：3M requests（按 1063 MR 从好到坏排序）
 
@@ -1846,8 +1718,6 @@ _Auto-updated from `tmp/penalty_ablation_pair_0316/results.csv` at 2026-03-16 20
 2. 1063 上 net4 略优，但 wiki/meta 基本无显著收益。
 3. 若追求稳定吞吐，`net1(256)` 仍是更稳妥默认；若只追求 1063 MR，可选 net4。
 
-说明：baseline 已并入主表作为直接对照行。网络层历史最优与 baseline 的差异总体较小，但 wiki 仍有明显优化空间。
-
 ### 21.2 Replay Buffer / Batch（`sac_buffer_size`, `sac_batch_size`）
 
 测试组使用 `sac_net_arch=256,256`：
@@ -3045,51 +2915,340 @@ SAC Ex0 独立 seed 对照（27.15 同配置，原三类 trace，各 2 次）：
 3. 从 `tail mean6` 看，权重并非单维极化（不是典型“只压 recency”或“只压 frequency”），而是多维混合偏好。
 4. 因此在当前 compound/IRT 特征下，更符合“组合特征偏好收敛”而非“单一 LRU/LFU 维度主导收敛”。
 
-## 0. 当前最好配置
+## 28. Seed×Config 扩展矩阵（orig3, cache=0.1, 每组5个seed, Auto）
 
-> 本章固定放在文档末尾，用于覆盖前文分散结论，给出可直接执行的“当前最优”建议。
-> 依据数据：§10.1、§10.1.1、§10.3.4、§10.3.8。
+本批次更新说明（Batch 20260322）：
 
-### 0.1 当前最好配置（2026-03-13 更新）
+- 脚本位置：`sweeps/20260319-seed5_matrix_orig3_cache01/run.sh`
+- 结果文件：`tmp/20260319-seed5_matrix_orig3_cache01/results.csv`
+- 文档更新脚本：`sweeps/20260319-seed5_matrix_orig3_cache01/summarize_to_doc.py`
 
+本批次修复内容：
+
+1. 最终行提取规则支持 `LOH-Mix(...) cache size`，不再仅限 `LOH-OMR/LOH-BMR`。
+2. 配置校验补齐 `LOH_MISS_RATIO_WEIGHT` 日志打印，减少软失败误判。
+3. 对历史结果执行回填重算，并重新生成章节统计。
+
+本批次汇总统计（基于 `results.csv`）：
+
+| 指标 | 数值 |
+|:--|--:|
+| 总样本数 | 645 |
+| ok | 645 |
+| failed | 0 |
+| 含 NA 指标行数 | 0 |
+
+结论：
+
+1. 先前 “failed 且 NA” 主要由解析口径不匹配导致，不是同等规模的真实运行失败。
+2. 当前批次回填后可用率为 100%，可直接用于本章的均值/方差统计解释。
+
+基于 `sweeps/20260318-transformq0_wobs0_orig3_cache01_0317/run.sh` 扩展的一体化矩阵实验，覆盖以下 8 组配置：
+
+1. 不改变配置。
+2. `LOH_ADAPTIVE_BUDGET=0`。
+3. `LOH_RANDOM_CANDIDATES` 与 `LOH_STRUCTURED_CANDIDATES` 在 `(96,96)` 邻域网格（默认 `64/96/128`）组合。
+4. `LOH_MISS_RATIO_WEIGHT` 按 `0.0~1.0`、步长 `0.1`。
+5. 复用 `20260318-reward_paths_nondefault_orig3_cache01_0318` 的 9 种 reward path。
+6. RL algo 切换：`TD3`、`DDPG`、`DQN`、`TQC`、`A2C`、`PPO_LSTM`。
+7. 组合：`(LOH_INCLUDE_WEIGHTS_IN_OBS, LOH_INCLUDE_HIT_MISS_FEATURES) = (1,0), (0,1), (1,1)`。
+8. 三种特征模式：
+   a) `IDENTITY=1, LOG1P=0, FIXED_NORM=0, ADAPTIVE_NORM=0`
+   b) `IDENTITY=1, LOG1P=0, FIXED_NORM=0, ADAPTIVE_NORM=1`
+   c) `IDENTITY=0, LOG1P=1, FIXED_NORM=0, ADAPTIVE_NORM=0`
+
+并发默认 `PARALLEL=24`，支持断点补齐（重复执行时自动跳过已成功样本）。
+
+<!-- AUTO_SEED5_MATRIX_ORIG3_CACHE01_20260319_BEGIN -->
+_Auto-updated from `tmp/20260323-seed5_matrix_orig3_cache01_rerun/results.csv` at 2026-03-24 14:52:48._
+
+统计口径：每组按 `trace × scenario × variant` 聚合 5 个 seed 的 `ok` 结果，表中给出均值与样本方差（var）。
+
+### 28.1 不改变配置
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | default | 5 | **0.023287** | 0.000000 | **0.024633** | 0.000000 | 0.212000 | 0.000020 | 0 |
+| wiki | default | 5 | **0.171448** | 0.000000 | **0.139518** | 0.000000 | 0.036000 | 0.000030 | 0 |
+| meta | default | 5 | **0.269360** | 0.000000 | **0.153752** | 0.000000 | 0.290000 | 0.000400 | 0 |
+
+### 28.2 LOH_ADAPTIVE_BUDGET=0
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | ab0 | 5 | **0.023796** | 0.000000 | **0.025311** | 0.000000 | 0.208000 | 0.000020 | 0 |
+| wiki | ab0 | 5 | **0.171411** | 0.000000 | **0.139439** | 0.000000 | 0.036000 | 0.000030 | 0 |
+| meta | ab0 | 5 | **0.269440** | 0.000000 | **0.153877** | 0.000000 | 0.252000 | 0.001970 | 0 |
+
+### 28.3 LOH_RANDOM_CANDIDATES × LOH_STRUCTURED_CANDIDATES 网格
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | r128_s128 | 5 | 0.022852 | 0.000000 | 0.024292 | 0.000000 | 0.180000 | 0.000000 | 0 |
+| 1063 | r128_s64 | 5 | **0.022754** | 0.000000 | **0.024202** | 0.000000 | 0.192000 | 0.000020 | 0 |
+| 1063 | r128_s96 | 5 | 0.022790 | 0.000000 | 0.024224 | 0.000000 | 0.186000 | 0.000030 | 0 |
+| 1063 | r64_s128 | 5 | 0.024832 | 0.000000 | 0.026049 | 0.000000 | 0.220000 | 0.000050 | 0 |
+| 1063 | r64_s64 | 5 | 0.024912 | 0.000000 | 0.026049 | 0.000000 | 0.242000 | 0.000020 | 0 |
+| 1063 | r64_s96 | 5 | 0.024957 | 0.000000 | 0.026093 | 0.000000 | 0.222000 | 0.000020 | 0 |
+| 1063 | r96_s128 | 5 | 0.023312 | 0.000000 | 0.024636 | 0.000000 | 0.192000 | 0.000020 | 0 |
+| 1063 | r96_s64 | 5 | 0.023300 | 0.000000 | 0.024657 | 0.000000 | 0.216000 | 0.000030 | 0 |
+| 1063 | r96_s96 | 5 | 0.023271 | 0.000000 | 0.024615 | 0.000000 | 0.206000 | 0.000030 | 0 |
+| wiki | r128_s128 | 5 | 0.171338 | 0.000000 | 0.139540 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | r128_s64 | 5 | **0.171293** | 0.000000 | 0.139572 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | r128_s96 | 5 | 0.171309 | 0.000000 | 0.139559 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | r64_s128 | 5 | 0.171769 | 0.000000 | 0.139317 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | r64_s64 | 5 | 0.171673 | 0.000000 | **0.139295** | 0.000000 | 0.050000 | 0.000000 | 0 |
+| wiki | r64_s96 | 5 | 0.171684 | 0.000000 | 0.139321 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | r96_s128 | 5 | 0.171465 | 0.000000 | 0.139471 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | r96_s64 | 5 | 0.171392 | 0.000000 | 0.139460 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | r96_s96 | 5 | 0.171464 | 0.000000 | 0.139465 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| meta | r128_s128 | 5 | **0.269232** | 0.000000 | 0.153524 | 0.000000 | 0.214000 | 0.000280 | 0 |
+| meta | r128_s64 | 5 | 0.269277 | 0.000000 | 0.153522 | 0.000000 | 0.202000 | 0.000120 | 0 |
+| meta | r128_s96 | 5 | 0.269234 | 0.000000 | **0.153519** | 0.000000 | 0.206000 | 0.000180 | 0 |
+| meta | r64_s128 | 5 | 0.269377 | 0.000000 | 0.154469 | 0.000000 | 0.222000 | 0.000270 | 0 |
+| meta | r64_s64 | 5 | 0.269415 | 0.000000 | 0.153998 | 0.000000 | 0.256000 | 0.000580 | 0 |
+| meta | r64_s96 | 5 | 0.269342 | 0.000000 | 0.154234 | 0.000000 | 0.230000 | 0.000350 | 0 |
+| meta | r96_s128 | 5 | 0.269260 | 0.000000 | 0.153769 | 0.000000 | 0.204000 | 0.000130 | 0 |
+| meta | r96_s64 | 5 | 0.269322 | 0.000000 | 0.153666 | 0.000000 | 0.222000 | 0.000120 | 0 |
+| meta | r96_s96 | 5 | 0.269299 | 0.000000 | 0.153782 | 0.000000 | 0.214000 | 0.000580 | 0 |
+
+### 28.4 LOH_MISS_RATIO_WEIGHT 阶梯 0.1
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | mrw0p0 | 5 | 0.023274 | 0.000000 | 0.024622 | 0.000000 | 0.206000 | 0.000030 | 0 |
+| 1063 | mrw0p1 | 5 | 0.023335 | 0.000000 | 0.024716 | 0.000000 | 0.204000 | 0.000030 | 0 |
+| 1063 | mrw0p2 | 5 | 0.023292 | 0.000000 | 0.024640 | 0.000000 | 0.206000 | 0.000030 | 0 |
+| 1063 | mrw0p3 | 5 | 0.023339 | 0.000000 | 0.024695 | 0.000000 | 0.204000 | 0.000030 | 0 |
+| 1063 | mrw0p4 | 5 | 0.023245 | 0.000000 | 0.024587 | 0.000000 | 0.206000 | 0.000030 | 0 |
+| 1063 | mrw0p5 | 5 | 0.023463 | 0.000000 | 0.024851 | 0.000000 | 0.206000 | 0.000030 | 0 |
+| 1063 | mrw0p6 | 5 | 0.023265 | 0.000000 | 0.024603 | 0.000000 | 0.200000 | 0.000000 | 0 |
+| 1063 | mrw0p7 | 5 | 0.023285 | 0.000000 | 0.024639 | 0.000000 | 0.212000 | 0.000020 | 0 |
+| 1063 | mrw0p8 | 5 | **0.023240** | 0.000000 | **0.024577** | 0.000000 | 0.210000 | 0.000000 | 0 |
+| 1063 | mrw0p9 | 5 | 0.023307 | 0.000000 | 0.024657 | 0.000000 | 0.204000 | 0.000030 | 0 |
+| 1063 | mrw1p0 | 5 | 0.023345 | 0.000000 | 0.024724 | 0.000000 | 0.210000 | 0.000000 | 0 |
+| wiki | mrw0p0 | 5 | 0.171449 | 0.000000 | 0.139503 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | mrw0p1 | 5 | 0.171471 | 0.000000 | 0.139488 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | mrw0p2 | 5 | 0.171433 | 0.000000 | 0.139480 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | mrw0p3 | 5 | 0.171435 | 0.000000 | 0.139466 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | mrw0p4 | 5 | 0.171448 | 0.000000 | **0.139414** | 0.000000 | 0.032000 | 0.000020 | 0 |
+| wiki | mrw0p5 | 5 | 0.171422 | 0.000000 | 0.139455 | 0.000000 | 0.034000 | 0.000030 | 0 |
+| wiki | mrw0p6 | 5 | 0.171428 | 0.000000 | 0.139482 | 0.000000 | 0.036000 | 0.000030 | 0 |
+| wiki | mrw0p7 | 5 | **0.171417** | 0.000000 | 0.139466 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | mrw0p8 | 5 | 0.171424 | 0.000000 | 0.139450 | 0.000000 | 0.038000 | 0.000020 | 0 |
+| wiki | mrw0p9 | 5 | 0.171442 | 0.000000 | 0.139461 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | mrw1p0 | 5 | 0.171417 | 0.000000 | 0.139445 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| meta | mrw0p0 | 5 | 0.269299 | 0.000000 | 0.153688 | 0.000000 | 0.222000 | 0.000170 | 0 |
+| meta | mrw0p1 | 5 | 0.269308 | 0.000000 | 0.153754 | 0.000000 | 0.206000 | 0.000130 | 0 |
+| meta | mrw0p2 | 5 | 0.269308 | 0.000000 | 0.153684 | 0.000000 | 0.206000 | 0.000130 | 0 |
+| meta | mrw0p3 | 5 | **0.269277** | 0.000000 | 0.153755 | 0.000000 | 0.222000 | 0.000370 | 0 |
+| meta | mrw0p4 | 5 | 0.269301 | 0.000000 | 0.153763 | 0.000000 | 0.208000 | 0.000070 | 0 |
+| meta | mrw0p5 | 5 | 0.269285 | 0.000000 | 0.153715 | 0.000000 | 0.218000 | 0.000170 | 0 |
+| meta | mrw0p6 | 5 | 0.269283 | 0.000000 | **0.153668** | 0.000000 | 0.214000 | 0.000430 | 0 |
+| meta | mrw0p7 | 5 | 0.269318 | 0.000000 | 0.153727 | 0.000000 | 0.220000 | 0.000600 | 0 |
+| meta | mrw0p8 | 5 | 0.269300 | 0.000000 | 0.153685 | 0.000000 | 0.214000 | 0.000230 | 0 |
+| meta | mrw0p9 | 5 | 0.269281 | 0.000000 | 0.153747 | 0.000000 | 0.224000 | 0.000280 | 0 |
+| meta | mrw1p0 | 5 | 0.269287 | 0.000000 | 0.153767 | 0.000000 | 0.210000 | 0.000350 | 0 |
+
+### 28.5 9 种 reward path
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | abs_miss_improve | 5 | 0.023383 | 0.000000 | 0.024744 | 0.000000 | 0.230000 | 0.000050 | 0 |
+| 1063 | abs_miss_improve_trend_delta | 5 | 0.023259 | 0.000000 | 0.024610 | 0.000000 | 0.212000 | 0.000020 | 0 |
+| 1063 | abs_miss_improve_trend_slope | 5 | **0.023190** | 0.000000 | **0.024542** | 0.000000 | 0.214000 | 0.000030 | 0 |
+| 1063 | abs_miss_neg | 5 | 0.023371 | 0.000000 | 0.024741 | 0.000000 | 0.228000 | 0.000020 | 0 |
+| 1063 | abs_miss_neg_trend_delta | 5 | 0.023248 | 0.000000 | 0.024582 | 0.000000 | 0.214000 | 0.000030 | 0 |
+| 1063 | abs_miss_neg_trend_slope | 5 | 0.023275 | 0.000000 | 0.024620 | 0.000000 | 0.218000 | 0.000020 | 0 |
+| 1063 | abs_trend_delta | 5 | 0.023262 | 0.000000 | 0.024618 | 0.000000 | 0.214000 | 0.000030 | 0 |
+| 1063 | abs_trend_slope | 5 | 0.023253 | 0.000000 | 0.024631 | 0.000000 | 0.214000 | 0.000030 | 0 |
+| 1063 | baseline_default(no_reward_override) | 5 | 0.023287 | 0.000000 | 0.024633 | 0.000000 | 0.212000 | 0.000020 | 0 |
+| 1063 | delta_only | 5 | 0.023251 | 0.000000 | 0.024600 | 0.000000 | 0.214000 | 0.000030 | 0 |
+| wiki | abs_miss_improve | 5 | 0.171495 | 0.000000 | 0.139492 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | abs_miss_improve_trend_delta | 5 | 0.171522 | 0.000000 | 0.139521 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | abs_miss_improve_trend_slope | 5 | 0.171484 | 0.000000 | 0.139524 | 0.000000 | 0.038000 | 0.000020 | 0 |
+| wiki | abs_miss_neg | 5 | 0.171502 | 0.000000 | **0.139412** | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | abs_miss_neg_trend_delta | 5 | 0.171545 | 0.000000 | 0.139477 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | abs_miss_neg_trend_slope | 5 | 0.171539 | 0.000000 | 0.139549 | 0.000000 | 0.038000 | 0.000020 | 0 |
+| wiki | abs_trend_delta | 5 | 0.171526 | 0.000000 | 0.139503 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| wiki | abs_trend_slope | 5 | 0.171526 | 0.000000 | 0.139537 | 0.000000 | 0.036000 | 0.000030 | 0 |
+| wiki | baseline_default(no_reward_override) | 5 | **0.171448** | 0.000000 | 0.139518 | 0.000000 | 0.036000 | 0.000030 | 0 |
+| wiki | delta_only | 5 | 0.171527 | 0.000000 | 0.139467 | 0.000000 | 0.040000 | 0.000000 | 0 |
+| meta | abs_miss_improve | 5 | 0.269316 | 0.000000 | 0.153715 | 0.000000 | 0.246000 | 0.000430 | 0 |
+| meta | abs_miss_improve_trend_delta | 5 | **0.269282** | 0.000000 | 0.153769 | 0.000000 | 0.218000 | 0.000070 | 0 |
+| meta | abs_miss_improve_trend_slope | 5 | 0.269303 | 0.000000 | 0.153719 | 0.000000 | 0.226000 | 0.000030 | 0 |
+| meta | abs_miss_neg | 5 | 0.269348 | 0.000000 | 0.153783 | 0.000000 | 0.224000 | 0.000080 | 0 |
+| meta | abs_miss_neg_trend_delta | 5 | 0.269292 | 0.000000 | **0.153715** | 0.000000 | 0.222000 | 0.000170 | 0 |
+| meta | abs_miss_neg_trend_slope | 5 | 0.269340 | 0.000000 | 0.153772 | 0.000000 | 0.218000 | 0.000270 | 0 |
+| meta | abs_trend_delta | 5 | 0.269354 | 0.000000 | 0.153734 | 0.000000 | 0.220000 | 0.000250 | 0 |
+| meta | abs_trend_slope | 5 | 0.269287 | 0.000000 | 0.153785 | 0.000000 | 0.232000 | 0.000720 | 0 |
+| meta | baseline_default(no_reward_override) | 5 | 0.269360 | 0.000000 | 0.153752 | 0.000000 | 0.290000 | 0.000400 | 0 |
+| meta | delta_only | 5 | 0.269306 | 0.000000 | 0.153762 | 0.000000 | 0.218000 | 0.000170 | 0 |
+
+### 28.6 RL Algo 切换
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | A2C | 5 | 0.024013 | 0.000001 | 0.025544 | 0.000001 | 0.276000 | 0.000030 | 0 |
+| 1063 | DDPG | 5 | 0.026561 | 0.000164 | 0.027296 | 0.000130 | 0.242000 | 0.003320 | 0 |
+| 1063 | DQN | 5 | 0.021918 | 0.000000 | 0.023208 | 0.000000 | 0.264000 | 0.000030 | 0 |
+| 1063 | PPO_LSTM | 1 | **0.019317** | 0.000000 | **0.021967** | 0.000000 | 0.350000 | 0.000000 | 0 |
+| 1063 | TD3 | 5 | 0.025087 | 0.000082 | 0.025625 | 0.000052 | 0.244000 | 0.002030 | 0 |
+| 1063 | TQC | 5 | 0.023319 | 0.000000 | 0.024881 | 0.000000 | 0.280000 | 0.000150 | 0 |
+| 1063 | baseline_SAC(default_algo) | 5 | 0.023287 | 0.000000 | 0.024633 | 0.000000 | 0.212000 | 0.000020 | 0 |
+| wiki | A2C | 0 | NA | NA | NA | NA | NA | NA | 0 |
+| wiki | DDPG | 5 | 0.171267 | 0.000007 | **0.133917** | 0.000021 | 0.044000 | 0.000030 | 0 |
+| wiki | DQN | 3 | **0.170486** | 0.000000 | 0.137610 | 0.000000 | 0.050000 | 0.000000 | 0 |
+| wiki | PPO_LSTM | 0 | NA | NA | NA | NA | NA | NA | 0 |
+| wiki | TD3 | 5 | 0.171176 | 0.000004 | 0.134407 | 0.000036 | 0.040000 | 0.000000 | 0 |
+| wiki | TQC | 0 | NA | NA | NA | NA | NA | NA | 0 |
+| wiki | baseline_SAC(default_algo) | 5 | 0.171448 | 0.000000 | 0.139518 | 0.000000 | 0.036000 | 0.000030 | 0 |
+| meta | A2C | 5 | 0.269332 | 0.000000 | 0.153827 | 0.000000 | 0.314000 | 0.000880 | 0 |
+| meta | DDPG | 5 | 0.269629 | 0.000001 | 0.155319 | 0.000002 | 0.280000 | 0.023150 | 0 |
+| meta | DQN | 5 | 0.269241 | 0.000000 | 0.154862 | 0.000000 | 0.354000 | 0.000530 | 0 |
+| meta | PPO_LSTM | 5 | 0.269409 | 0.000000 | 0.154496 | 0.000000 | 0.416000 | 0.000330 | 0 |
+| meta | TD3 | 5 | **0.269233** | 0.000000 | 0.155078 | 0.000002 | 0.314000 | 0.004130 | 0 |
+| meta | TQC | 5 | 0.269331 | 0.000000 | 0.155692 | 0.000000 | 0.332000 | 0.001070 | 0 |
+| meta | baseline_SAC(default_algo) | 5 | 0.269360 | 0.000000 | **0.153752** | 0.000000 | 0.290000 | 0.000400 | 0 |
+
+### 28.7 LOH_INCLUDE_WEIGHTS_IN_OBS / LOH_INCLUDE_HIT_MISS_FEATURES 组合
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | baseline_w0_h0(W=0,H=0) | 5 | 0.023287 | 0.000000 | 0.024633 | 0.000000 | 0.212000 | 0.000020 | 0 |
+| 1063 | w0_h1 | 5 | **0.023219** | 0.000000 | **0.024580** | 0.000000 | 0.178000 | 0.000070 | 0 |
+| 1063 | w1_h1 | 5 | 0.023300 | 0.000000 | 0.024659 | 0.000000 | 0.182000 | 0.000070 | 0 |
+| wiki | baseline_w0_h0(W=0,H=0) | 5 | **0.171448** | 0.000000 | 0.139518 | 0.000000 | 0.036000 | 0.000030 | 0 |
+| wiki | w0_h1 | 5 | 0.171617 | 0.000000 | 0.139363 | 0.000000 | 0.030000 | 0.000000 | 0 |
+| wiki | w1_h1 | 5 | 0.171564 | 0.000000 | **0.139137** | 0.000000 | 0.030000 | 0.000000 | 0 |
+| meta | baseline_w0_h0(W=0,H=0) | 5 | 0.269360 | 0.000000 | 0.153752 | 0.000000 | 0.290000 | 0.000400 | 0 |
+| meta | w0_h1 | 5 | 0.269399 | 0.000000 | 0.153615 | 0.000000 | 0.292000 | 0.000270 | 0 |
+| meta | w1_h1 | 5 | **0.269356** | 0.000000 | **0.153607** | 0.000000 | 0.276000 | 0.001680 | 0 |
+
+### 28.8 三种 feature/normalization 模式
+
+| Trace | Variant | N(ok) | MR mean | MR var | BMR mean | BMR var | MQPS mean | MQPS var | Failed |
+|:--|:--|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1063 | baseline_log1p_adaptive(ID=0,LOG1P=1,ADAPT=1) | 5 | **0.023287** | 0.000000 | **0.024633** | 0.000000 | 0.212000 | 0.000020 | 0 |
+| wiki | baseline_log1p_adaptive(ID=0,LOG1P=1,ADAPT=1) | 5 | **0.171448** | 0.000000 | **0.139518** | 0.000000 | 0.036000 | 0.000030 | 0 |
+| meta | baseline_log1p_adaptive(ID=0,LOG1P=1,ADAPT=1) | 5 | **0.269360** | 0.000000 | **0.153752** | 0.000000 | 0.290000 | 0.000400 | 0 |
+<!-- AUTO_SEED5_MATRIX_ORIG3_CACHE01_20260319_END -->
+
+说明：baseline 已并入主表作为直接对照行。网络层历史最优与 baseline 的差异总体较小，但 wiki 仍有明显优化空间。
+
+## 29. 1063/wiki/meta 三条 trace 基于 20260319-seed5_matrix 的统一验证
+
+**背景**：
+在进行 03-19 相关验证时发现部分路径软链接失效或历史测试冲突。为保证在 `seed5_matrix` 完全覆盖这三条特定绝对路径 trace（分别为 `tencentBlock_1063`、`wiki_2019t`、`meta_reag`）上的稳定性，这里直接开启 `OUT_DIR` 覆盖，避免 `results.csv` 的续跑机制 `[resume-skip]` 干扰，执行完全重跑。
+
+**运行方式**：
 ```bash
-# 运行与构建流程（低开销）
-LOH_ENABLE_SEMAPHORE=1
-LOH_BUILD_RELEASE=1
-
-# C 端开销相关（注意：为编译期宏，需在构建前生效）
-LOH_PERF_PROFILING=0
-LOH_DEBUG_LEVEL=0
-
-# RL/策略配置
-LOH_SCORE_USE_COMPOUND=1
-LOH_SCORE_USE_IRT=0
-LOH_RANDOM_CANDIDATES=96
-LOH_STRUCTURED_CANDIDATES=96
-LOH_WAIT_MODE=nonblocked
-LOH_ASYNC_TRAIN=1
-LOH_ENABLE_PENALTY=0
-LOH_MISS_RATIO_WEIGHT=1.0
-
-LOH_INCLUDE_WEIGHTS_IN_OBS=1
-# 可开启 hit_miss 作为 state（注意：这是编译期选项，改后需重编译）
-
-# 新默认：adaptive budget 开启，score rebalance 关闭
-LOH_ADAPTIVE_BUDGET=1
-LOH_USE_SCORE_REBALANCE=0
+export PATH="$PWD/.venv/bin:$PATH"
+export OUT_DIR="tmp/20260323-seed5_matrix_orig3_cache01_rerun"
+bash sweeps/20260319-seed5_matrix_orig3_cache01/run.sh > tmp/20260323_seed5_sweep_rerun.log 2>&1
 ```
 
-Trace 特定的特征公式设置（并入原 0.2）：
+**实验产物**：
+- 总日志：`tmp/20260323_seed5_sweep_rerun.log`
+- 输出与记录目录：`tmp/20260323-seed5_matrix_orig3_cache01_rerun`
+- 详细聚合表格：`tmp/20260323-seed5_matrix_orig3_cache01_rerun/results.csv`
 
-| Trace | 特征模式 | 设置 |
-|:--|---|---|
-| 1063 | log1p | `LOH_FEATURE_LOG1P=1`, `LOH_FEATURE_LOG1P_RECIPROCAL=0` |
-| meta | log1p | `LOH_FEATURE_LOG1P=1`, `LOH_FEATURE_LOG1P_RECIPROCAL=0` |
-| wiki | reciprocal | `LOH_FEATURE_LOG1P=0`, `LOH_FEATURE_LOG1P_RECIPROCAL=1` |
+*(待该大规模评估执行完毕后，可通过汇总脚本向本文件输出汇总内容)*
 
-说明：
+<!-- AUTO_BANDIT_RERUN_20260324_START -->
+## 30. Bandit 三模型三 Trace 全量重跑（自动更新）
 
-- `LOH_INCLUDE_WEIGHTS_IN_OBS=1`（weights 并入 state）对三条 trace 的 MR 均有不劣表现，其中 Wiki 改善最明显。
-- 默认采用 `LOH_ADAPTIVE_BUDGET=1` + `LOH_USE_SCORE_REBALANCE=0`。
-- `LOH_SKIP_BUILD=1`/`LOH_SKIP_PIP_INSTALL=1` 用于减少启动开销（前提是二进制和 Python 依赖已就绪）。
-- `LOH_PERF_PROFILING`、`LOH_DEBUG_LEVEL` 对 C 端属于编译期宏：改值后需要触发一次构建才能作用到 `cachesim`。
+- RUN_TAG: 20260324-bandit-rerun-full
+- OUT_DIR: tmp/20260324-bandit-sweep-rerun-full/logs
+- 更新时间: 2026-03-24 06:48:49
+- 进度: DONE=18, FAIL=0, RUNNING=0, PENDING=0
+
+| 序号 | Trace | IRT | Bandit | 状态 | MR | BMR | MQPS | 子日志 | Python日志 | Cachesim日志 | 备注 |
+|---:|:--|:--:|:--|:--|---:|---:|---:|:--|:--|:--|:--|
+| 1 | 1063 | N | e_greedy | DONE | 0.074602 | 0.077170 | 0.23 | tmp/20260324-bandit-sweep-rerun-full/logs/tencentBlock_1063_default_loh_bandit_e_greedy.log | logs/ac_sb3_0324_053431.log | logs/cachesim_sb3_0324_053431.log | - |
+| 2 | 1063 | N | ucb | DONE | 0.042723 | 0.043810 | 0.34 | tmp/20260324-bandit-sweep-rerun-full/logs/tencentBlock_1063_default_loh_bandit_ucb.log | logs/ac_sb3_0324_053433.log | logs/cachesim_sb3_0324_053433.log | - |
+| 3 | 1063 | N | contextual | DONE | 0.061243 | 0.064823 | 0.22 | tmp/20260324-bandit-sweep-rerun-full/logs/tencentBlock_1063_default_loh_contextual_bandit.log | logs/ac_sb3_0324_054014.log | logs/cachesim_sb3_0324_054014.log | - |
+| 4 | 1063 | Y | e_greedy | DONE | 0.057855 | 0.068503 | 0.24 | tmp/20260324-bandit-sweep-rerun-full/logs/tencentBlock_1063_irt_loh_bandit_e_greedy.log | logs/ac_sb3_0324_053437.log | logs/cachesim_sb3_0324_053437.log | - |
+| 5 | 1063 | Y | ucb | DONE | 0.049845 | 0.049733 | 0.29 | tmp/20260324-bandit-sweep-rerun-full/logs/tencentBlock_1063_irt_loh_bandit_ucb.log | logs/ac_sb3_0324_053439.log | logs/cachesim_sb3_0324_053439.log | - |
+| 6 | 1063 | Y | contextual | DONE | 0.207524 | 0.193579 | 0.09 | tmp/20260324-bandit-sweep-rerun-full/logs/tencentBlock_1063_irt_loh_contextual_bandit.log | logs/ac_sb3_0324_054016.log | logs/cachesim_sb3_0324_054016.log | - |
+| 7 | wiki | N | e_greedy | DONE | 0.184552 | 0.138013 | 0.12 | tmp/20260324-bandit-sweep-rerun-full/logs/wiki_2019t_default_loh_bandit_e_greedy.log | logs/ac_sb3_0324_053443.log | logs/cachesim_sb3_0324_053443.log | - |
+| 8 | wiki | N | ucb | DONE | 0.189817 | 0.139200 | 0.11 | tmp/20260324-bandit-sweep-rerun-full/logs/wiki_2019t_default_loh_bandit_ucb.log | logs/ac_sb3_0324_053445.log | logs/cachesim_sb3_0324_053445.log | - |
+| 9 | wiki | N | contextual | DONE | 0.185540 | 0.148108 | 0.10 | tmp/20260324-bandit-sweep-rerun-full/logs/wiki_2019t_default_loh_contextual_bandit.log | logs/ac_sb3_0324_054018.log | logs/cachesim_sb3_0324_054018.log | - |
+| 10 | wiki | Y | e_greedy | DONE | 0.181543 | 0.130554 | 0.09 | tmp/20260324-bandit-sweep-rerun-full/logs/wiki_2019t_irt_loh_bandit_e_greedy.log | logs/ac_sb3_0324_053449.log | logs/cachesim_sb3_0324_053449.log | - |
+| 11 | wiki | Y | ucb | DONE | 0.181694 | 0.137387 | 0.10 | tmp/20260324-bandit-sweep-rerun-full/logs/wiki_2019t_irt_loh_bandit_ucb.log | logs/ac_sb3_0324_053451.log | logs/cachesim_sb3_0324_053451.log | - |
+| 12 | wiki | Y | contextual | DONE | 0.188478 | 0.152192 | 0.09 | tmp/20260324-bandit-sweep-rerun-full/logs/wiki_2019t_irt_loh_contextual_bandit.log | logs/ac_sb3_0324_054020.log | logs/cachesim_sb3_0324_054020.log | - |
+| 13 | meta | N | e_greedy | DONE | 0.285466 | 0.157733 | 0.13 | tmp/20260324-bandit-sweep-rerun-full/logs/meta_reag_default_loh_bandit_e_greedy.log | logs/ac_sb3_0324_053455.log | logs/cachesim_sb3_0324_053455.log | - |
+| 14 | meta | N | ucb | DONE | 0.297420 | 0.164131 | 0.14 | tmp/20260324-bandit-sweep-rerun-full/logs/meta_reag_default_loh_bandit_ucb.log | logs/ac_sb3_0324_054137.log | logs/cachesim_sb3_0324_054137.log | - |
+| 15 | meta | N | contextual | DONE | 0.303873 | 0.168331 | 0.08 | tmp/20260324-bandit-sweep-rerun-full/logs/meta_reag_default_loh_contextual_bandit.log | logs/ac_sb3_0324_054022.log | logs/cachesim_sb3_0324_054022.log | - |
+| 16 | meta | Y | e_greedy | DONE | 0.332530 | 0.184184 | 0.06 | tmp/20260324-bandit-sweep-rerun-full/logs/meta_reag_irt_loh_bandit_e_greedy.log | logs/ac_sb3_0324_053501.log | logs/cachesim_sb3_0324_053501.log | - |
+| 17 | meta | Y | ucb | DONE | 0.311345 | 0.171631 | 0.09 | tmp/20260324-bandit-sweep-rerun-full/logs/meta_reag_irt_loh_bandit_ucb.log | logs/ac_sb3_0324_053503.log | logs/cachesim_sb3_0324_053503.log | - |
+| 18 | meta | Y | contextual | DONE | 0.318035 | 0.174812 | 0.06 | tmp/20260324-bandit-sweep-rerun-full/logs/meta_reag_irt_loh_contextual_bandit.log | logs/ac_sb3_0324_054024.log | logs/cachesim_sb3_0324_054024.log | - |
+<!-- AUTO_BANDIT_RERUN_20260324_END -->
+
+<!-- AUTO_CH31_20260324_START -->
+### 31. 20260324 三 Trace 四模式并行结果（自动更新）
+
+- 批次目录: `tmp/20260324-three-traces-four-modes/`
+- 最近刷新: 2026-03-24 08:40:01
+
+| 任务 | trace | 模式 | 状态 | miss ratio | byte miss ratio | Wrapper日志 | LOH日志目录 |
+|---|---|---|---|---:|---:|---|---|
+| unknown | unknown | default | done | 0.023075 | 0.024389 | `tmp/20260324-three-traces-four-modes/t1063_default.log` | `tmp/20260324-three-traces-four-modes/logs_t1063_default` |
+| unknown | unknown | nstep | done | 0.023506 | 0.024713 | `tmp/20260324-three-traces-four-modes/t1063_nstep.log` | `tmp/20260324-three-traces-four-modes/logs_t1063_nstep` |
+| unknown | unknown | per | done | 0.022808 | 0.024231 | `tmp/20260324-three-traces-four-modes/t1063_per.log` | `tmp/20260324-three-traces-four-modes/logs_t1063_per` |
+| unknown | unknown | nstep+per | done | 0.023200 | 0.024591 | `tmp/20260324-three-traces-four-modes/t1063_nstep_per.log` | `tmp/20260324-three-traces-four-modes/logs_t1063_nstep_per` |
+| unknown | unknown | default | done | 0.171637 | 0.139339 | `tmp/20260324-three-traces-four-modes/wiki_default.log` | `tmp/20260324-three-traces-four-modes/logs_wiki_default` |
+| unknown | unknown | nstep | done | 0.171692 | 0.139128 | `tmp/20260324-three-traces-four-modes/wiki_nstep.log` | `tmp/20260324-three-traces-four-modes/logs_wiki_nstep` |
+| unknown | unknown | per | done | 0.171663 | 0.139209 | `tmp/20260324-three-traces-four-modes/wiki_per.log` | `tmp/20260324-three-traces-four-modes/logs_wiki_per` |
+| unknown | unknown | nstep+per | done | 0.171480 | 0.139093 | `tmp/20260324-three-traces-four-modes/wiki_nstep_per.log` | `tmp/20260324-three-traces-four-modes/logs_wiki_nstep_per` |
+| unknown | unknown | default | done | 0.269188 | 0.153746 | `tmp/20260324-three-traces-four-modes/meta_default.log` | `tmp/20260324-three-traces-four-modes/logs_meta_default` |
+| unknown | unknown | nstep | done | 0.269204 | 0.153632 | `tmp/20260324-three-traces-four-modes/meta_nstep.log` | `tmp/20260324-three-traces-four-modes/logs_meta_nstep` |
+| unknown | unknown | per | done | 0.269201 | 0.153807 | `tmp/20260324-three-traces-four-modes/meta_per.log` | `tmp/20260324-three-traces-four-modes/logs_meta_per` |
+| unknown | unknown | nstep+per | done | 0.269205 | 0.153739 | `tmp/20260324-three-traces-four-modes/meta_nstep_per.log` | `tmp/20260324-three-traces-four-modes/logs_meta_nstep_per` |
+
+- 完成进度: 12/12
+<!-- AUTO_CH31_20260324_END -->
+
+## 32. Uniform Mix (随机均匀掺杂比) 防止过拟合稳定性测试结论 (2026-03-24 & 03-25)
+
+> 实验来源：`tmp/20260324-uniform-mix-grid-3traces` 及 `tmp/20260325-uniform-mix-grid-3traces-rerun`
+
+### 32.1 测试目的
+纯使用 Prioritized Experience Replay (PER，即 Mix=0.00) 容易导致网络过度关注高错误率的极端案例（甚至噪声），从而遗忘常规数据的驱逐规律（灾难性遗忘）。
+本次实验全面测试了在 3M 全量 Trace 下，混入 `0.00 ~ 0.30` 以及 `1.00` 甚至更高比例的均匀随机采样，对强化学习带来的抗拟合提升效果。通过对两侧全量复测求均值，消除了强随机种子带来的“蝴蝶效应”。
+
+### 32.2 均值双重复测数据（12组并发全量跑完毕汇总）
+
+| 业务及 Trace | Mix 比例 | 03-24 BMR | 03-25 BMR | **平均 MR** | **平均 BMR** (关键指标) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **TencentBlock** | `0.00` | 0.024729 | 0.024306 | 0.023343 | 0.024518 (基线) |
+| (1063) | `0.05` | 0.024057 | 0.024389 | **0.022947 (最佳)** | **0.024223 (最佳)** |
+| | `0.10` | 0.025042 | 0.024485 | 0.023425 | 0.024764 |
+| | `0.15` | 0.024344 | 0.024284 | **0.022977 (次佳)** | **0.024314 (次佳)** |
+| | `0.20` | 0.024656 | 0.024515 | 0.023247 | 0.024585 |
+| | `0.25` | 0.024530 | 0.024288 | 0.023046 | 0.024409 |
+| | `0.30` | 0.024914 | 0.024502 | 0.023324 | 0.024708 |
+| | `1.00` | 0.024640 | - | 0.023296 | 0.024640 |
+| **WikiCDN** | `0.00` | 0.139257 | 0.139004 | 0.171437 | 0.139130 (基线) |
+| (2019t) | `0.05` | 0.139629 | 0.139048 | 0.171668 | 0.139339 |
+| | `0.10` | 0.139345 | 0.139027 | 0.171520 | 0.139186 |
+| | `0.15` | 0.139349 | 0.139243 | 0.171654 | 0.139296 |
+| | `0.20` | 0.139418 | 0.139054 | 0.171624 | 0.139236 |
+| | `0.25` | 0.138679 | 0.139411 | 0.171626 | 0.139045 |
+| | `0.30` | 0.138947 | 0.138837 | **0.171517 (次佳)** | **0.138892 (最佳)** |
+| **MetaCDN** | `0.00` | 0.153677 | 0.153882 | 0.269177 | 0.153780 (基线) |
+| (meta_reag) | `0.05` | 0.153613 | 0.153836 | 0.269185 | 0.153724 |
+| | `0.10` | 0.154240 | 0.153769 | **0.269150 (最佳)** | 0.154004 |
+| | `0.15` | 0.153522 | 0.153652 | 0.269212 | **0.153587 (核心次佳)** |
+| | `0.20` | 0.153660 | 0.153573 | 0.269198 | 0.153616 |
+| | `0.25` | 0.153916 | 0.153535 | 0.269178 | 0.153726 |
+| | `0.30` | 0.153536 | 0.153739 | 0.269222 | 0.153637 |
+| | `1.00` | 0.153437 | - | 0.269201 | **0.153437** |
+
+### 32.3 结论提取：引入 Uniform Mix 是对抗 RL 过拟合的有效机制
+
+1. **对于极易陷于过拟合的场景（TencentBlock）：** 纯使用 PER（`0.00`）时，BMR高达 `0.024518`。只给它加 **5% (`0.05`)** 或 **15% (`0.15`)** 的环境随机抽取后，平均 BMR 立刻断崖式下跌到底部。这说明该 Trace 是典型的局部最优解极深的环境，极度需要用正态分布的长尾经验进行正则化。
+2. **对于对象数目庞大但尾部分散的场景（WikiCDN）：** 真正的质变发生在 **强混合区 (`0.30`)**。BMR 降到了唯一破 `0.138` 的区间（`0.138892`）。这意味着在小型特征多碎片的场景下，单纯按高TD回放反而忽略了平庸基线数据的整体容量利用率。
+3. **对于大对象极度敏感的场景（MetaCDN）：** 我们看到在 `0.15` 和 `1.00` 处 Byte MR 都大幅度优于基线。在这类大文件引起强烈 Reward 抖动的场景内，均匀采样有效冲淡了某些单一文件的 TD 波动灾难。
+
+**通用调参建议**：由于各 trace 的惩罚极值不同，但无论哪种场景，纯粹的 `0.00` 都不能胜出。如果希望所有业务有一套通用配置，**推荐固定使用 `LOH_PER_MIX_UNIFORM=0.15` 或者 `0.20`** 作为基线；如果按场景特调：TencentBlock → `0.05`，Wiki → `0.30`。

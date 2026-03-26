@@ -786,6 +786,11 @@ typedef struct {
   int mlp_hidden;     // 隐层大小（<=LOH_MLP_MAX_HIDDEN）
   int mlp_param_len;  // mlp_params 的有效长度
   double mlp_params[LOH_MLP_MAX_PARAMS];
+
+  // ===== 分簇动作（Segmented Actions）参数 =====
+  int segment_mode;
+  int num_segments;
+  double segmented_weights[8][WEIGHT_DIM];
 } shm_data_t;
 
 #define FREQ_MAX 255         // 单独跟踪的最大频率
@@ -919,6 +924,12 @@ typedef struct {
   int mlp_hidden;
   int mlp_param_len;
   double mlp_params[LOH_MLP_MAX_PARAMS];
+
+  // ===== 分簇动作（Segmented Actions）参数 =====
+  int segment_mode;
+  int num_segments;
+  double segmented_weights[8][WEIGHT_DIM];
+
   cache_obj_t *candidates[MAX_CANDIDATES];
   int n_candidates;
 
@@ -2979,6 +2990,11 @@ static void sync_with_actor_critic_fast(LOH_params_t *params) {
   // 读取上一轮 Python 写回的权重（无锁，直接内存读取）
   if (__atomic_load_n(&m->weights_updated, __ATOMIC_ACQUIRE)) {
     memcpy(params->weights, m->weights, sizeof(double) * WEIGHT_DIM);
+    params->segment_mode = m->segment_mode;
+    params->num_segments = m->num_segments;
+    if (params->segment_mode > 0 && params->num_segments > 0) {
+      memcpy(params->segmented_weights, m->segmented_weights, sizeof(double) * 8 * WEIGHT_DIM);
+    }
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         m->score_model == LOH_SCORE_MODEL_MLP) {
       int plen = m->mlp_param_len;
@@ -3109,6 +3125,11 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   // 会在这次 sync 的读取中被发现并应用
   if (!loh_wait_mode_blocked && shm_data.weights_updated) {
     memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
+    params->segment_mode = shm_data.segment_mode;
+    params->num_segments = shm_data.num_segments;
+    if (params->segment_mode > 0 && params->num_segments > 0) {
+      memcpy(params->segmented_weights, shm_data.segmented_weights, sizeof(double) * 8 * WEIGHT_DIM);
+    }
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         shm_data.score_model == LOH_SCORE_MODEL_MLP) {
       int plen = shm_data.mlp_param_len;
@@ -3668,6 +3689,11 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
     lock_shared_memory(params);
     memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
+    params->segment_mode = shm_data.segment_mode;
+    params->num_segments = shm_data.num_segments;
+    if (params->segment_mode > 0 && params->num_segments > 0) {
+      memcpy(params->segmented_weights, shm_data.segmented_weights, sizeof(double) * 8 * WEIGHT_DIM);
+    }
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         shm_data.score_model == LOH_SCORE_MODEL_MLP) {
       int plen = shm_data.mlp_param_len;
@@ -6170,6 +6196,7 @@ random_sampling_section:
 
   // 将权重提升到寄存器，避免在循环中反复读取
   const double *w = params->weights;
+  const double *base_w = params->weights; // 保留基础引用
   double sign[WEIGHT_DIM];
   for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
 
@@ -6223,6 +6250,17 @@ random_sampling_section:
       cache_obj_t *candidate = params->candidates[i];
       double rec, freq, sz, score;
       const double eps = 1e-12;
+
+      if (params->segment_mode > 0 && params->num_segments > 1) {
+        // 简易路由规则：以文件大小进行二分发 (0: small, 1: large)
+        int seg_idx = 0;
+        if (candidate->obj_size >= 1048576) { // >= 1MB
+           seg_idx = 1;
+        }
+        if (seg_idx >= params->num_segments) seg_idx = params->num_segments - 1;
+        w = params->segmented_weights[seg_idx];
+        for (int k = 0; k < WEIGHT_DIM; ++k) ws[k] = w[k] * sign[k];
+      }
 
       if (loh_feature_unified_formula) {
         // 统一公式：frequency 用 log-ratio，其他维度用其互补（均在 [0,1]）
@@ -6531,6 +6569,17 @@ random_sampling_section:
           } else {
             terms[6] = freq * rec * size;
           }
+        }
+
+        if (params->segment_mode > 0 && params->num_segments > 1) {
+            int seg_idx = 0;
+            if (candidate->obj_size >= 1048576) {
+               seg_idx = 1;
+            }
+            if (seg_idx >= params->num_segments) seg_idx = params->num_segments - 1;
+            w = params->segmented_weights[seg_idx];
+        } else {
+            w = base_w;
         }
 
         int used_dim = loh_score_compound_v2 ? WEIGHT_DIM : 6;
