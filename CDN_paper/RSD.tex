@@ -1,0 +1,571 @@
+\documentclass[10pt,journal]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+%\usepackage{algorithmic}
+\usepackage{array}
+%\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{textcomp}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{verbatim}
+\hyphenation{op-tical net-works semi-conduc-tor IEEE-Xplore}
+%\usepackage{balance}
+\usepackage[table,dvipsnames]{xcolor}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+%\usepackage{ntheorem}
+\usepackage{amsthm}%
+\usepackage{enumitem}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{pifont}
+\usepackage[ruled,linesnumbered]{algorithm2e}
+\usepackage{threeparttable}
+\usepackage{multirow}
+\usepackage{booktabs}  % 更美观的三线表，如无需可去掉
+\usepackage[margin=2cm]{geometry} % 页面边距可自行调整
+%\usepackage{flushend}
+\usepackage[normalem]{ulem}
+\usepackage[hang,flushmargin]{footmisc}
+\usepackage{makecell}
+\usepackage{stackengine}
+\usepackage{microtype}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc}
+\newcommand{\halfcheck}{
+	 \raisebox{-1ex}{ % 调整整体高度
+	\begin{tikzpicture}
+		\node[baseline] at (0,0) {\ding{51}}; % 对勾 ✔
+		\node[baseline] at (0,0) {\ding{55}}; % 错号 ✘
+	\end{tikzpicture}
+}
+}
+
+%\usepackage[numbers,sort&compress]{natbib}
+%\newtheorem{definition}{\bfseries\emph\bf{Definition}}
+%\newtheorem{theorem}{\bfseries \emph \bf {Theorem}}
+\newtheoremstyle{slantedlemma}% name
+	{2pt}% space above
+	{2pt}% space below
+	{}% body font, 斜体
+	{}% indent amount
+	{\bfseries}% theorem head font, 粗体
+	{.}% punctuation after theorem head
+	{0.5em}% space after theorem head
+	{\hspace{-0.5em}\thmname{ #1}\hspace{0.5em}\textit{\thmnumber{#2}}\textit{\thmnote{ (#3)}}}% theorem head spec (can be left empty, meaning ‘normal’)
+\theoremstyle{slantedlemma}
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{\emph{Lemma}}
+%\newtheorem{lemma}{\bfseries \emph \bf {Lemma}}
+%\newtheorem{proof}{\bfseries \emph \bf {Proof}}
+\makeatletter
+\renewenvironment{proof}[1][\proofname]{\par
+	\pushQED{\qed}%
+	\normalfont\topsep3\p@\@plus0\p@\relax
+	\trivlist
+	\item[\hskip\labelsep\itshape #1\@addpunct{:}]\ignorespaces
+	}{%
+	\popQED\endtrivlist\@endpefalse
+	}
+\makeatother
+\usepackage{amssymb}
+\usepackage{subfigure}
+\setlength{\subfigcapmargin}{0pt}
+%\renewcommand{\thefootnote}{}
+\renewcommand\qedsymbol{$\square$}%将proof的结束符号方框置于正右边而非下行最右边,\blacksquare是变成黑色实体方框
+%\pdfoptionpdfminorversion = 7	%  7表示你的PDF版本
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+	T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\hyphenpenalty=6000
+\tolerance=10000
+
+\newcommand{\Jiayu}[1]{{\color{red}[Jiayu: #1]}}
+\newcommand{\JiayuRevised}[1]{{\color{red}#1}}
+
+\newcommand{\Kunpeng}[1]{{\color{blue}[Kunpeng: #1]}}
+\newcommand{\KunpengRevised}[1]{{\color{blue}#1}}
+
+\setlength{\textfloatsep}{0.3\baselineskip}
+\setlength{\intextsep}{0.4\baselineskip}
+\graphicspath{{figures/}{photos/}}
+
+
+\begin{document}
+%*
+\title{Towards Robust Cache Hits with Scalability via a Feature-Expressive Middle Layer}
+\author{Kunpeng Ding,~\IEEEmembership{Graduate Student Member, IEEE}, \\Jiangping Han,~\IEEEmembership{Member, IEEE}, Kaiping Xue,~\IEEEmembership{Senior Member, IEEE}
+
+\thanks{K. Ding, K. Xue and J. Han are with the School of Cyber Science and Technology, University of Science and Technology of China, Hefei, Anhui 230027, China. }
+\thanks{Corresponding Author: K. Xue (kpxue@ustc.edu.cn)}}
+
+\maketitle
+
+\begin{abstract}
+Caches play a critical role in network and computer systems for reducing request latency and source traffic. Various cache eviction algorithms have been developed to elevate cache hits. Heuristics-based schemes are lightweight but inflexible, asynchronous-learning-based schemes require high resources support and infer slowly, and synchronous-learning-based schemes sacrifice performance for in-time inference.
+To bridge the support of scalability (fast decision in high concurrent request) and robust high cache hits performance across distinguished workload, we introduce a feature-expressive middle layer between cache eviction decision and model inference. It updates intermittently from the model but serves for each eviction decision, thus scalable and deployable. For robustness, it is designed as the combination of weighted features selected meticulously to generalize the expression of various workload. We use the covariance matrix adaptation evolution strategy (CMA-ES) to learn the optimal weights within current workload, which can learn the second-order interactions between features and converge rapidly.
+We evaluate our scheme in a testbed using 4855 traces. The results show it achieves the lowest cache miss ratio robustly, and are similar to heuristic algorithms in terms of execution speed and overhead.
+
+\end{abstract}
+
+\begin{IEEEkeywords}
+	Cache eviction policy, robustness, scalability, deployability, middle layer, evolution strategy.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\IEEEPARstart{L}{ocated} near users or applications, caches serve a great proportion of requests due to pervasive skewed distribution of content though limited capacity.
+Caches have been deployed widely in network and computer systems, significantly improve user experience and lessen the operating expenditures in today's large-scale, geographically distributed cloud services.
+For example, content delivery networks (CDNs), a distributed system close to users, significantly reduce network delays and maintain user retention compared to traditional single-origin server models \cite{sreepriyankauppuContent2025}.
+
+The effectiveness of a caching system heavily relies on its eviction algorithm to minimize the miss ratio.
+Traditional heuristic-based algorithms [cite LRU LFU LRUK LIRS ARC LRFU LHD TinyLFU SIEVE S3-FIFO] are lightweight and fast, but they are highly environment-specific and often fail when workload patterns shift. For example, LRU strictly evicts the least recent used object, which degrades performance when recent objects are not reused. LFU prioritizes frequently requested content, rendering it susceptible to cache pollution when once-popular objects lapse into long periods of inactivity.
+To address these adaptability issues, learning-based schemes have been proposed, but they introduce a harsh tradeoff between model capability and inference latency.
+Complex model-based approaches [cite Raven Parrot LRU-BaSE] offer strong fitting capabilities but suffer from high computational overhead and slow inference. For example, Raven's density estimation network and Parrot's transformers require substantial training time and incur unacceptable inference delays. Furthermore, their reliance on offline training makes them vulnerable to out-of-distribution (OOD) shifts.
+On the other hand, lightweight learning models [cite HALP 3LCACHE CACHEUS] achieve in-time inference by sacrificing expressive power. Algorithms like HALP (using MLPs for pairwise comparison) and 3LCACHE (using decision trees to predict reuse distance) possess weak fitting abilities, which ultimately compromises the accuracy of their eviction targets.
+
+Realistic production cache environments demand scalable cache algorithm that deliver robust hit ratios while sustaining highly concurrent requests.
+First, production caches tend to face high concurrent requests [shown in motivation]. If an eviction decision takes longer than the request arrival interval, the resulting queuing delay negates the latency benefits of caching altogether. Second, Furthermore, production workloads are highly diverse and complicated [shown in motivation]. neither static heuristics nor simple machine learning models can consistently adapt to such dynamics.
+This presents a critical dilemma: Can we leverage the high accuracy of complex, slow models while maintaining the ultra-low latency required for real-time eviction? Our insight stems from identifying the bottleneck in existing learning-based caches: the tight, synchronous coupling between model inference and eviction decisions. Because the model directly dictates the eviction victim, decision latency is strictly bounded by inference time.
+Instead, propose introducing a "middle layer" to decouple the two. In this architecture, a complex background model periodically updates the middle layer, which in turn asynchronously guides the real-time cache eviction decisions.
+
+The design of the middle layer is the most critical. Serving as the bridge between the background model's inference and the real-time cache decision, it must satisfy three essential requirements:
+\begin{itemize}
+    \item Simplicity: It must incur minimal computational overhead to ensure ultra-fast, real-time eviction decisions while remaining easily optimizable by background learning models.
+    \item Universality: It must be expressive enough to capture and represent a wide variety of trace patterns and workload dynamics.
+    \item Stability: It must remain robust and effective over a temporal window, resisting the noise and randomness of transient requests.
+\end{itemize}
+
+To meet these criteria, we formalize the middle layer as a parametrized scoring formula driven by a concise set of representative features.
+First, the formula relies exclusively on basic multiplications and additions, guaranteeing fast execution (Simplicity).
+Second,
+by assigning adjustable parameters (weights) to distinct features, the formula acts as a flexible combination that can express a vast spectrum of workload preferences (Universality).
+Third, rather than reacting to the stochasticity of individual requests, the formula captures the macroscopic patterns of the current workload, allowing it to maintain high performance over extended temporal windows (Stability).
+
+Building around this middle layer, we design two complementary components: the decision layer and the model layer.
+The decision layer must be equally lightweight to preserve the low-latency advantage of the scoring formula.
+To achieve this, we introduce an efficient candidate selection mechanism, eliminating the need to score all cached objects during an eviction.
+Meanwhile, the model layer operates asynchronously. Benefiting from the middle layer's robust design, our architecture is remarkably model-agnostic.
+To demonstrate this flexibility, we implement and evaluate the model layer using both a lightweight statistical model (Covariance Matrix Adaptation Evolution Strategy, CMA-ES) and a highly complex learning model (Deep Reinforcement Learning, DRL).
+
+Therefore, we propose a novel, scalable cache eviction framework that successfully decouples heavy model inference from real-time decision-making.
+Driven by a tripartite architecture, the asynchronous model layer periodically learns current workload dynamics to update the middle layer's feature weights.
+Synchronously, the decision layer leverages this parameterized formula to rapidly evaluate a subset of candidates and execute cache replacements.
+This framework gracefully bridges the gap between the accuracy of complex machine learning and the microsecond-level constraints of production systems.
+
+Our contributions can be summarized as follows:
+\begin{itemize}
+	\item \textbf{A Novel Decoupled Caching Paradigm:} We propose a scalable framework that resolves the fundamental conflict between model capability and decision latency. By decoupling slow model inference from the real-time execution path, our architecture preserves the high learning accuracy while sustaining the low latency required by highly concurrent requests.
+    \item \textbf{A Universal and Model-Agnostic Bridge:} We design a lightweight, parameterized scoring formula combined with an efficient candidate selection process. This design is highly expressive for modeling diverse workloads while remaining hardware-friendly. Furthermore, we demonstrate its model-agnostic nature by seamlessly integrating both CMA-ES and DRL without modifying the critical data path.
+    \item \textbf{Comprehensive Empirical Validation:} We extensively evaluate our framework on a testbed using 4,855 real-world traces. The results demonstrate that our approach consistently achieves state-of-the-art cache miss ratios, while maintaining execution speeds and CPU overheads strictly comparable to static heuristic algorithms.
+\end{itemize}
+
+The rest of this paper is organized as follows. Section \ref{sec: motivation} presents the motivation. Section \ref{sec: related work} reviews related work. Section \ref{sec: scheme} details our proposed scheme. Section \ref{sec: performance} presents the experimental evaluation, and Section \ref{sec: conclusion} concludes the paper.
+
+\section{Background and Motivation}\label{sec: motivation}
+% ==========================================
+% 请确保导言区包含以下宏包：
+% \usepackage{graphicx}
+% \usepackage{subfigure} % 对应你的画图习惯
+% ==========================================
+
+
+The fundamental goal of our decoupled architecture is to resolve the inherent conflict between model capability and decision latency in modern caching systems. In this section, we motivate our design by examining the stringent latency constraints of highly concurrent production environments and the multidimensional complexity of real-world workloads.
+
+\subsection{The Latency-Accuracy Dilemma in High-Concurrency Caches}
+
+Realistic production cache environments demand algorithms that deliver robust hit ratios while sustaining highly concurrent requests. In modern hyperscale infrastructures, a single cache node routinely processes millions of queries per second (QPS) with strict sub-millisecond service level agreements (SLAs).
+
+Under such immense throughput, the latency of the eviction decision becomes a critical bottleneck. If a complex learning-based algorithm takes longer to infer an eviction candidate than the inter-arrival time of requests, the system transitions into a congested state. We can formulate the expected content retrieval latency $E[T]$ using basic queuing theory. Let $\lambda$ be the request arrival rate, $h$ be the cache hit ratio, $T_{backend}$ be the backend fetch penalty, and $T_{dec}$ be the inference/decision latency of the eviction algorithm. The total retrieval latency is heavily influenced by the queuing delay $T_{queue}$:
+
+\begin{equation}
+E[T] = T_{queue} + T_{dec} + (1 - h) \times T_{backend}
+\label{eq:latency}
+\end{equation}
+
+As $T_{dec}$ increases (due to heavy model inference), the service rate $\mu = 1 / T_{dec}$ drops. When the arrival rate $\lambda$ approaches $\mu$, the queuing delay $T_{queue}$ grows exponentially, offsetting the latency reduction advantage gained by any marginal improvement in the hit ratio $h$. This creates a critical dilemma: we desire the high hit ratios provided by complex machine learning models, but their synchronous inference latency is mathematically prohibitive under high concurrency. This necessitates a paradigm shift to decouple heavy model updates from the critical path of real-time eviction.
+
+\subsection{The Heterogeneity and Non-stationarity of Production Workloads}
+
+Beyond concurrency challenges, the workload faced by production cache systems is notoriously diverse and complicated. Static heuristic algorithms or simple machine learning models, which implicitly assume specific, stable traffic patterns, consistently fail to adapt to such dynamics. To understand why a universal and highly expressive eviction approach is required, we contrast real production traces (e.g., 1063, wiki\_2019t, meta\_reag) with synthetic benchmarks (e.g., lrutest, lfutest, sizetest) across four critical dimensions.
+
+\textbf{The Complexity of Reuse and Temporal Locality:}
+While traditional algorithms like LRU excel when temporal locality is strictly defined by short-term reuse, production traces defy such simplicity (Fig.~\ref{fig:reuse}). In our virtual time CDF analysis, a synthetic pure-recency trace (lrutest) exhibits a nearly vertical line, indicating highly predictable and immediate re-accesses. Conversely, production traces present sub-linear growth curves spanning multiple orders of magnitude, yet their specific behaviors diverge significantly from one another. The 1063 trace displays a long-tail distribution punctuated by bursty step-increases, reflecting periodic batch accesses. In contrast, the wiki\_2019t trace exhibits an extremely smooth and steady accumulation across its tail. Meanwhile, the meta\_reag trace shows a sharp initial vertical rise denoting intense immediate reuse, which abruptly transitions into an extended, deeply polarized long-tail. This visual disparity proves that real workloads contain a complex mixture of short-term bursts and extreme long-tail periodic returns, rendering pure recency metrics fundamentally insufficient.
+
+% --- Figure 2: Reuse (2x2 Matrix) ---
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[lrutest (Synthetic Base)]{
+			\label{fig:reuse_a}
+			\includegraphics[width=0.94\linewidth]{lrutest_10m_reuse_vt.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[1063]{
+			\label{fig:reuse_b}
+			\includegraphics[width=0.94\linewidth]{1063_reuse_vt.png}
+		}
+	\end{minipage}
+
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[wiki\_2019t]{
+			\label{fig:reuse_c}
+			\includegraphics[width=0.94\linewidth]{wiki_2019t_reuse_vt.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[meta\_reag]{
+			\label{fig:reuse_d}
+			\includegraphics[width=0.94\linewidth]{meta_reag_reuse_vt.png}
+		}
+	\end{minipage}
+	\caption{CDF of object reuse.}
+	\label{fig:reuse}
+\end{figure}
+
+\textbf{The Heterogeneity of Frequency Distributions:}
+Standard LFU approaches assume a smooth, predictable Zipfian popularity distribution (Fig.~\ref{fig:frequency}). Visually, a synthetic frequency trace (lfutest) plots as a perfect straight line on a log-log rank-frequency graph. However, the allocation of request frequencies in reality is far more convoluted. For instance, the 1063 trace exhibits a ``stepped head'' (a large cluster of objects sharing similar high frequencies), and the wiki\_2019t trace presents a standard yet distinct Zipfian skew. Meanwhile, the meta\_reag trace displays extreme head concentration followed by an abrupt, steep tail. These heterogeneous popularity skews severely degrade the performance of rigid frequency-based heuristics.
+
+% --- Figure 3: Frequency (2x2 Matrix) ---
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[lfutest (Synthetic Base)]{
+			\label{fig:freq_a}
+			\includegraphics[width=0.94\linewidth]{lfutest_10m_pop_rank.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[1063]{
+			\label{fig:freq_b}
+			\includegraphics[width=0.94\linewidth]{1063_pop_rank.png}
+		}
+	\end{minipage}
+
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[wiki\_2019t]{
+			\label{fig:freq_c}
+			\includegraphics[width=0.94\linewidth]{wiki_2019t_pop_rank.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[meta\_reag]{
+			\label{fig:freq_d}
+			\includegraphics[width=0.94\linewidth]{meta_reag_pop_rank.png}
+		}
+	\end{minipage}
+	\caption{Rank-frequency (Zipfian) distribution.}
+	\label{fig:frequency}
+\end{figure}
+
+\textbf{The Cross-Magnitude Variance of Object Sizes:}
+Size-aware caching is crucial, yet synthetic models (sizetest) often simplify object sizes into discrete, rigid tiers, appearing as stark step functions in CDF plots (Fig.~\ref{fig:size}). In stark contrast, real workloads demonstrate a continuous and heavy-tailed variance in object footprints, with their actual size spans diverging drastically across different environments. For instance, the meta\_reag trace is heavily concentrated within a relatively narrow span of small object sizes (typical of key-value stores from bytes to kilobytes). On the other hand, traces like wiki\_2019t and 1063 stretch across a massive continuum—spanning smoothly across several orders of magnitude up to large media objects or block volumes (gigabytes). This profound cross-magnitude variance, alongside the distinct span differences among production environments, proves that rigid size-tiering algorithms cannot gracefully accommodate realistic, highly skewed storage distributions.
+
+% --- Figure 4: Size (2x2 Matrix) ---
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[sizetest (Synthetic Base)]{
+			\label{fig:size_a}
+			\includegraphics[width=0.94\linewidth]{sizetest_10m_size.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[1063]{
+			\label{fig:size_b}
+			\includegraphics[width=0.94\linewidth]{1063_size.png}
+		}
+	\end{minipage}
+
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[wiki\_2019t]{
+			\label{fig:size_c}
+			\includegraphics[width=0.94\linewidth]{wiki_2019t_size.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[meta\_reag]{
+			\label{fig:size_d}
+			\includegraphics[width=0.94\linewidth]{meta_reag_size.png}
+		}
+	\end{minipage}
+	\caption{CDF of object sizes.}
+	\label{fig:size}
+\end{figure}
+
+\textbf{Non-stationarity and Dimensional Coupling:}
+Ultimately, the most profound challenge of production traces is their dynamic evolution over time, as revealed by access virtual time scatter plots (Fig.~\ref{fig:access_time}). Synthetic traces form simplistic geometric patterns: a rigid triangle for lrutest (a strict moving window), a dense bottom band for lfutest (static hotspots), and a uniform rectangle for sizetest. Production traces, however, exhibit highly non-stationary hybrid structures. The 1063 trace reveals a dense hotspot base coupled with an upward-expanding working set boundary and distinct temporal gaps (intermissions). Meanwhile, the wiki\_2019t trace presents a seemingly smoother distribution, yet it firmly refuses to degenerate into any simplistic geometric pattern. Furthermore, the meta\_reag trace displays heavily stratified layers, indicating a deep, evolving coupling between recency and frequency that shifts dynamically over time.
+
+% --- Figure 5: Access Time (3x2 Matrix) ---
+\begin{figure}[htbp]
+	\centering
+	% Row 1
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[lrutest]{
+			\label{fig:access_a}
+			\includegraphics[width=0.94\linewidth]{lrutest_10m_access_vt.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[1063]{
+			\label{fig:access_b}
+			\includegraphics[width=0.94\linewidth]{1063_access_vt.png}
+		}
+	\end{minipage}
+
+	% Row 2
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[lfutest]{
+			\label{fig:access_c}
+			\includegraphics[width=0.94\linewidth]{lfutest_10m_access_vt.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[wiki\_2019t]{
+			\label{fig:access_d}
+			\includegraphics[width=0.94\linewidth]{wiki_2019t_access_vt.png}
+		}
+	\end{minipage}
+
+	% Row 3
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[sizetest]{
+			\label{fig:access_e}
+			\includegraphics[width=0.94\linewidth]{sizetest_10m_access_vt.png}
+		}
+	\end{minipage}\hfill
+	\begin{minipage}{0.47\linewidth}
+		\centering
+		\subfigure[meta\_reag]{
+			\label{fig:access_f}
+			\includegraphics[width=0.94\linewidth]{meta_reag_access_vt.png}
+		}
+	\end{minipage}
+	\caption{Access time scatter plots.}
+	\label{fig:access_time}
+\end{figure}
+
+In summary, the multidimensional complexity and non-stationarity of production traces dictate that no single heuristic (like LRU, LFU, or strict Size) can dominate. An effective eviction system must employ an expressive scoring formula capable of dynamically weighting multiple coupled features, continuously guided by a background learning model that tracks these shifting workload characteristics.
+
+\section{Related Work}\label{sec: related work}
+The design of cache eviction policies has been a long-standing research topic, with a rich history of both heuristic and learning-based approaches.
+
+Heuristics rely on fixed rules to evict objects. Traditional heuristic methods depend on a single observable feature. For example, LRU, LFU, Size, and FIFO policies prioritize eviction based on recency, frequency, size, and arrival time, respectively. Building on this, various abstract heuristics attempt to improve performance by combining multiple features. LRU-K \cite{oneilLRUK1993} uses an LRU queue strictly for objects with $K$ or more accesses. 2Q \cite{johnson2Q1994} adds a FIFO queue before the main LRU queue to filter out one-time accesses. GDSF \cite{cherkasovaGDSF1998a} combines aged frequency and size into a single scoring mechanism. LRFU \cite{dongheeleeLRFU2001} uniquely unifies LRU and LFU by exponentially decaying historical access frequencies. ARC \cite{megiddoARC2003} dynamically balances between recency and frequency by adjusting the relative capacity of its LRU and LFU queues. wTinyLFU \cite{einzigerTinyLFU2017} adopts a space-efficient frequency sketch to actively filter out one-time accesses before they even enter the main cache space. Furthermore, sophisticated heuristics define abstract metrics to capture complex workload patterns. LIRS \cite{jiangLIRS2002} distinguishes cold and hot objects via inter-reference intervals. Hyperbolic \cite{blanksteinHyperbolic2017} computes a priority score by dividing the access frequency by the elapsed time since the first access. LHD \cite{beckmannLHD2018} defines the expected cache hit count per unit size as the hit density metric. Recently, hardware-efficient logic has regained popularity through methods like SIEVE \cite{zhangSIEVE2024} and S3-FIFO \cite{yangs3FIFO2023}, which deploy strict quick demotion and lazy promotion rules on simple FIFO structures. As a whole, heuristics are extremely lightweight and execute quickly upon cache misses. However, their static assumption inherently causes them to be highly environment-specific, leading to severe performance collapse when sudden workload pattern shifts occur.
+
+Learning-based schemes have been proposed specifically to resolve the adaptability issues of traditional heuristics. However, directly inserting learning models into the cache miss path introduces a harsh tradeoff between model capability and inference latency.
+
+\textbf{Complex Model-based Policies:} To achieve maximum predictive scale and flexibility, some approaches deploy heavy architectures. Raven \cite{huRaven2022} constructs a density estimation network built on Gaussian mixture models to accurately predict the reuse distance distribution of individual objects. Parrot \cite{liuImitation2020} extensively modifies transformers and BiDAF network architectures to closely imitate Belady's optimal theoretical algorithm. Deep reinforcement learning has also been attempted, such as LRU-BaSE \cite{wangLRUBase2024}, which applies a continuous DRL agent explicitly responsible for selecting the proper eviction object among the tail portion of an LRU list. While these complex models offer profound fitting capabilities, they inherently suffer from excessive computational overhead, leading to slow per-miss inference that renders them prohibitive in high-concurrence real-world systems.
+
+\textbf{Lightweight Model-based Policies:} To mitigate inference bottlenecks and allow real-time operational safety, recent mechanisms significantly sacrifice expressive capability. LRB \cite{songLRB2020} trains Gradient Boosting Machines (GBM) to predict the reuse distance of objects online, selectively evicting the item with the worst prediction. 3LCACHE \cite{zhou3Lcache2025} later extends LRB by aggressively lowering the online training and inference overheads through adaptive probability sampling. HALP \cite{songHALP2023} shifts the paradigm by combining heuristics and ML: an MLP solely ranks and compares the four tail-end objects residing in an active LRU queue. GL-Cache \cite{yangGLcache2023} clusters objects based on recent access time and uses GBM models to train and forecast utilization exclusively at the aggregate group level instead of per-object tracking. Finally, LHR \cite{yanLHR2021} proposes the Hazard Rate criteria—the probability of an object being requested again inside a dynamic time window—and systematically targets the object holding the lowest hazard score for eviction. Alternatively, instead of learning object scores, methods like LeCaR \cite{vietrLeCaR2018} and CACHEUS \cite{rodriguezCACHEUS2021} frame the problem using regret minimization algorithms, dynamically alternating the operational weight between a handful of distinct heuristic components.
+
+\textbf{Offline Belady Imitation and OOD Issues:} Setting prediction limits aside, offline learning attempts have emerged through heavy historical emulation. Hawkeye \cite{jainHawkeye2016} retrospectively tracks Belady simulations out-of-core on past access streams to construct historical occupancy vectors, mapping objects into positive hits or negative misses. Similarly, LFO \cite{bergerLFO2018} discovers near-OPT sequences by strictly formulating best-case caching as an analytical min-cost flow problem over historical snapshots. Although computationally invisible on the critical path, these offline-trained imitation approaches routinely fail to resolve out-of-distribution (OOD) shift barriers. Because they inherently require pre-configuration based on historical assumptions, they fall short of fulfilling modern "plug-and-play" requirements for dynamically migrating and unprecedented CDN settings.
+
+\subsection{Middle Layer Design}
+The middle layer is the central abstraction of our framework. It must simultaneously satisfy the three requirements identified in Section~\ref{sec: motivation}: simplicity, universality, and stability. Simplicity requires the score to be inexpensive enough for per-eviction execution. Universality requires it to represent heterogeneous workloads that exhibit different age, frequency, and size preferences. Stability requires the score to depend on workload-level object properties rather than transient identifiers or instantaneous queue positions.
+
+These requirements naturally lead to a feature-based parametric score. We select three primary object descriptors that are universally available in practical caches and directly related to eviction quality: age, frequency, and size. Age captures temporal locality, frequency reflects long-term popularity, and size models the opportunity cost of occupying cache space. However, a plain linear combination of these basic features is insufficient for production workloads, because real traces are dominated by cross-dimensional interactions. For example, a large object with moderate frequency may still be less valuable than a small object with the same frequency, and an old object with high historical frequency may remain beneficial if its popularity-to-staleness ratio is strong.
+
+To preserve efficiency while increasing expressiveness, we augment the three primary features with pairwise interaction terms instead of replacing the middle layer with a neural predictor. This choice is deliberate. A fully learned per-object predictor would introduce a much larger parameter space, slower convergence, and higher synchronization cost between the background learner and the data path. In contrast, pairwise interactions retain interpretability, keep the parameter dimension small, and still expose second-order coupling information to the model layer.
+
+Under the default implementation, raw feature values are first transformed by a logarithmic compressor, namely
+\begin{equation}
+\tilde{x}=\log(1+x),
+\end{equation}
+which suppresses the extreme scale disparity across age, access count, and object size. Let $a$, $f$, and $s$ denote the transformed age, frequency, and size of a candidate object, respectively. The default middle-layer score is
+\begin{equation}
+S(o) = -w_1 a + w_2 f - w_3 s + w_4 \frac{f}{a} + w_5 \frac{f}{s} - w_6 as,
+\label{eq:middle-score}
+\end{equation}
+where each weight $w_i \in [0,1]$ is periodically updated by the model layer. The sign convention is fixed by cache semantics: large age and large size make an object more evictable, whereas large frequency makes it more retainable. This sign-decoupled parameterization is practically important because it constrains the learner to search only over the magnitude of each factor rather than relearning obvious polarity.
+
+Equation~\ref{eq:middle-score} is expressive enough to cover a broad family of classical heuristics as special cases or soft variants. For instance, emphasizing only $a$ approximates age-based eviction, emphasizing $f$ approximates frequency-oriented retention, and emphasizing $s$ favors size-aware replacement. More importantly, the interaction terms allow the score to capture multidimensional tradeoffs that static heuristics cannot represent. The term $f/a$ retains objects that are both popular and recently useful, $f/s$ prefers compact objects with high value density, and $as$ suppresses old large objects that are expensive to keep.
+
+Not every interaction term is equally informative for every workload. Therefore, the design further includes an adaptive pruning mechanism for compound terms. During warm-up, the cache scans resident objects and estimates Pearson correlations between a compound feature and its constituent base features. If a compound term is almost fully explained by a base feature, it is treated as redundant and can be disabled. In particular, the $f/a$ term is conservatively removed in the adaptive variant because it is often strongly collinear with frequency in real traces. The $f/s$ term is disabled when $\mathrm{Pearson}(f, f/s)$ is close to one, which typically occurs when object sizes show very limited variation. Similarly, the $as$ term can be removed when $\mathrm{Pearson}(a, as)$ indicates that multiplying by size adds little independent information. This mechanism preserves universality without forcing unnecessary dimensions on structurally simpler workloads.
+
+The resulting middle layer provides a favorable balance between expressiveness and deployability. It is substantially richer than a single-feature heuristic, yet still compact enough to be optimized by either statistical search or reinforcement learning while keeping the critical path lightweight. In effect, it acts as an information bottleneck with carefully preserved semantics: rich enough to encode workload preference, but small enough to be updated reliably and executed cheaply.
+
+\subsection{Decision Layer Design}
+The decision layer executes on every cache miss that requires replacement. Its objective is to preserve eviction quality under the middle-layer score while avoiding full-cache scanning. This is achieved through a three-step pipeline: candidate selection, feature computation, and batched eviction.
+
+\textbf{1) Candidate selection.} In realistic deployments, a cache
+can contain tens of thousands to millions of objects. Even
+a simple scoring function becomes expensive if evaluated
+over all residents on every eviction. We therefore construct a compact candidate pool consisting of objects that are highly likely to yield the lowest eviction score.
+
+To efficiently assemble this pool, we actively track objects that exhibit extreme values across the three fundamental dimensions: age, frequency, and size. The supporting structures are designed according to each feature's value range and update dynamics, so that both extraction and maintenance remain lightweight in the online path. For age, we maintain an age-ordered queue and sample objects directly from its tail to obtain the stalest residents. For frequency, we maintain count-indexed linked lists and sample from the lowest-count lists. For size, objects are grouped into discrete size-range buckets, where each bucket represents an interval of sizes rather than one exact size, and candidates are sampled from the buckets covering the largest ranges. The maintenance overhead of these structures is low: each request triggers only local object insertion or movement in the corresponding queue, list, or bucket, without any global reorder or full-cache traversal. Candidates systematically drawn from these structures are called \emph{feature-extreme candidates}, as they represent the worst objects along at least one individual dimension.
+
+The quota for feature-extreme candidates is not fixed across candidate sources, namely, the age-based, frequency-based, and size-based sources. Instead, the decision layer adaptively reallocates quota according to how often each source produces the final eviction object. Let $n_i^{\mathrm{evict}}$ denote the number of evictions which came from source $i$ in the last period. The next-period quota for source $i$ is adjusted in proportion to its observed contribution:
+\begin{equation}
+n_i^{\mathrm{cand}} \propto n_i^{\mathrm{evict}},
+\label{eq:adaptive-budget}
+\end{equation}
+Meanwhile, it is subject to a minimum quota to prevent starvation. This adaptive mechanism allows the decision layer to spend more search effort on the candidate sources that are currently more predictive, while still preserving diversity in candidate generation.
+
+Feature-extreme candidates alone are insufficient because the truly optimal eviction target may not be strictly extreme in any single feature. Real caches often contain objects that are only moderately poor along each individual dimension, yet become the worst target under joint scoring. To cover this case, we also sample a set of \emph{random candidates} from current cached objects. This random set complements the feature-extreme pool and improves exploration over the full candidate space.
+
+\textbf{2) Feature computation.} After candidate generation, the decision layer computes only the required features for each candidate. The raw age of an object is measured by the request distance since its last access, frequency is its access count, and size is its occupied bytes. Because these quantities naturally differ by several orders of magnitude, direct combination would cause numerical overflow and shadow smaller features. To address this, the decision layer first applies a logarithmic transformation to compress the dynamic range of each metric. It then divides each transformed feature by a tracked running maximum to normalize the scales into a standardized interval. This  ensures stability during dynamic score aggregation.
+
+\textbf{3) Batched eviction execution.} The decision layer further amortizes scoring overhead through a small batch-eviction queue. After one scoring round, the worst candidates are temporarily buffered and can be directly consumed by subsequent evictions as long as they serve the same cache miss. To prevent delayed evictions from degrading the hit ratio, this queue is strictly invalidated upon the arrival of any new request. This optimization effectively eliminates repeated candidate sampling and score computation when inserting a single large object mandates evicting multiple smaller ones, preventing latency spikes during size-induced batched evictions.
+
+Algorithm~\ref{alg:decision-layer} summarizes the online eviction procedure. When a miss occurs and the cache space is insufficient for the incoming object, the decision layer eviction procedure is invoked. If the batch queue is empty, a new candidate pool $P$ is assembled according to the adaptively allocated feature-extreme quota and the random samples. Normalized features are computed for each caching metric $j \in \{a,f,s\}$ and used to score each candidate. The object $O$ with the minimum score is evicted, and remaining low-score candidates are buffered to serve further space requirements within the same request cycle.
+
+\begin{algorithm}[t]
+	\caption{Decision-layer eviction procedure.}
+	\label{alg:decision-layer}
+	\KwIn{Missed request $R$, current cache state}
+	\KwOut{Evicted object(s)}
+	\SetAlgoLined
+	clear the batch-eviction queue\;
+	\If{at start of a new epoch}{
+		update quota $n_i^{\mathrm{cand}}$ for each source $i$ via Eq.~\eqref{eq:adaptive-budget}\;
+	}
+	\While{free space $<$ size($R$)}{
+		\eIf{batch eviction queue is not empty}{
+			$O \gets$ pop candidate from the queue\;
+		}{
+			$P \gets \emptyset$\;
+			add $n_i^{\mathrm{cand}}$ candidates to $P$ from each source $i$\;
+			add random candidates to $P$\;
+			\ForEach{$c \in P$}{
+				\ForEach{feature $j \in \{a, f, s\}$}{
+					$\tilde{f}_j(c) \gets \frac{\log(1 + f_j(c))}{\max(\log(1+f_j))}$\;
+				}
+				compute score $S(c)$ via Eq.~\eqref{eq:middle-score} using $\tilde{f}_j(c)$\;
+			}
+			$O \gets \arg\min_{c \in P} S(c)$\;
+			buffer remaining low-score candidates from $P$ into queue\;
+		}
+		evict $O$ and update statistics for source $i$ of $O$\;
+	}
+\end{algorithm}
+
+\subsection{Model Layer Design}
+% [OLD-Intro] The model layer periodically updates the middle-layer weights
+% using epoch-level statistics, and can run asynchronously at a much lower
+% frequency than cache accesses.
+% [OLD-Intro] The framework is model-agnostic: any learner that maps aggregate
+% feedback to a small weight vector can be plugged in (CMA-ES or DRL).
+
+The model layer governs the adaptation of the caching system by periodically updating the middle-layer weight vector $\mathbf{w}\in[0,1]^d$. Unlike traditional learning-based caches that couple model inference with real-time eviction, our design delegates heavy learning to an asynchronous background process operating on an epoch scale. 
+
+This architectural decoupling yields significant advantages in both system scalability and algorithmic robustness. First, it removes the latency bottleneck. By taking the model off the critical data path, the system effortlessly sustains ultra-high concurrency. Decisions are made in microseconds, while the model is updated at much larger timescales. Second, epoch-scale learning acts as a natural low-pass filter. Instead of being misled by the stochastic noise and transient spikes of individual requests, the model layer synthesizes macro-patterns from aggregated feedback such as epoch-level miss ratios. Third, it gracefully sidesteps the curse of dimensionality. By compressing the combinatorial search over millions of objects into a $d$-dimensional continuous policy space, the framework transforms an intractable selection problem into a tractable continuous optimization problem that is highly amenable to rapid learning. Ultimately, through these three architectural innovations, the model layer is elevated from a mere eviction predictor to a \emph{policy-shaping module}. It determines the underlying preference structure of the cache, leaving the fast decision layer to simply execute the formulated policy.
+
+Guided by this philosophy, the model layer no longer focuses on pinpointing specific victims. Instead, it continuously executes a stable tripartite protocol: evaluating the current preference vector over an entire epoch, distilling a refined vector from the aggregated feedback, and updating the middle layer with the new policy. 
+
+\textbf{Unified learning objective.}
+Let epoch $t$ denote an evaluation window containing a sequence of requests.
+Model-layer learning aims to minimizes the epoch-level miss ratio,
+which yields a low-dimensional black-box optimization over the middle-layer
+policy space:
+\begin{equation}
+\mathbf{w}_t^* = \arg\min_{\mathbf{w}\in[0,1]^d} \mathrm{MR}_t(\mathbf{w}).
+\label{eq:model-argmin}
+\end{equation}
+
+This formulation is model-agnostic: any optimizer that maps
+epoch summaries to improved $\mathbf{w}$ can be plugged in. We instantiate two
+algorithmic families, DRL and CMA-ES, to demonstrate this property.
+
+\textbf{1) DRL-based model layer.}
+Deep Reinforcement Learning (DRL) is a powerful machine learning paradigm where an intelligent agent trains a deep neural network to maximize cumulative future rewards through trial-and-error interactions. In our framework, the DRL agent operates as an epoch-level policy optimizer. At the start of each epoch, it observes the summarized state of the cache environment, predicts the optimal middle-layer weights, and later receives an aggregated reward based on the caching performance during that epoch. Through continuous repetitions, it systematically learns a policy mapping from cache states to optimal weights.
+
+This formulation aligns seamlessly with the episodic nature of our architecture and unlocks the true potential of DRL in real-time caching. First, it circumvents the notorious \emph{inference wall}. By pushing computationally heavy neural network inference to the epoch boundary, it prevents DRL from throttling microsecond-level cache operations. Second, it elegantly mitigates the \emph{delayed credit assignment} problem. By treating an entire epoch as a single transition step in a Markov Decision Process (MDP), the DRL agent receives a robust, aggregated reward signal. This filters out the chaotic volatility of individual requests, enabling the neural network to focus entirely on learning enduring workload trends and optimizing long-term cache performance.
+
+At epoch boundary $t$, the agent reads a comprehensive summary state $s_t$ that characterizes the current caching dynamics. Specifically, $s_t$ encompasses the recent epoch miss ratio alongside the aggregated distribution features of hits and misses, namely, the mean and variance of fundamental object properties (such as recency, frequency, and size) computed separately for objects that hit and missed during the epoch. Based on $s_t$, the neural network directly outputs an action corresponding to the continuous weight vector $\mathbf{w}_t \in [0,1]^d$. After executing the cache eviction policy directed by $\mathbf{w}_t$ for an entire epoch, the agent receives a reward
+\begin{equation}
+r_t = -\mathrm{MR}_t(\mathbf{w}_t),
+\label{eq:drl-reward}
+\end{equation}
+and transitions to a new state $s_{t+1}$. The training objective is to learn an optimal policy $\pi$ that maximizes the expected return:
+\begin{equation}
+\max_{\pi}\; \mathbb{E}_{\pi}\!\left[\sum_{t=0}^{\infty}\gamma^t r_t\right],
+\label{eq:drl-objective}
+\end{equation}
+where $\gamma \in (0,1]$ is the discount factor. Through this trajectory, DRL successfully exploits its powerful representation capacity without entering the latency-critical replacement loop.
+
+\textbf{2) CMA-ES-based model layer.}
+While DRL showcases the architectural capability to support heavy neural networks, the inherent expressiveness of our middle-layer design means that even simpler models can achieve exceptional performance. To demonstrate this, we also instantiate the model layer using a purely statistical, lightweight alternative: the Covariance Matrix Adaptation Evolution Strategy (CMA-ES). CMA-ES is a widely used derivative-free optimization algorithm for continuous spaces. It updates weights by repeated trial and selection.
+At each generation, it samples several weight vectors, evaluates their miss
+ratios, keeps the better ones, and shifts the next sampling distribution toward
+those better results.
+
+This method seamlessly fits our objective in Eq.~\ref{eq:model-argmin}.
+Because the real cache environment is continuous but highly non-convex, full of
+local optima, and lacks reliable analytical gradients, direct mathematical
+optimization fails. CMA-ES thrives in this exact regime.
+By intrinsically adapting a covariance matrix, it naturally decodes the complex,
+second-order geometrical dependencies among feature dimensions, such as the
+correlation between frequency and recency. By retaining the most successful
+candidates, it ensures steady navigation through shifting workloads.
+
+
+In each generation, candidate weights are sampled as
+\begin{equation}
+\mathbf{w}_k \sim \mathcal{N}(\mathbf{m}_t,\sigma_t^2\mathbf{C}_t),
+\label{eq:cma-sample}
+\end{equation}
+where $\mathbf{m}_t$ is the current center of candidate weights, $\sigma_t$ controls the overall search step, and $\mathbf{C}_t$ controls how different dimensions move together.
+Each candidate $\mathbf{w}_k$ is evaluated by one epoch rollout to obtain
+$\mathrm{MR}_t(\mathbf{w}_k)$.
+The optimizer then updates $\mathbf{m}_{t+1}$ toward better candidates, and
+adjusts $\mathbf{C}_{t+1}$ and $\sigma_{t+1}$ based on recent improvements.
+
+Specifically, we employ the Active CMA-ES with Increasing Population Size (aIPOP) variant\footnote{\url{https://github.com/CMA-ES/libcmaes}}. Building upon standard CMA-ES, aIPOP actively accelerates convergence by making negative updates to the covariance matrix for unsuccessful directions. Moreover, when the search converges to a local optimum, it triggers a restart with an increasing population size. This systematic expansion of the search space effectively climbs out of deep local minima, making it exceptionally robust to the highly multimodal and shifting nature of real-world cache environments.
+
+Based on the interchangeable role of the optimization models, Algorithm~\ref{alg:model-layer} summarizes the generalized framework interface. Rather than coupling specific logic inside the eviction path, the system encapsulates any optimizer into an abstract routine that observes epoch summaries, steps an internal solver, and emits refined parameters.
+\begin{algorithm}[t]
+\caption{Generalized model-layer process.}
+\label{alg:model-layer}
+\KwIn{Abstract optimizer context $\Theta$, summary state $s$, and epoch feedback $\mathcal{D}$}
+\KwOut{Refreshed middle-layer weights $\mathbf{w}$}
+\SetAlgoLined
+parse the epoch summary $s_t$ and evaluate cache miss ratio $\mathrm{MR}_t$\;
+pass the aggregated feedback $\mathcal{D}_t$ to the unified optimization oracle\;
+execute one step of parameter adjustment internally (e.g., gradient ascent for DRL or covariance update for CMA-ES)\;
+generate the next optimal weight vector $\mathbf{w}_{t+1} \in [0,1]^d$ from the internal model\;
+propagate the updated weights $\mathbf{w}_{t+1}$ to the fast middle-layer for subsequent evictions\;
+\end{algorithm}
+
+\section{Experiment Performance}\label{sec: performance}
+
+\section{Conclusion}\label{sec: conclusion}
+
+
+
+\bibliographystyle{IEEEtran}
+\bibliography{reference}
+
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Photo-KunpengDing}}]{Kunpeng Ding} (Graduate Student Member, IEEE)
+received the B.S. degree from the School of Cyber Science and Technology, University of Science and Technology of China (USTC) in 2022, where he is currently pursuing the Ph.D. degree with the School of Cyber Science and Technology. His research interests include network security protocol design and analysis.
+\end{IEEEbiography}
+
+\begin{IEEEbiography}
+[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Photo-jiangpinghan}}]{Jiangping Han (M'22)} received the bachelor's degree and the doctor's degree both from the Department of Electronic Engineering and Information Science (EEIS), USTC, in 2016 and 2021, respectively. From Nov. 2019 to Oct. 2021, She was a visiting scholar with the School of Computing, Informatics, and Decision Systems Engineering, Arizona State University. She was a postdoctoral researcher with the School of Cyber Science and Technology, USTC, in 2021-2023. She is currently an associate researcher with the School of Cyber Science and Technology, USTC. Her research interests include future Internet architecture design and transmission optimization.
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Photo-KaipingXue}}]{Kaiping Xue (M'09-SM'15)} received the bachelor's degree from the Department of Information Security, University of Science and Technology of China (USTC), in 2003 and received the Ph.D degree from the Department of Electronic Engineering and Information Science (EEIS), USTC, in 2007. From May 2012 to May 2013, he was a postdoctoral researcher with the Department of Electrical and Computer Engineering, University of Florida. Currently, he is a Professor in the School of Cyber Science and Technology, USTC. He is also the director of Network and Information Center, USTC. His research interests include next-generation Internet architecture design, transmission optimization and network security. His work won best paper awards in IEEE ICC 2025, IEEE MSN 2017 and IEEE HotICN 2019, the Best Paper Honorable Mention in ACM CCS 2022, the Best Paper Runner-Up Award in IEEE MASS 2018, and the best track paper in MSN 2020. He serves on the Editorial Board of several journals, including  \textsc{IEEE Transactions on Information Forensics and Security}, \textsc{IEEE Transactions on Dependable and Secure Computing}, \textsc{IEEE Transactions on Wireless Communications}, and \textsc{IEEE Transactions on Network and Service Management}. He has served as a Guest Editor for many reputed journals/magazines, and he has also served as a track/symposium chair for some reputed conferences. He is an IET Fellow and an IEEE Senior Member.
+\end{IEEEbiography}
+
+
+\end{document}
