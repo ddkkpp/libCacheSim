@@ -10,6 +10,15 @@ class GDSF : public abstractRank {
   GDSF() = default;
 
   double pri_last_evict = 0.0;
+  int cost_mode =
+      0;  // 0 = 原始 GDSF (cost=1e6), 1 = GDSF-BMR (cost=2+size/536)
+
+  double calc_cost(int64_t obj_size) const {
+    if (cost_mode == 1) {
+      return 2.0 + (double)(obj_size) / 536.0;
+    }
+    return 1e6;  // 原始 GDSF: 固定 cost
+  }
 };
 }  // namespace eviction
 
@@ -25,6 +34,8 @@ extern "C" {
 
 cache_t *GDSF_init(const common_cache_params_t ccache_params,
                    const char *cache_specific_params);
+cache_t *GDSF_BMR_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
 static void GDSF_free(cache_t *cache);
 static bool GDSF_get(cache_t *cache, const request_t *req);
 
@@ -50,11 +61,14 @@ static bool GDSF_remove(cache_t *cache, const obj_id_t obj_id);
  * @param cache_specific_params cache specific parameters, see parse_params
  * function or use -e "print" with the cachesim binary
  */
-cache_t *GDSF_init(const common_cache_params_t ccache_params,
-                   const char *cache_specific_params) {
+static cache_t *GDSF_init_internal(const common_cache_params_t ccache_params,
+                                   const char *cache_specific_params,
+                                   const char *name, int cost_mode) {
   cache_t *cache =
-      cache_struct_init("GDSF", ccache_params, cache_specific_params);
-  cache->eviction_params = reinterpret_cast<void *>(new eviction::GDSF);
+      cache_struct_init(name, ccache_params, cache_specific_params);
+  auto *gdsf = new eviction::GDSF;
+  gdsf->cost_mode = cost_mode;
+  cache->eviction_params = reinterpret_cast<void *>(gdsf);
 
   cache->cache_init = GDSF_init;
   cache->cache_free = GDSF_free;
@@ -73,6 +87,19 @@ cache_t *GDSF_init(const common_cache_params_t ccache_params,
   }
 
   return cache;
+}
+
+// 原始 GDSF: cost = 1e6 (固定大常数，等效于忽略 cost 差异)
+cache_t *GDSF_init(const common_cache_params_t ccache_params,
+                   const char *cache_specific_params) {
+  return GDSF_init_internal(ccache_params, cache_specific_params, "GDSF", 0);
+}
+
+// GDSF-BMR: cost = 2 + size/536 (byte-miss-ratio 优化变体)
+cache_t *GDSF_BMR_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params) {
+  return GDSF_init_internal(ccache_params, cache_specific_params, "GDSF-BMR",
+                            1);
 }
 
 /**
@@ -152,8 +179,9 @@ static cache_obj_t *GDSF_find(cache_t *cache, const request_t *req,
     auto node = gdsf->pq_map[obj];
     gdsf->pq.erase(node);
 
+    double cost = gdsf->calc_cost(obj->obj_size);
     double pri =
-        gdsf->pri_last_evict + (double)(obj->misc.freq) * 1.0e6 / obj->obj_size;
+        gdsf->pri_last_evict + (double)(obj->misc.freq) * cost / obj->obj_size;
     eviction::pq_node_type new_node = {obj, pri, cache->n_req};
     gdsf->pq.insert(new_node);
     gdsf->pq_map[obj] = new_node;
@@ -174,7 +202,8 @@ static bool GDSF_can_insert(cache_t *cache, const request_t *req) {
 
   int64_t to_evict_size =
       req->obj_size - (cache->cache_size - cache->get_occupied_byte(cache));
-  double pri = gdsf->pri_last_evict + 1.0e6 / req->obj_size;
+  double cost = gdsf->calc_cost(req->obj_size);
+  double pri = gdsf->pri_last_evict + cost / req->obj_size;
   bool can_insert = true;
   auto iter = gdsf->pq.begin();
 
@@ -224,18 +253,14 @@ static bool GDSF_can_insert(cache_t *cache, const request_t *req) {
 static cache_obj_t *GDSF_insert(cache_t *cache, const request_t *req) {
   auto *gdsf = reinterpret_cast<eviction::GDSF *>(cache->eviction_params);
 
-  // this does not affect insertion for most workloads unless object size is too
-  // large however, when it have effect, it often increases miss ratio because a
-  // list of small objects (with relatively large priority) will stop the
-  // insertion of a large object, however, the newly requested large object is
-  // likely to be more useful than the small objects if (!GDSF_can_insert(cache,
-  // req)) return nullptr;
+  if (!GDSF_can_insert(cache, req)) return nullptr;
 
   cache_obj_t *obj = cache_insert_base(cache, req);
   DEBUG_ASSERT(obj != nullptr);
   obj->misc.freq = 1;
 
-  double pri = gdsf->pri_last_evict + 1.0e6 / obj->obj_size;
+  double cost = gdsf->calc_cost(obj->obj_size);
+  double pri = gdsf->pri_last_evict + cost / obj->obj_size;
   eviction::pq_node_type new_node = {obj, pri, cache->n_req};
   auto r = gdsf->pq.insert(new_node);
   DEBUG_ASSERT(r.second);

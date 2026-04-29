@@ -1,3 +1,21 @@
+/*
+ * 2026-04 ThreeLCache safety fixes (from 20260415 bugfix review)
+ *
+ * Root causes observed in production runs:
+ * 1) quick_demotion could loop on metadata states that no longer had a valid
+ *    in-cache index, leading to invalid accesses.
+ * 2) evict_predobj used predicted candidates without strict bounds validation,
+ *    which could dereference stale / out-of-range positions.
+ *
+ * Fix principles applied in this module:
+ * - Always validate list index / position before dereference and update.
+ * - Fallback to safe eviction path when prediction metadata is inconsistent.
+ * - Keep demotion logic monotonic and break out on invalid transition states.
+ *
+ * These checks prioritize correctness and crash prevention for long-running
+ * traces and ablation sweeps.
+ */
+
 #include "ThreeLCache.hpp"
 
 #include <algorithm>
@@ -285,7 +303,12 @@ vector<int32_t> ThreeLCacheCache::quick_demotion() {
   int i = 0, j = 0;
   while (new_obj_size > (uint64_t)(_currentSize * reserved_space / 100) &&
          j < (int)(sample_rate * 1.5) && (size_t)i < new_obj_keys.size()) {
-    auto it = key_map.find(new_obj_keys[i])->second;
+    auto km_it = key_map.find(new_obj_keys[i]);
+    if (km_it == key_map.end()) {
+      i++;
+      continue;
+    }
+    auto it = km_it->second;
     if (it.list_idx == 0) {
       new_obj_size -= in_cache.metas[it.list_pos]._size;
       sampled_objects.emplace_back(it.list_pos);
@@ -309,7 +332,10 @@ void ThreeLCacheCache::evict() {
 void ThreeLCacheCache::evict_with_candidate(pair<uint64_t, int32_t> &epair) {
   int32_t old_pos = epair.second;
   if (old_pos == -1) {
-    // No valid candidate to evict, avoid segfault
+    return;
+  }
+
+  if (old_pos < 0 || (size_t)old_pos >= in_cache.metas.size()) {
     return;
   }
 
@@ -368,7 +394,17 @@ pair<uint64_t, int32_t> ThreeLCacheCache::evict_predobj() {
              });
     pred_times.pop_back();
     if (pred_map.find(key) != pred_map.end() && pred_map[key] == reuse_time) {
-      int32_t old_pos = key_map.find(key)->second.list_pos;
+      auto km_it = key_map.find(key);
+      if (km_it == key_map.end() || km_it->second.list_idx != 0) {
+        // object already evicted from in_cache, skip
+        pred_map.erase(key);
+        continue;
+      }
+      int32_t old_pos = km_it->second.list_pos;
+      if (old_pos < 0 || (size_t)old_pos >= in_cache.metas.size()) {
+        pred_map.erase(key);
+        continue;
+      }
       object_distribution_n_eviction[uint16_t(
           log2(in_cache.metas[old_pos]._freq))]++;
       if (in_cache.metas[old_pos]._past_timestamp <= spointer_timestamp)

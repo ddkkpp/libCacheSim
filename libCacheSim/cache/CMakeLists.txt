@@ -80,6 +80,7 @@ set(eviction_sources_c
 set(eviction_sources_cpp
         eviction/cpp/LFU.cpp
         eviction/cpp/GDSF.cpp
+    eviction/cpp/loh_cmaes_bridge.cpp
         eviction/LHD/lhd.cpp
         eviction/LHD/LHD_Interface.cpp
         )

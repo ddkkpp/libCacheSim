@@ -37,7 +37,7 @@ struct pq_node_type {
                int64_t last_request_vtime_param)
       : obj(obj_param),
         priority(priority_param),
-        last_request_vtime(last_request_vtime_param){};
+        last_request_vtime(last_request_vtime_param) {};
 
   void print() const {
     printf("obj %lu, priority %f, last_request_vtime %ld\n",

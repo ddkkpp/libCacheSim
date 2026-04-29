@@ -361,13 +361,32 @@ bucket_t *select_segs_learned(cache_t *cache, segment_t **segs) {
     rank_segs(cache);
   }
 
+  if (ss->n_ranked_segs <= 0) {
+    return select_one_seg_to_evict(cache, segs);
+  }
+
+  if (*ranked_seg_pos_p < 0) {
+    *ranked_seg_pos_p = 0;
+  }
+  if (*ranked_seg_pos_p >= ss->n_ranked_segs) {
+    // The ranking window has been exhausted, fallback to one-seg eviction and
+    // force rerank in next round.
+    ss->ranked_seg_pos = INT32_MAX;
+    return select_one_seg_to_evict(cache, segs);
+  }
+
   /* choosing n_merge segments with the lowest utility, may not be consecutive
    */
   segment_t *seg_to_evict = ranked_segs[*ranked_seg_pos_p];
   // find the segment with the lowest utility
-  while (seg_to_evict == NULL && *ranked_seg_pos_p < ss->ranked_seg_size) {
+  while (seg_to_evict == NULL && *ranked_seg_pos_p < ss->n_ranked_segs) {
     *ranked_seg_pos_p = *ranked_seg_pos_p + 1;
+    if (*ranked_seg_pos_p >= ss->n_ranked_segs) break;
     seg_to_evict = ranked_segs[*ranked_seg_pos_p];
+  }
+  if (seg_to_evict == NULL || *ranked_seg_pos_p >= ss->n_ranked_segs) {
+    ss->ranked_seg_pos = INT32_MAX;
+    return select_one_seg_to_evict(cache, segs);
   }
   // keep the first seg_to_evict in case we cannot find segments to merge, and
   // we need to evict one segment (without retaining)
@@ -379,6 +398,10 @@ bucket_t *select_segs_learned(cache_t *cache, segment_t **segs) {
                            params->merge_consecutive_segs)) {
     if (*ranked_seg_pos_p > ss->n_ranked_segs * 0.8) {
       // let's evict one seg rather than merging multiple
+      if (seg_to_evict_first == NULL) {
+        ss->ranked_seg_pos = INT32_MAX;
+        return select_one_seg_to_evict(cache, segs);
+      }
       segs[0] = seg_to_evict_first;
       segs[1] = NULL;
       bucket_t *bkt = &params->buckets[segs[0]->bucket_id];
@@ -394,6 +417,16 @@ bucket_t *select_segs_learned(cache_t *cache, segment_t **segs) {
       return NULL;
     }
     *ranked_seg_pos_p = *ranked_seg_pos_p + 1;
+    if (*ranked_seg_pos_p >= ss->n_ranked_segs) {
+      if (seg_to_evict_first == NULL) {
+        ss->ranked_seg_pos = INT32_MAX;
+        return select_one_seg_to_evict(cache, segs);
+      }
+      segs[0] = seg_to_evict_first;
+      segs[1] = NULL;
+      ss->ranked_seg_pos = INT32_MAX;
+      return NULL;
+    }
     seg_to_evict = ranked_segs[*ranked_seg_pos_p];
     ranked_segs[*ranked_seg_pos_p] = NULL;
   }

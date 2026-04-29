@@ -4,6 +4,14 @@
  * performance, but it is harder to follow. LeCaR0 is a simpler implementation,
  * it has a lower throughput.
  *
+ * 2026-04 update (long-run stability):
+ * - Root cause: on long high-hit-rate traces, LFU frequencies can grow to very
+ *   large values; update_LFU_min_freq then scans from min_freq to max_freq and
+ *   degenerates to an O(max_freq) hot-path cost.
+ * - Fix: cap LFU frequency via LECAR_MAX_FREQ and saturate counters at the cap.
+ * - Expected effect: avoid catastrophic slowdown / apparent hangs while keeping
+ *   the LFU ordering semantics stable enough for long ablation runs.
+ *
  * */
 
 #include <assert.h>
@@ -19,6 +27,11 @@ extern "C" {
 #endif
 
 // #define LECAR_USE_BELADY
+
+/* Maximum LFU frequency. Bounding max_freq prevents update_LFU_min_freq from doing
+ * an O(max_freq) linear scan that becomes catastrophically slow on long high-hit-rate
+ * traces where hot objects accumulate frequencies in the millions. */
+#define LECAR_MAX_FREQ 4096
 
 static const char *DEFAULT_PARAMS = "update-weight=1,lru-weight=0.5";
 
@@ -275,6 +288,10 @@ static cache_obj_t *LeCaR_find(cache_t *cache, const request_t *req,
 
     /* freq incr and move to next freq node */
     cache_obj->LeCaR.freq += 1;
+      /* Cap to LECAR_MAX_FREQ to bound update_LFU_min_freq scan length */
+      if (cache_obj->LeCaR.freq > LECAR_MAX_FREQ) {
+        cache_obj->LeCaR.freq = LECAR_MAX_FREQ;
+      }
     if (params->max_freq < cache_obj->LeCaR.freq) {
       params->max_freq = cache_obj->LeCaR.freq;
     }

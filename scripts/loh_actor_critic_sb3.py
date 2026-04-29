@@ -27,6 +27,25 @@ def LOH_DEBUG_VERBOSE() -> bool:
     return LOH_DEBUG_LEVEL >= LOH_DEBUG_VERBOSE_LEVEL
 
 
+def _resolve_pairwise_trace_level() -> int:
+    try:
+        return int(os.environ.get("LOH_PAIRWISE_TRACE_LEVEL", "0").strip())
+    except Exception:
+        return 0
+
+
+LOH_PAIRWISE_TRACE_LEVEL = _resolve_pairwise_trace_level()
+
+
+def LOH_PAIRWISE_TRACE_ENABLED() -> bool:
+    return LOH_PAIRWISE_TRACE_LEVEL > 0
+
+
+def loh_pairwise_trace(message: str) -> None:
+    if LOH_PAIRWISE_TRACE_ENABLED():
+        print(f"[PAIRTRACE-PY] {message}")
+
+
 def loh_print_config(message: str) -> None:
     if LOH_DEBUG_CONFIG_ENABLED():
         print(message)
@@ -193,7 +212,7 @@ DEFAULT_LOH_PENALTY_REWARD_FORMULA = "centered"  # relative|centered|one_minus|n
 DEFAULT_LOH_PENALTY_NET_GOOD_SCALE = "1.0"
 DEFAULT_LOH_PENALTY_NET_PENALTY_SCALE = "1.0"
 DEFAULT_LOH_PENALTY_EMPTY_AS_GOOD = "1"  # 1=evicted_count>0 且无 penalty 事件时给正反馈（penalty=0）
-DEFAULT_LOH_PENALTY_REFINE_ON_LATE = "1"  # 1=late penalty 到达时触发该位置重新 finalize
+DEFAULT_LOH_PENALTY_REFINE_ON_LATE = "0"  # 1=late penalty 到达时触发该位置重新 finalize
 DEFAULT_LOH_PENALTY_NO_EVICT_REWARD = "keep"  # keep|zero
 DEFAULT_LOH_SURVIVAL_QUANTILE = "0.99"
 DEFAULT_LOH_SURVIVAL_BINS = "64"
@@ -211,12 +230,21 @@ DEFAULT_LOH_REWARD_W_BASE_ORIG = "0.7"
 DEFAULT_LOH_REWARD_W_BASE_MISS = "0.3"
 DEFAULT_LOH_REWARD_W_BASE_TREND = "0.0"
 DEFAULT_LOH_REWARD_W_PENALTY_DELTA = "0.35"
+DEFAULT_LOH_FIXED_FINAL_REWARD = ""  # ""=disabled; else constant final reward in [-1,1]
 DEFAULT_LOH_REWARD_ORIGINAL_MAP = ""  # ""=auto (penalty启用时center01，否则raw), raw|clip01|center01
 DEFAULT_LOH_PENALTY_GATE_MINCOUNT = "8"
 DEFAULT_LOH_PENALTY_GATE_GOODRATE = "0.15"
 DEFAULT_LOH_PENALTY_GATE_PENALTYSCALE = "1.0"
 DEFAULT_LOH_PENALTY_GATE_NO_CUTOFF_SCALE = "0.5"
 DEFAULT_LOH_PENALTY_DELTA_SCALE = "1.0"
+DEFAULT_LOH_PENALTY_PAIRWISE_NORMALIZE = "1"
+DEFAULT_LOH_PENALTY_PAIRWISE_NORM_BASE = "500.0"
+DEFAULT_LOH_PENALTY_PAIRWISE_WEIGHT = "1.0"
+DEFAULT_LOH_REWARD_CANDIDATE_PAIRWISE_ONLY = "1"
+DEFAULT_LOH_REWARD_CANDIDATE_PAIRWISE_EVENT = "2"
+DEFAULT_LOH_PAIRWISE_IMMEDIATE_FINALIZE = "0"
+DEFAULT_LOH_PAIRWISE_REWARD_MODE = "mean"  # mean|tanh|quantile
+DEFAULT_LOH_PAIRWISE_MIX_ALPHA = "0.0"
 DEFAULT_LOH_MISSRATIOTREND_WINDOW = "100"
 DEFAULT_LOH_TREND_WINDOW = "100"
 DEFAULT_LOH_MISSRATIOTREND_MODE = "slope"
@@ -231,7 +259,7 @@ DEFAULT_LOH_REWARD_SCALE = "1.0"        # reward 乘法缩放（1=不缩放）
 
 # 6) RL 算法选择与超参（仅列出本脚本直接使用的关键键）
 DEFAULT_LOH_RL_ALGO = "SAC"
-DEFAULT_LOH_EXCLUDE_RECENT_STEPS = "2000"
+DEFAULT_LOH_EXCLUDE_RECENT_STEPS = "0"
 DEFAULT_LOH_SOFT_PRIOR = "0"
 DEFAULT_LOH_SOFT_PRIOR_BIAS = "0.5"
 
@@ -1058,16 +1086,25 @@ if LOH_SCORE_COMPOUND_V2:
     LOH_SCORE_USE_COMPOUND = 1
     LOH_SCORE_USE_IRT = 0
 
+# compound 独立特征开关（消融实验，与 C 端 LOH_USE_FREQ_REC/FREQ_SIZE/REC_SIZE 对齐）
+# 设为 0 时 Python 侧会将对应 compound 权重维度清零，使该交叉项不参与评分
+LOH_USE_FREQ_REC  = _env_int_flag("LOH_USE_FREQ_REC",  1)
+LOH_USE_FREQ_SIZE = _env_int_flag("LOH_USE_FREQ_SIZE", 1)
+LOH_USE_REC_SIZE  = _env_int_flag("LOH_USE_REC_SIZE",  1)
+
 # compound 模式优先生效：一旦开启，则评分与动作都按照 6 维 compound 特征解释，IRT 不参与评分
 if LOH_SCORE_USE_COMPOUND:
     LOH_SCORE_USE_IRT = 0
 
 # 有效评分特征维度（决定动作维度）：
-#   - compound=1 → 6 维（rec/freq/size + 3 compound）
+#   - compound=1 → 3 + 启用的 compound 维度数（freq_rec/freq_size/rec_size）
 #   - compound=0 且 use_irt=0 → 3 维（rec/freq/size）
 #   - 其它 → 6 维基础特征
 if LOH_SCORE_USE_COMPOUND:
-    SCORE_FEATURE_DIM = SHM_WEIGHT_DIM if LOH_SCORE_COMPOUND_V2 else 6
+    if LOH_SCORE_COMPOUND_V2:
+        SCORE_FEATURE_DIM = SHM_WEIGHT_DIM
+    else:
+        SCORE_FEATURE_DIM = 3 + int(bool(LOH_USE_FREQ_REC)) + int(bool(LOH_USE_FREQ_SIZE)) + int(bool(LOH_USE_REC_SIZE))
 elif LOH_SCORE_USE_IRT == 0:
     SCORE_FEATURE_DIM = 3
 else:
@@ -1077,8 +1114,6 @@ else:
 STATE_OBJ_FEATURE_DIM = STATE_OBJ_FEATURE_CAP_DIM if LOH_SCORE_USE_IRT else 3
 
 LOH_DUAL_CHANNEL = _env_flag("LOH_DUAL_CHANNEL", DEFAULT_LOH_DUAL_CHANNEL == "1")
-LOH_SEGMENT_MODE = int(os.getenv('LOH_SEGMENT_MODE', '0'))
-LOH_NUM_SEGMENTS = int(os.getenv('LOH_NUM_SEGMENTS', '2'))
 # Softmax default: True (always enabled by default unless explicitly disabled)
 LOH_USE_SOFTMAX = _env_flag("LOH_USE_SOFTMAX", DEFAULT_LOH_USE_SOFTMAX == "1")
 
@@ -1095,8 +1130,6 @@ if LOH_SCORE_MODEL in {"mlp", "nn"}:
         LOH_USE_SOFTMAX = False
 else:
     ACTION_DIM = 2 * SCORE_FEATURE_DIM if LOH_DUAL_CHANNEL else SCORE_FEATURE_DIM
-    if LOH_SEGMENT_MODE > 0:
-        ACTION_DIM *= LOH_NUM_SEGMENTS
 
 loh_print_config(
     f"[LOH CONFIG] Score model: {LOH_SCORE_MODEL} (ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, STATE_OBJ_FEATURE_CAP_DIM={STATE_OBJ_FEATURE_CAP_DIM}, SHM_WEIGHT_DIM={SHM_WEIGHT_DIM}, MLP_HIDDEN={LOH_MLP_HIDDEN})"
@@ -1104,7 +1137,18 @@ loh_print_config(
 loh_print_config(f"[LOH CONFIG] Dual-channel action space: {'ENABLED' if LOH_DUAL_CHANNEL else 'DISABLED'}")
 loh_print_config(f"[LOH CONFIG] Softmax activation: {'ENABLED' if LOH_USE_SOFTMAX else 'DISABLED'}")
 loh_print_config(f"[LOH CONFIG] Score feature mode: LOH_SCORE_USE_IRT={LOH_SCORE_USE_IRT}, LOH_SCORE_USE_COMPOUND={LOH_SCORE_USE_COMPOUND}")
+loh_print_config(
+    f"[LOH CONFIG] AUTO_COMPOUND: enabled={_env_int_flag('LOH_AUTO_COMPOUND', 0)} "
+    f"resolved(freq_rec={LOH_USE_FREQ_REC}, freq_size={LOH_USE_FREQ_SIZE}, rec_size={LOH_USE_REC_SIZE}) "
+    f"=> SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}"
+)
 loh_print_config(f"[LOH CONFIG] State obj feature dim: {STATE_OBJ_FEATURE_DIM} (STATE_OBJ_FEATURE_CAP_DIM={STATE_OBJ_FEATURE_CAP_DIM})")
+_tx_active_dim = max(0, min(SCORE_FEATURE_DIM, SHM_WEIGHT_DIM))
+if LOH_DEBUG_BASIC():
+    print(
+        f"[LOH CONFIG] RL weight dims: ACTION_DIM={ACTION_DIM}, SCORE_FEATURE_DIM={SCORE_FEATURE_DIM}, "
+        f"SHM_WEIGHT_DIM={SHM_WEIGHT_DIM}, TX_ACTIVE_DIM={_tx_active_dim}"
+    )
 
 # --- 状态维度配置（与 C 端 LOH_INCLUDE_* 宏对齐）---
 def _env_truthy(name: str) -> bool:
@@ -1203,9 +1247,12 @@ loh_print_config(f"[LOH CONFIG] Shared state dims: CONTEXT_DIM={CONTEXT_DIM}, ST
 class PenaltyEntry(ctypes.Structure):
     _fields_ = [
         ("penalty_version", ctypes.c_uint64),
-        ("eviction_to_access", ctypes.c_int64),   # 驱逐到访问的距离
+        ("eviction_to_access", ctypes.c_int64),   # 驱逐到访问的距离（兼容旧语义）
         ("obj_size", ctypes.c_int64),             # 对象大小
         ("obj_id", ctypes.c_uint64),
+        ("event_type", ctypes.c_int32),           # 0=ghost miss(负样本), 1=ghost aged-out(正样本)
+        ("reserved", ctypes.c_int32),
+        ("observed_lifetime", ctypes.c_int64),    # 非负生存时长（用于同周期对照）
     ]
 
 # 【修复】将 SharedMemoryData 定义为模块级别的类，以支持 pickle
@@ -1233,9 +1280,6 @@ class SharedMemoryData(ctypes.Structure):
         ("mlp_hidden", ctypes.c_int),
         ("mlp_param_len", ctypes.c_int),
         ("mlp_params", ctypes.c_double * LOH_MLP_MAX_PARAMS),
-        ('segment_mode', ctypes.c_int),
-        ('num_segments', ctypes.c_int),
-        ('segmented_weights', (ctypes.c_double * SHM_WEIGHT_DIM) * 8),
     ]
 
 # 运行时校验 sizeof 与字段偏移（可选，首次导入即打印）
@@ -1305,9 +1349,23 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
         # version -> buffer position 映射（用于快速查找）
         self.version_to_pos = {}  # {state_version: buffer_pos}
+        # buffer position -> version 反向映射，用于环形覆盖时清理旧索引
+        self.pos_to_version = [None] * self.buffer_size
+        # 映射尚未建立时，先按 version 暂存事件，待 add() 建立映射后回放
+        self.pending_events_by_version = {}
+        self.pending_events_total = 0
+        self.pending_events_peak = 0
+        self.latest_mapped_version = 0
+        self.pending_queued = 0
+        self.pending_replayed = 0
+        self.pending_dropped_capacity = 0
+        # 写入统计：total_feedback_written 为写入 replaybuffer 的总反馈数；
+        # add_replayed_written 为由 add() 触发 pending 回放写入的反馈数。
+        self.total_feedback_written = 0
+        self.add_replayed_written = 0
 
         # 【修改】存储原始惩罚数据（每个buffer位置对应一个列表）
-        # penalty_data[pos] = [(eviction_to_access, obj_size), ...]
+        # penalty_data[pos] = [(eviction_to_access, obj_size, event_type, observed_lifetime), ...]
         self.penalty_data = [[] for _ in range(self.buffer_size)]
 
         # 【新增】存储每个位置对应的驱逐统计（用于延迟计算）
@@ -1411,6 +1469,60 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 DEFAULT_LOH_PENALTY_REFINE_ON_LATE == "1",
             )
 
+            # 同周期“平均生存时长 - 错误驱逐距离”差分归一化配置
+            self.penalty_pairwise_normalize = _env_flag(
+                "LOH_PENALTY_PAIRWISE_NORMALIZE",
+                DEFAULT_LOH_PENALTY_PAIRWISE_NORMALIZE == "1",
+            )
+            try:
+                self.penalty_pairwise_norm_base = float(
+                    os.environ.get("LOH_PENALTY_PAIRWISE_NORM_BASE", DEFAULT_LOH_PENALTY_PAIRWISE_NORM_BASE)
+                )
+            except Exception:
+                self.penalty_pairwise_norm_base = float(DEFAULT_LOH_PENALTY_PAIRWISE_NORM_BASE)
+            if self.penalty_pairwise_norm_base <= 0.0:
+                self.penalty_pairwise_norm_base = float(DEFAULT_LOH_PENALTY_PAIRWISE_NORM_BASE)
+
+            try:
+                self.penalty_pairwise_weight = float(
+                    os.environ.get("LOH_PENALTY_PAIRWISE_WEIGHT", DEFAULT_LOH_PENALTY_PAIRWISE_WEIGHT)
+                )
+            except Exception:
+                self.penalty_pairwise_weight = float(DEFAULT_LOH_PENALTY_PAIRWISE_WEIGHT)
+
+            self.reward_candidate_pairwise_only = _env_flag(
+                "LOH_REWARD_CANDIDATE_PAIRWISE_ONLY",
+                DEFAULT_LOH_REWARD_CANDIDATE_PAIRWISE_ONLY == "1",
+            )
+            try:
+                self.reward_candidate_pairwise_event = int(
+                    os.environ.get(
+                        "LOH_REWARD_CANDIDATE_PAIRWISE_EVENT",
+                        DEFAULT_LOH_REWARD_CANDIDATE_PAIRWISE_EVENT,
+                    )
+                )
+            except Exception:
+                self.reward_candidate_pairwise_event = int(
+                    DEFAULT_LOH_REWARD_CANDIDATE_PAIRWISE_EVENT
+                )
+            self.pairwise_immediate_finalize = _env_flag(
+                "LOH_PAIRWISE_IMMEDIATE_FINALIZE",
+                DEFAULT_LOH_PAIRWISE_IMMEDIATE_FINALIZE == "1",
+            )
+            raw_pair_mode = os.environ.get(
+                "LOH_PAIRWISE_REWARD_MODE", DEFAULT_LOH_PAIRWISE_REWARD_MODE
+            )
+            raw_pair_mode = "mean" if raw_pair_mode is None else str(raw_pair_mode).strip().lower()
+            self.pairwise_reward_mode = (
+                raw_pair_mode if raw_pair_mode in {"mean", "tanh", "quantile"} else "mean"
+            )
+            try:
+                self.pairwise_mix_alpha = float(
+                    os.environ.get("LOH_PAIRWISE_MIX_ALPHA", DEFAULT_LOH_PAIRWISE_MIX_ALPHA)
+                )
+            except Exception:
+                self.pairwise_mix_alpha = float(DEFAULT_LOH_PAIRWISE_MIX_ALPHA)
+
             # survival 模式特有参数
             if self.penalty_scale_mode == "survival":
                 try:
@@ -1462,6 +1574,13 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.penalty_reward_formula = "relative"
             self.penalty_empty_as_good = False
             self.penalty_refine_on_late = False
+            self.reward_candidate_pairwise_only = False
+            self.reward_candidate_pairwise_event = int(
+                DEFAULT_LOH_REWARD_CANDIDATE_PAIRWISE_EVENT
+            )
+            self.pairwise_immediate_finalize = False
+            self.pairwise_reward_mode = "mean"
+            self.pairwise_mix_alpha = 0.0
             if LOH_DEBUG_BASIC():
                 print(f"[ReplayBuffer] LOH_ENABLE_PENALTY=0, penalty mechanism disabled")
 
@@ -1544,6 +1663,18 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             self.reward_w_original = float(os.environ.get("LOH_REWARD_W_ORIGINAL", DEFAULT_LOH_REWARD_W_ORIGINAL))
         except Exception:
             self.reward_w_original = float(DEFAULT_LOH_REWARD_W_ORIGINAL)
+        raw_fixed_final_reward = os.environ.get("LOH_FIXED_FINAL_REWARD", DEFAULT_LOH_FIXED_FINAL_REWARD)
+        if raw_fixed_final_reward is None:
+            raw_fixed_final_reward = ""
+        raw_fixed_final_reward = str(raw_fixed_final_reward).strip()
+        self.fixed_final_reward = None
+        if raw_fixed_final_reward != "":
+            try:
+                self.fixed_final_reward = max(-1.0, min(1.0, float(raw_fixed_final_reward)))
+            except Exception:
+                self.fixed_final_reward = None
+        if self.fixed_final_reward is not None:
+            print(f"[LOH_FIXED_FINAL_REWARD] enabled: value={self.fixed_final_reward:.6f}")
         raw_mix_mode = os.environ.get("LOH_REWARD_MIX_MODE", DEFAULT_LOH_REWARD_MIX_MODE)
         raw_mix_mode = "legacy" if raw_mix_mode is None else str(raw_mix_mode).strip().lower()
         self.reward_mix_mode = raw_mix_mode if raw_mix_mode in {"legacy", "gated_penalty_mix"} else "legacy"
@@ -1728,6 +1859,10 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
         注意：reward参数是根据state中的global_features计算的加权命中率
         """
+        def _gc_pending_events() -> None:
+            # 事件触发模式：Python 侧不做 TTL 淘汰，仅由 C 侧反馈 TTL 控制时效。
+            return
+
         # 【性能优化】测量 add 函数的耗时
         add_start = time.perf_counter()
 
@@ -1735,13 +1870,62 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         pos_before = self.pos
         full_before = self.full
 
-        # 记录当前position对应的state_version
-        if len(infos) > 0 and 'state_version' in infos[0]:
-            state_version = infos[0]['state_version']
-            self.version_to_pos[state_version] = pos_before  # 使用add前的pos
+        # 记录当前position对应的决策版本（优先 decision_state_version，避免与 next-state 版本相位差）
+        if len(infos) > 0:
+            decision_version = infos[0].get('decision_state_version', infos[0].get('state_version'))
+            if decision_version is not None:
+                state_version = int(decision_version)
 
-            if LOH_DEBUG_BASIC() and pos_before % 100 == 0:
-                print(f"[ReplayBuffer] Added transition at pos={pos_before}, version={state_version}")
+                # 环形覆盖时，先删除该位置上旧版本的反向索引，避免旧版本误命中到新数据。
+                old_version = self.pos_to_version[pos_before]
+                if old_version is not None:
+                    mapped_pos = self.version_to_pos.get(old_version)
+                    if mapped_pos == pos_before:
+                        self.version_to_pos.pop(old_version, None)
+
+                self.version_to_pos[state_version] = pos_before
+                self.pos_to_version[pos_before] = state_version
+                self.latest_mapped_version = max(self.latest_mapped_version, state_version)
+                _gc_pending_events()
+
+                if LOH_DEBUG_BASIC():
+                    print(
+                        f"[PY-BUF-MAP] decision_version={state_version} -> pos={pos_before}, "
+                        f"latest_mapped={self.latest_mapped_version}"
+                    )
+
+                # 该 version 可能已有先到达的事件，映射建立后立刻回放。
+                pending_events = self.pending_events_by_version.pop(state_version, None)
+                if pending_events:
+                    self.pending_events_total = max(
+                        0, self.pending_events_total - len(pending_events)
+                    )
+                    replayed = 0
+                    for ev in pending_events:
+                        try:
+                            ok = self.retrospective_correct_reward(
+                                state_version,
+                                int(ev[0]),
+                                int(ev[1]),
+                                int(ev[2]),
+                                int(ev[3]),
+                            )
+                            if ok:
+                                replayed += 1
+                        except Exception:
+                            pass
+                    self.pending_replayed += replayed
+                    self.add_replayed_written += replayed
+                    if LOH_DEBUG_BASIC() and replayed > 0:
+                        print(
+                            f"[ReplayBuffer] Replayed pending events: version={state_version}, count={replayed}, "
+                            f"pending_total={self.pending_events_total}, "
+                            f"add_replayed={self.add_replayed_written}, "
+                            f"total_written={self.total_feedback_written}"
+                        )
+
+                if LOH_DEBUG_BASIC():
+                    print(f"[ReplayBuffer] Added transition at pos={pos_before}, version={state_version}")
 
         # 【修改】初始化该位置的惩罚数据和驱逐统计
         # 注意：这是必需的，因为环形buffer会覆盖旧数据
@@ -1761,7 +1945,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         init_end = time.perf_counter()
 
         # 【优化】只在 VERBOSE 模式或每 100 步打印一次（减少日志开销）
-        if LOH_DEBUG_BASIC() or (LOH_DEBUG_BASIC() and pos_before % 100 == 0):
+        if LOH_DEBUG_BASIC():
             # 【优化】直接使用 .item()，因为 SB3 内部已将 reward 转为 numpy 数组
             reward_scalar = reward.item() if hasattr(reward, 'item') else float(reward)
             print(f"[ReplayBuffer] pos={pos_before}, reward={reward_scalar:.6f}, "
@@ -1805,7 +1989,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         if self.pos % 1000 == 0 and LOH_DEBUG_BASIC():
             print(f"📊 [ReplayBuffer] pos={self.pos}, full={self.full}, size={self.size()}")
 
-    def retrospective_correct_reward(self, state_version, eviction_to_access, obj_size):
+    def retrospective_correct_reward(self, state_version, eviction_to_access, obj_size, event_type=0, observed_lifetime=0):
         """
         累积原始惩罚数据（不立即计算最终奖励）
 
@@ -1818,11 +2002,53 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             state_version: 需要修正的状态版本号
             eviction_to_access: 驱逐到访问的距离
             obj_size: 对象大小
+            event_type: 事件类型（0=负样本，1=正样本）
+            observed_lifetime: 非负生存时长（与 event_type 搭配）
         """
-        if state_version not in self.version_to_pos:
+        # 保护：version<=0 视为无效，不进入 pending 或映射流程。
+        if int(state_version) <= 0:
+            try:
+                pair_event = int(getattr(self, "reward_candidate_pairwise_event", 2))
+                if int(event_type) == pair_event:
+                    loh_pairwise_trace(
+                        f"drop_invalid_version version={int(state_version)} event_type={int(event_type)} "
+                        f"evicted_life={int(eviction_to_access)} kept_life={int(observed_lifetime)}"
+                    )
+            except Exception:
+                pass
             if LOH_DEBUG_BASIC():
-                print(f"[ReplayBuffer] Version {state_version} not in buffer (已被覆盖或未存储)")
+                print(f"[ReplayBuffer] Drop invalid version: {state_version}")
             return False
+
+        if state_version not in self.version_to_pos:
+                queued = False
+                bucket = self.pending_events_by_version.get(state_version)
+                if bucket is None:
+                    bucket = []
+                    self.pending_events_by_version[state_version] = bucket
+                bucket.append((eviction_to_access, obj_size, int(event_type), int(observed_lifetime)))
+                self.pending_events_total += 1
+                if self.pending_events_total > self.pending_events_peak:
+                    self.pending_events_peak = self.pending_events_total
+                self.pending_queued += 1
+                queued = True
+
+                try:
+                    pair_event = int(getattr(self, "reward_candidate_pairwise_event", 2))
+                    if int(event_type) == pair_event:
+                        if queued:
+                            loh_pairwise_trace(
+                                f"queue_missing_version version={int(state_version)} event_type={int(event_type)} "
+                                f"evicted_life={int(eviction_to_access)} kept_life={int(observed_lifetime)}"
+                            )
+                except Exception:
+                    pass
+                if LOH_DEBUG_BASIC():
+                    if queued:
+                        print(f"[ReplayBuffer] Version {state_version} not mapped yet, event queued")
+                    else:
+                        print(f"[ReplayBuffer] Version {state_version} not in buffer (已被覆盖或未存储)")
+                return queued
 
         pos = self.version_to_pos[state_version]
 
@@ -1836,7 +2062,24 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         was_finalized = bool(self.reward_finalized[pos])
 
         # 【新增】将原始数据添加到列表中
-        self.penalty_data[pos].append((eviction_to_access, obj_size))  # 记录原始惩罚数据
+        self.penalty_data[pos].append((eviction_to_access, obj_size, int(event_type), int(observed_lifetime)))  # 记录原始惩罚数据
+        self.total_feedback_written += 1
+        mapped_version = self.pos_to_version[pos]
+        if LOH_DEBUG_BASIC():
+            print(
+                f"[PY-EVENT-MAP] penalty_version={int(state_version)} -> pos={int(pos)}, "
+                f"mapped_decision_version={int(mapped_version) if mapped_version is not None else -1}, "
+                f"event_type={int(event_type)}"
+            )
+        try:
+            pair_event = int(getattr(self, "reward_candidate_pairwise_event", 2))
+            if int(event_type) == pair_event:
+                loh_pairwise_trace(
+                    f"recv_event version={int(state_version)} pos={int(pos)} event_type={int(event_type)} "
+                    f"evicted_life={int(eviction_to_access)} kept_life={int(observed_lifetime)}"
+                )
+        except Exception:
+            pass
 
         # 统计（仅收到）
         self.corrected_num += 1
@@ -1860,6 +2103,8 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             print(f"  - state_version: {state_version}")
             print(f"  - eviction_to_access: {eviction_to_access}")
             print(f"  - obj_size: {obj_size}")
+            print(f"  - event_type: {int(event_type)}")
+            print(f"  - observed_lifetime: {int(observed_lifetime)}")
             print(f"  - total penalties at pos: {len(self.penalty_data[pos])}")
             print(f"  - evicted_bytes at pos: {self.evicted_bytes_at_pos[pos]}")
             print(f"  - evicted_count at pos: {self.evicted_count_at_pos[pos]}")
@@ -1872,6 +2117,18 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 self._update_hist(eviction_to_access)
             except Exception:
                 pass
+
+        # 纯 candidate-level pairwise 模式：收到目标事件后立即做单点 finalize，
+        # 避免长窗口或异步时序导致“奖励已接收但最终覆写不可见”。
+        try:
+            pairwise_only = bool(getattr(self, "reward_candidate_pairwise_only", False))
+            pair_event = int(getattr(self, "reward_candidate_pairwise_event", 2))
+            immediate_finalize = bool(getattr(self, "pairwise_immediate_finalize", False))
+            if pairwise_only and immediate_finalize and int(event_type) == pair_event:
+                self.reward_finalized[pos] = False
+                self.compute_final_rewards(pos, pos + 1)
+        except Exception:
+            pass
 
         return True
 
@@ -1919,6 +2176,67 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
         else:
             # 默认倒数
             return 1.0 / max(d, 1.0)
+
+    def _compute_pairwise_signal(self, penalties):
+        """从 penalty 列表中提取 candidate-level pair 事件并计算聚合信号。"""
+        try:
+            pair_event_type = int(getattr(self, "reward_candidate_pairwise_event", 2))
+        except Exception:
+            pair_event_type = 2
+
+        ev_lives = []
+        kp_lives = []
+        terms = []
+
+        for item in penalties:
+            if not isinstance(item, tuple) or len(item) < 4:
+                continue
+            evicted_life, _obj_size_unused, event_type, kept_life = item
+            if int(event_type) != pair_event_type:
+                continue
+            try:
+                ev_life = abs(float(evicted_life))
+                kp_life = abs(float(kept_life))
+            except Exception:
+                continue
+
+            if getattr(self, 'penalty_pairwise_normalize', True):
+                den = max(
+                    1.0,
+                    float(getattr(self, 'penalty_pairwise_norm_base', 500.0)),
+                    ev_life + kp_life,
+                )
+                term = (kp_life - ev_life) / den
+            else:
+                term = kp_life - ev_life
+
+            ev_lives.append(ev_life)
+            kp_lives.append(kp_life)
+            terms.append(float(term))
+
+        pair_count = len(terms)
+        if pair_count == 0:
+            return 0.0, 0
+
+        mode = str(getattr(self, "pairwise_reward_mode", "mean")).lower()
+        if mode == "tanh":
+            signal = math.tanh(float(np.mean(terms)))
+        elif mode == "quantile":
+            qk = float(np.quantile(np.asarray(kp_lives, dtype=np.float64), 0.75))
+            qe = float(np.quantile(np.asarray(ev_lives, dtype=np.float64), 0.25))
+            if getattr(self, 'penalty_pairwise_normalize', True):
+                den = max(
+                    1.0,
+                    float(getattr(self, 'penalty_pairwise_norm_base', 500.0)),
+                    qk + qe,
+                )
+                signal = math.tanh((qk - qe) / den)
+            else:
+                signal = math.tanh(qk - qe)
+        else:
+            signal = float(np.mean(terms))
+
+        return float(signal), int(pair_count)
 
     def _update_hist(self, d: float):
         """survival 模式: 更新距离直方图"""
@@ -2048,7 +2366,7 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             # 如果该周期没有驱逐：penalty 无意义。
             # - no_evict_reward_policy=zero: 强制给 0（旧行为）
             # - 否则：用 original/miss/trend 作为最终 reward，避免把学习信号抹平
-            if evicted_count == 0:
+            if evicted_count == 0 and not getattr(self, 'reward_candidate_pairwise_only', False):
                 mixed = 0.0
                 if getattr(self, 'no_evict_reward_policy', 'keep') == 'zero':
                     mixed = 0.0
@@ -2067,6 +2385,8 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
 
                 final_mixed_pre_clip = float(mixed)
                 final_mixed = max(-1.0, min(1.0, final_mixed_pre_clip))
+                if self.fixed_final_reward is not None:
+                    final_mixed = float(self.fixed_final_reward)
                 self.rewards[pos, 0] = final_mixed
                 self.reward_finalized[pos] = True
                 count_computed += 1
@@ -2076,6 +2396,52 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                     print(f"  🎁 final_reward: {final_mixed:.6f} (no-evict finalize)")
                 continue
 
+            if getattr(self, 'reward_candidate_pairwise_only', False):
+                penalties = self.penalty_data[pos]
+                pair_event_type = int(getattr(self, 'reward_candidate_pairwise_event', 2))
+                pair_signal, raw_penalty_count = self._compute_pairwise_signal(penalties)
+                reward_preclip = float(pair_signal)
+
+                reward_preclip *= float(getattr(self, 'penalty_pairwise_weight', 1.0))
+                final_mixed_pre_clip = float(reward_preclip)
+                final_mixed = max(-1.0, min(1.0, final_mixed_pre_clip))
+                if self.fixed_final_reward is not None:
+                    final_mixed = float(self.fixed_final_reward)
+
+                try:
+                    self.reward_preclip_samples.append(float(final_mixed_pre_clip))
+                    self.reward_final_samples.append(float(final_mixed))
+                except Exception:
+                    pass
+
+                try:
+                    self._last_reward_components = {
+                        'pairwise_only': 1.0,
+                        'pair_event_type': float(pair_event_type),
+                        'pair_count': float(raw_penalty_count),
+                            'pair_mode': 1.0,
+                            'pair_signal': float(pair_signal),
+                        'final': float(final_mixed),
+                        'final_pre_clip': float(final_mixed_pre_clip),
+                        'clip_delta': float(final_mixed - final_mixed_pre_clip),
+                    }
+                except Exception:
+                    pass
+
+                self.rewards[pos, 0] = final_mixed
+                self.reward_finalized[pos] = True
+                count_computed += 1
+
+                if LOH_DEBUG_BASIC() and count_computed <= 5:
+                    print(f"[Reward→Final] 🎯 pos {pos}:")
+                    print(f"  📊 candidate_pair_events: {raw_penalty_count}")
+                    print(f"  🎁 pairwise_only reward: {final_mixed:.6f}")
+                loh_pairwise_trace(
+                    f"finalize_pairwise_only pos={int(pos)} pair_count={int(raw_penalty_count)} "
+                    f"signal={float(pair_signal):.6f} final={float(final_mixed):.6f}"
+                )
+                continue
+
             # 计算加权 penalty（对象惩罚 + 字节惩罚）
             obj_penalty = 0.0
             byte_penalty = 0.0
@@ -2083,37 +2449,66 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
             if getattr(self, 'penalty_cutoff', 0) > 0:
                 try:
                     cutoff = float(self.penalty_cutoff)
-                    # cutoff 只过滤“错误驱逐事件”(d>=0)。
-                    # 正样本事件使用 d<0 sentinel，不应被 cutoff 过滤。
-                    penalties = [(d, s) for (d, s) in penalties if (float(d) < 0.0) or (float(d) <= cutoff)]
+                    # cutoff 只过滤“错误驱逐事件”(d>=0)，并兼容新旧 tuple 结构。
+                    # 新结构: (d, size, event_type, observed_lifetime)
+                    # 旧结构: (d, size)
+                    filtered = []
+                    for item in penalties:
+                        d0 = float(item[0])
+                        if d0 < 0.0 or d0 <= cutoff:
+                            filtered.append(item)
+                    penalties = filtered
                 except Exception:
                     pass
 
             raw_penalty_count = len(penalties)
+            pair_signal_generic, pair_count_generic = self._compute_pairwise_signal(penalties)
 
-            # 统计正样本（d<0）与负样本（d>=0）
+            # 统计正样本（long-lived）与负样本（revisit）
             pos_events = 0
             neg_events = 0
+            pos_lifetime_sum = 0.0
+            neg_lifetime_sum = 0.0
+            pos_lifetime_cnt = 0
+            neg_lifetime_cnt = 0
 
-            for (eviction_to_access, obj_size) in penalties:
+            for item in penalties:
+                # 兼容旧格式：(eviction_to_access, obj_size)
+                if isinstance(item, tuple) and len(item) >= 4:
+                    eviction_to_access, obj_size, event_type, observed_lifetime = item
+                else:
+                    eviction_to_access, obj_size = item
+                    event_type = 1 if float(eviction_to_access) < 0.0 else 0
+                    observed_lifetime = abs(float(eviction_to_access))
+
                 try:
                     d = float(eviction_to_access)
                 except Exception:
                     d = 0.0
+                try:
+                    life = float(observed_lifetime)
+                except Exception:
+                    life = abs(d)
+                if life < 0.0:
+                    life = -life
 
-                # eviction_to_access<0: 正样本事件（ghost 淘汰，期间未被再次访问）
-                if d < 0.0:
+                is_positive = int(event_type) == 1 or d < 0.0
+                if is_positive:
                     pos_events += 1
+                    pos_lifetime_sum += life
+                    pos_lifetime_cnt += 1
                     if self.penalty_trace_all:
                         print(
                             f"[PenaltyTrace][event] pos={pos} type=positive distance={d:.6f} "
-                            f"obj_size={float(obj_size):.6f} evicted_count={int(evicted_count)} "
-                            f"evicted_bytes={float(evicted_bytes):.6f} scale=NA obj_contrib=0.000000 "
-                            f"byte_contrib=0.000000"
+                            f"lifetime={life:.6f} obj_size={float(obj_size):.6f} "
+                            f"evicted_count={int(evicted_count)} evicted_bytes={float(evicted_bytes):.6f} "
+                            f"scale=NA obj_contrib=0.000000 byte_contrib=0.000000"
                         )
                     continue
 
                 neg_events += 1
+                neg_lifetime_sum += life
+                neg_lifetime_cnt += 1
                 pd = self._penalty_scale(d)
                 try:
                     self.scale_samples.append(float(pd))
@@ -2133,28 +2528,39 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 if self.penalty_trace_all:
                     print(
                         f"[PenaltyTrace][event] pos={pos} type=negative distance={d:.6f} "
-                        f"obj_size={float(obj_size):.6f} evicted_count={int(evicted_count)} "
-                        f"evicted_bytes={float(evicted_bytes):.6f} scale={float(pd):.6f} "
-                        f"obj_contrib={float(obj_contrib):.6f} byte_contrib={float(byte_contrib):.6f}"
+                        f"lifetime={life:.6f} obj_size={float(obj_size):.6f} "
+                        f"evicted_count={int(evicted_count)} evicted_bytes={float(evicted_bytes):.6f} "
+                        f"scale={float(pd):.6f} obj_contrib={float(obj_contrib):.6f} "
+                        f"byte_contrib={float(byte_contrib):.6f}"
                     )
 
             # 加权求和 -> penalty（badness）
-            penalty = (self.obj_penalty_weight * obj_penalty +
-                       self.byte_penalty_weight * byte_penalty)
+            penalty_raw = (self.obj_penalty_weight * obj_penalty +
+                           self.byte_penalty_weight * byte_penalty)
+
+            # 同周期相对差：平均正样本生存时长 - 平均负样本可惜距离
+            avg_pos_life = (pos_lifetime_sum / float(pos_lifetime_cnt)) if pos_lifetime_cnt > 0 else 0.0
+            avg_neg_life = (neg_lifetime_sum / float(neg_lifetime_cnt)) if neg_lifetime_cnt > 0 else 0.0
+            pairwise_gap = avg_pos_life - avg_neg_life
+            if getattr(self, "penalty_pairwise_normalize", True):
+                norm_den = max(1.0, float(getattr(self, "penalty_pairwise_norm_base", 500.0)),
+                               avg_pos_life + avg_neg_life)
+                pairwise_term = max(-1.0, min(1.0, pairwise_gap / norm_den))
+            else:
+                pairwise_term = pairwise_gap
+
+            # pairwise_term > 0 代表“该周期里保留下来的对象平均活得更久”，应减轻惩罚
+            pairwise_weight = float(getattr(self, "penalty_pairwise_weight", 1.0))
+            penalty = max(0.0, penalty_raw - pairwise_weight * pairwise_term)
+
             try:
                 self.obj_penalty_samples.append(float(obj_penalty))
                 self.penalty_samples.append(float(penalty))
             except Exception:
                 pass
 
-            # net 公式需要“goodness”项：正样本事件比例
-            # 注意：pos_events 是 ghost-aged-out 的“正样本事件”，不一定与 evicted_count（真实驱逐数）同量级，
-            # 直接用 pos_events/evicted_count 可能 >1，导致 reward 被 clip 饱和，学习信号失真。
-            # 因此用 (pos_events + neg_events) 作为分母，将 good_rate 归一化到 [0,1]。
             total_events = int(pos_events) + int(neg_events)
             good_rate = float(pos_events) / float(total_events) if total_events > 0 else 0.0
-
-            # 记录本次 finalize 实际应用的 penalty
             try:
                 self.applied_penalties.append(float(penalty))
             except Exception:
@@ -2227,7 +2633,10 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                     f"[PenaltyTrace][final] pos={pos} formula={formula} raw_penalty_count={int(raw_penalty_count)} "
                     f"pos_events={int(pos_events)} neg_events={int(neg_events)} good_rate={float(good_rate):.6f} "
                     f"obj_penalty={float(obj_penalty):.6f} byte_penalty={float(byte_penalty):.6f} "
-                    f"penalty={float(penalty):.6f} reward_preclip={float(reward):.6f} final_reward={float(final_reward):.6f}"
+                    f"penalty_raw={float(penalty_raw):.6f} penalty={float(penalty):.6f} "
+                    f"avg_pos_life={float(avg_pos_life):.3f} avg_neg_life={float(avg_neg_life):.3f} "
+                    f"pairwise_gap={float(pairwise_gap):.3f} pairwise_term={float(pairwise_term):.6f} "
+                    f"reward_preclip={float(reward):.6f} final_reward={float(final_reward):.6f}"
                 )
 
             # 更新统计（已应用部分）
@@ -2270,6 +2679,11 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 if getattr(self, 'reward_use_penalty', True) and _pen_ok:
                     penalty_bonus = float(self.reward_w_penalty_delta) * float(gate) * float(penalty_delta)
                 mixed = float(base_reward) + float(penalty_bonus)
+
+                pair_alpha = float(getattr(self, 'pairwise_mix_alpha', 0.0))
+                if pair_alpha != 0.0 and pair_count_generic > 0:
+                    mixed += pair_alpha * float(pair_signal_generic)
+                    mixed_terms.append(('pair', pair_alpha, float(pair_signal_generic)))
             else:
                 # legacy 混合：维持当前行为
                 _pen_ok = (raw_penalty_count > 0) or bool(getattr(self, "penalty_empty_as_good", False))
@@ -2292,8 +2706,15 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                 # 如果 penalty 也没加（例如 raw_penalty_count=0），且其他项都没启用，则回退为 original
                 if not mixed_terms:
                     mixed = float(orig_comp)
+
+                pair_alpha = float(getattr(self, 'pairwise_mix_alpha', 0.0))
+                if pair_alpha != 0.0 and pair_count_generic > 0:
+                    mixed += pair_alpha * float(pair_signal_generic)
+                    mixed_terms.append(('pair', pair_alpha, float(pair_signal_generic)))
             final_mixed_pre_clip = float(mixed)
             final_mixed = max(-1.0, min(1.0, final_mixed_pre_clip))
+            if self.fixed_final_reward is not None:
+                final_mixed = float(self.fixed_final_reward)
             # 保存组件供诊断
             try:
                 self._last_reward_components = {
@@ -2305,6 +2726,13 @@ class RetrospectiveReplayBuffer(ReplayBuffer):
                     'gate': float(gate),
                     'penalty_bonus': float(penalty_bonus),
                     'penalty_delta': float(penalty_delta),
+                    'penalty_raw': float(penalty_raw),
+                    'avg_pos_life': float(avg_pos_life),
+                    'avg_neg_life': float(avg_neg_life),
+                    'pairwise_gap': float(pairwise_gap),
+                    'pairwise_term': float(pairwise_term),
+                    'pair_signal_generic': float(pair_signal_generic),
+                    'pair_count_generic': float(pair_count_generic),
                     'final': float(final_mixed),
                     'final_pre_clip': float(final_mixed_pre_clip),
                     'clip_delta': float(final_mixed - final_mixed_pre_clip),
@@ -2793,6 +3221,20 @@ class LohEnv(gym.Env):
                 pass
         self._reward_use_penalty = bool(self._enable_penalty)
 
+        # 固定最终reward常量（空字符串表示关闭）。
+        raw_fixed_final_reward = os.environ.get("LOH_FIXED_FINAL_REWARD", DEFAULT_LOH_FIXED_FINAL_REWARD)
+        if raw_fixed_final_reward is None:
+            raw_fixed_final_reward = ""
+        raw_fixed_final_reward = str(raw_fixed_final_reward).strip()
+        self.fixed_final_reward = None
+        if raw_fixed_final_reward != "":
+            try:
+                self.fixed_final_reward = max(-1.0, min(1.0, float(raw_fixed_final_reward)))
+            except Exception:
+                self.fixed_final_reward = None
+        if self.fixed_final_reward is not None:
+            print(f"[LOH_FIXED_FINAL_REWARD] enabled: value={self.fixed_final_reward:.6f}")
+
         # reward 组件开关（用于 enable_penalty=0 时的 miss / trend 即时奖励，或 enable_penalty=1 时的复合配置）
         self._reward_use_missratio = _env_flag("LOH_REWARD_USE_MISSRATIO", DEFAULT_LOH_REWARD_USE_MISSRATIO == "1")
         self._reward_use_missratiotrend = _env_flag("LOH_REWARD_USE_MISSRATIOTREND", DEFAULT_LOH_REWARD_USE_MISSRATIOTREND == "1")
@@ -3114,7 +3556,7 @@ class LohEnv(gym.Env):
                     p = penalties[i]
                     print(f"[Python←C]   📋 penalty[{i}]: version={p.penalty_version}, "
                           f"evict_to_access={p.eviction_to_access}, "
-                          f"size={p.obj_size}, obj_id={p.obj_id}")
+                          f"size={p.obj_size}, obj_id={p.obj_id}, type={getattr(p, "event_type", 0)}, lifetime={getattr(p, "observed_lifetime", abs(p.eviction_to_access))}")
                 if len(penalties) > 5:
                     print(f"[Python←C]   ... ({len(penalties) - 5} more penalties)")
 
@@ -3337,8 +3779,9 @@ class LohEnv(gym.Env):
 
         if fixed_obs is not None:
             self._fixed_obs = fixed_obs
-            if LOH_DEBUG_BASIC():
-                print(f"[LOH_FIXED_OBS] Enabled in reset(): mode={LOH_FIXED_OBS_MODE}, obs_shape={fixed_obs.shape}")
+            if not getattr(self, "_fixed_obs_banner_printed", False):
+                print(f"[LOH_FIXED_OBS] enabled: mode={LOH_FIXED_OBS_MODE}, obs_shape={fixed_obs.shape}")
+                self._fixed_obs_banner_printed = True
             return self._fixed_obs, {}
 
         return initial_observation, {}
@@ -3538,6 +3981,20 @@ class LohEnv(gym.Env):
 
             self.current_step += 1
 
+            # 敏感性实验开关（按环境变量控制）
+            exp_action_noise = _env_flag("LOH_EXP_ACTION_NOISE", False)
+            exp_action_noise_sigma = _env_float("LOH_EXP_ACTION_NOISE_SIGMA", 0.05)
+            exp_state_shuffle = _env_flag("LOH_EXP_STATE_SHUFFLE", False)
+            exp_reward_invert = _env_flag("LOH_EXP_REWARD_INVERT", False)
+
+            # 实验A：对策略动作加高斯噪声
+            if exp_action_noise:
+                action_arr = np.asarray(action, dtype=np.float32)
+                noise = np.random.normal(0.0, float(exp_action_noise_sigma), size=action_arr.shape).astype(np.float32)
+                action = (action_arr + noise).astype(np.float32)
+                if LOH_DEBUG_BASIC():
+                    print(f"[EXPERIMENT] action_noise enabled: sigma={float(exp_action_noise_sigma):.4f}")
+
             # additive phases（互斥求和）临时变量
             _dur_softmax = 0.0
             _dur_read_shm0 = 0.0
@@ -3555,10 +4012,6 @@ class LohEnv(gym.Env):
                 action_start = get_monotonic_time()
                 action_np = np.asarray(action, dtype=np.float32)
                 action_np_scaled = action_np * float(self._action_scale)
-                orig_action_np = action_np_scaled.copy()
-                if LOH_SEGMENT_MODE > 0:
-                    per_segment_dim = len(orig_action_np) // LOH_NUM_SEGMENTS
-                    action_np_scaled = orig_action_np[:per_segment_dim]
 
                 if LOH_DEBUG_BASIC():
                     action_logits_fmt = ", ".join([
@@ -3664,6 +4117,15 @@ class LohEnv(gym.Env):
                     except Exception:
                         pass
 
+                # 强制 mask: 与 C 端 LOH_USE_FREQ_* 开关对齐，关闭的 compound 维度清零
+                if LOH_SCORE_USE_COMPOUND:
+                    if not LOH_USE_FREQ_REC:
+                        weights[3] = 0.0
+                    if not LOH_USE_FREQ_SIZE:
+                        weights[4] = 0.0
+                    if not LOH_USE_REC_SIZE:
+                        weights[5] = 0.0
+
                 action_end = get_monotonic_time()
             _dur_softmax = float(action_end - action_start)
 
@@ -3745,13 +4207,6 @@ class LohEnv(gym.Env):
                             weight_write_start = get_monotonic_time()
                             for i in range(SHM_WEIGHT_DIM):
                                 current.weights[i] = float(weights[i]) if i < len(weights) else 0.0
-                            if LOH_SEGMENT_MODE > 0:
-                                current.segment_mode = LOH_SEGMENT_MODE
-                                current.num_segments = LOH_NUM_SEGMENTS
-                                for s in range(LOH_NUM_SEGMENTS):
-                                    seg_w = orig_action_np[s*per_segment_dim : (s+1)*per_segment_dim]
-                                    for i in range(min(len(seg_w), SHM_WEIGHT_DIM)):
-                                        current.segmented_weights[s][i] = float(seg_w[i])
 
                             # 可选：写入 MLP 参数（仅在 LOH_SCORE_MODEL=mlp 时启用）
                             if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
@@ -3810,6 +4265,19 @@ class LohEnv(gym.Env):
                                 if active_dim > 0
                                 else ""
                             )
+                            if not getattr(self, "_first_weight_logged_config", False):
+                                if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
+                                    head = ", ".join([f"{float(mlp_params[i]):.6f}" for i in range(min(6, len(mlp_params)))])
+                                    loh_print_config(
+                                        f"[LOH CONFIG] FIRST_WEIGHTS_SENT: seq={acked_version} model=mlp "
+                                        f"param_len={int(LOH_MLP_PARAM_DIM)} head=[{head}]"
+                                    )
+                                else:
+                                    loh_print_config(
+                                        f"[LOH CONFIG] FIRST_WEIGHTS_SENT: seq={acked_version} "
+                                        f"dim={active_dim}/{SHM_WEIGHT_DIM} [{ack_active_fmt}]"
+                                    )
+                                self._first_weight_logged_config = True
                             if LOH_DEBUG_BASIC():
                                 if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
                                     head = ", ".join([f"{float(mlp_params[i]):.6f}" for i in range(min(6, len(mlp_params)))])
@@ -4035,6 +4503,19 @@ class LohEnv(gym.Env):
         new_state_full = np.array(data.state, dtype=np.float32)
         new_observation_raw = new_state_full[:STATE_DIM]
 
+        # 实验B：状态置乱（从历史状态中随机抽样替换当前观测）
+        if exp_state_shuffle:
+            if not hasattr(self, "_exp_state_shuffle_buf"):
+                self._exp_state_shuffle_buf = []
+            if len(self._exp_state_shuffle_buf) > 0:
+                _idx = int(np.random.randint(0, len(self._exp_state_shuffle_buf)))
+                new_observation_raw = np.array(self._exp_state_shuffle_buf[_idx], dtype=np.float32)
+                if LOH_DEBUG_BASIC():
+                    print(f"[EXPERIMENT] state_shuffle enabled: sampled_idx={_idx}, buf_size={len(self._exp_state_shuffle_buf)}")
+            self._exp_state_shuffle_buf.append(np.array(new_state_full[:STATE_DIM], dtype=np.float32))
+            if len(self._exp_state_shuffle_buf) > 4096:
+                self._exp_state_shuffle_buf = self._exp_state_shuffle_buf[-4096:]
+
         # 打印原始状态，与 C 端保持一致便于调试
         state_version = int(data.state_version)
         if LOH_DEBUG_BASIC():
@@ -4239,16 +4720,25 @@ class LohEnv(gym.Env):
                     eviction_to_access = int(penalty_entry.eviction_to_access)
                     obj_size = int(penalty_entry.obj_size)
                     obj_id = int(penalty_entry.obj_id)
+                    event_type = int(getattr(penalty_entry, "event_type", 0))
+                    observed_lifetime = int(getattr(penalty_entry, "observed_lifetime", abs(eviction_to_access)))
 
                     if LOH_DEBUG_BASIC():
                         print(f"[step→Process] 📋 Penalty #{i+1}: version={penalty_version}, "
                               f"evict_to_access={eviction_to_access}, "
                               f"size={obj_size}, obj_id={obj_id}")
 
+                    if LOH_DEBUG_BASIC() and replay_buffer is not None and hasattr(replay_buffer, 'latest_mapped_version'):
+                        print(
+                            f"[PY-PENALTY-RECV] penalty_version={penalty_version}, "
+                            f"latest_mapped_version={int(replay_buffer.latest_mapped_version)}"
+                        )
+
                     # 如果 replay buffer 存在，累积惩罚数据
                     if replay_buffer is not None and hasattr(replay_buffer, 'retrospective_correct_reward'):
                         success = replay_buffer.retrospective_correct_reward(
-                            penalty_version, eviction_to_access, obj_size)
+                            penalty_version, eviction_to_access, obj_size,
+                            event_type, observed_lifetime)
                         if success:
                             if LOH_DEBUG_BASIC():
                                 print(f"[step→Process] ✅ Accumulated for version {penalty_version}")
@@ -4312,6 +4802,16 @@ class LohEnv(gym.Env):
                 print(f"[Step {self.current_step}] EMA smoothed reward (window={len(self._reward_ema_history)}): "
                       f"{reward_before_ema:.6f} -> {reward:.6f}")
 
+        # 可选：固定最终 reward 常量（无 penalty 场景也生效）
+        if self.fixed_final_reward is not None and not self._enable_penalty:
+            reward = float(self.fixed_final_reward)
+
+        # 实验C：奖励符号反转
+        if exp_reward_invert:
+            reward = -float(reward)
+            if LOH_DEBUG_BASIC():
+                print("[EXPERIMENT] reward_invert enabled: reward sign flipped")
+
         # 9. 检查终止条件
         terminated = (data.terminate == 1)
         # 【改进】移除truncated，连续运行不reset
@@ -4321,14 +4821,17 @@ class LohEnv(gym.Env):
             if LOH_DEBUG_BASIC():
                 print(f"[Step {self.current_step}] Episode ending - terminated by C-side signal")
 
-        # 10. 返回信息（包含state_version用于ReplayBuffer映射）
+        # 10. 返回信息（包含决策版本与新状态版本，用于ReplayBuffer映射与调试）
         info = {
             'step': self.current_step,
             'obj_hit_ratio': obj_hit_ratio,  # 始终来自原始观测
             'byte_hit_ratio': byte_hit_ratio,  # 始终来自原始观测
             'total_evicted_bytes': total_evicted_bytes,  # 【新增】驱逐统计
             'total_evicted_count': total_evicted_count,  # 【新增】驱逐统计
-            'state_version': int(data.state_version),  # 【新增】用于ReplayBuffer追踪
+            # 决策版本：本次动作应用到的状态版本（与 C 侧 penalty_version 语义对齐）
+            'decision_state_version': int(acked_version),
+            # 新状态版本：动作生效后 C 侧返回的新状态版本（保留用于诊断）
+            'state_version': int(data.state_version),
             'weights': weights.copy(),  # 保存本次写入的权重，供ReplayBuffer记录和后续分析
             'state_missratiotrend_mode': self._state_trend_mode if self._state_use_missratiotrend else 'disabled',
         }
@@ -4388,7 +4891,16 @@ class LohEnv(gym.Env):
         self._current_weights = weights.copy()
 
         if LOH_INCLUDE_WEIGHTS_IN_OBS:
-            new_observation = np.concatenate([new_observation, weights[:ACTION_DIM].astype(np.float32)])
+            if LOH_SCORE_MODEL in {"mlp", "nn"} and mlp_params is not None:
+                # MLP 模式：obs 包含 MLP 参数（ACTION_DIM 维）
+                obs_weights = mlp_params[:ACTION_DIM].astype(np.float32)
+                if len(obs_weights) < ACTION_DIM:
+                    obs_weights = np.pad(obs_weights, (0, ACTION_DIM - len(obs_weights)))
+            else:
+                obs_weights = weights[:ACTION_DIM].astype(np.float32)
+                if len(obs_weights) < ACTION_DIM:
+                    obs_weights = np.pad(obs_weights, (0, ACTION_DIM - len(obs_weights)))
+            new_observation = np.concatenate([new_observation, obs_weights])
 
         # 若启用固定观测模式，则将返回给RL的观测替换为常数向量
         if LOH_FIXED_OBS_MODE == 1:
@@ -4400,12 +4912,13 @@ class LohEnv(gym.Env):
         else:
             obs_out = new_observation
 
-        #打印obs
+        #打印obs和reward
         if LOH_DEBUG_BASIC():
             obs_fmt = np.array2string(
                 obs_out, precision=6, separator=", ", suppress_small=False, max_line_width=1000000
             )
             print(f"[Step {self.current_step}] Observation returned to RL agent: {obs_fmt}")
+            print(f"[Step {self.current_step}] Reward returned to RL agent: {reward}")
             print("=" * 50)
         return obs_out, reward, terminated, truncated, info
 
@@ -5043,6 +5556,12 @@ def main():
     )
     print(f"  LOH_ENABLE_PROFILING: {'1 (enabled)' if LOH_ENABLE_PROFILING else '0 (disabled)'}")
     print(f"  LOH_ASYNC_TRAIN: {'1 (enabled - background thread training)' if LOH_ASYNC_TRAIN else '0 (disabled - synchronous)'}")
+    print(
+        f"  EXPERIMENTS: ACTION_NOISE={_envb('LOH_EXP_ACTION_NOISE', '0')} "
+        f"SIGMA={_envb('LOH_EXP_ACTION_NOISE_SIGMA', '0.05')} "
+        f"STATE_SHUFFLE={_envb('LOH_EXP_STATE_SHUFFLE', '0')} "
+        f"REWARD_INVERT={_envb('LOH_EXP_REWARD_INVERT', '0')}"
+    )
 
     # IPC 相关环境变量
     print("=== IPC Config ===")
@@ -5097,6 +5616,10 @@ def main():
     # 奖励配置
     print("=== Reward Config ===")
     enable_penalty = _envb('LOH_ENABLE_PENALTY', DEFAULT_LOH_ENABLE_PENALTY) == '1'
+    if not enable_penalty:
+        exclude_recent_steps = 0
+        if LOH_DEBUG_CONFIG_ENABLED():
+            print("[LOH CONFIG] Penalty disabled -> forcing LOH_EXCLUDE_RECENT_STEPS=0")
     if enable_penalty:
         _pen_mode = _envb('LOH_PENALTY_MODE', _envb('LOH_PENALTY_SCALE', DEFAULT_LOH_PENALTY_SCALE))
         _pen_formula = _envb('LOH_PENALTY_REWARD_FORMULA', DEFAULT_LOH_PENALTY_REWARD_FORMULA).strip().lower()

@@ -24,9 +24,18 @@ static void train_xgboost(cache_t *cache) {
   learner_t *learner = &params->learner;
 
   if (learner->n_train != 0) {
-    safe_call(XGBoosterFree(learner->booster));
-    safe_call(XGDMatrixFree(learner->train_dm));
-    safe_call(XGDMatrixFree(learner->valid_dm));
+    if (learner->booster != NULL) {
+      safe_call(XGBoosterFree(learner->booster));
+    }
+    if (learner->train_dm != NULL) {
+      safe_call(XGDMatrixFree(learner->train_dm));
+    }
+    if (learner->valid_dm != NULL) {
+      safe_call(XGDMatrixFree(learner->valid_dm));
+    }
+    learner->booster = NULL;
+    learner->train_dm = NULL;
+    learner->valid_dm = NULL;
   }
 
   prepare_training_data(cache);

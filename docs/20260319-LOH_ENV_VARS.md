@@ -172,6 +172,36 @@ $$
 	- 作用：切换 size 组织结构（bucket vs heap）。
 	- 影响：影响候选检索复杂度与缓存分布适配。
 
+### 5.2 CMA-ES 在线优化参数（C 端）
+
+- `LOH_ENABLE_CMAES`
+	- 作用：开启 C 侧 CMA-ES 在线优化。
+	- 默认：`0`（关闭）。
+
+- `LOH_CMAES_ALGO`
+	- 作用：选择 CMA-ES 算法族（如 `default/cmaes`、`abipop`、`sep`、`vd` 等）。
+	- 默认：`abipop`。
+
+- `LOH_CMAES_LAMBDA`
+	- 作用：种群大小。
+	- 默认：`10`（有效范围由代码约束为 `[2, 64]`）。
+
+- `LOH_CMAES_INIT_MEAN`
+	- 作用：初始化均值。
+	- 默认：`0.5`（运行时会夹紧到 `[0,1]`）。
+
+- `LOH_CMAES_INIT_SIGMA`
+	- 作用：初始化步长。
+	- 默认：`0.2`（运行时最小值 `0.01`）。
+
+- `LOH_CMAES_FEEDBACK`
+	- 作用：tell 阶段反馈指标（`miss` / `byte` / `weighted` / `abg_delta`）。
+	- 默认：`weighted`。
+
+- `LOH_CMAES_FEEDBACK_ALPHA` / `LOH_CMAES_FEEDBACK_BETA` / `LOH_CMAES_FEEDBACK_GAMMA`
+	- 作用：`abg_delta` 反馈模式下的系数。
+	- 默认：均为 `1.0`。
+
 ## 6. 特征归一化与自动模式
 
 - `LOH_ENABLE_FEATURE_NORMALIZATION`
@@ -560,7 +590,7 @@ bash scripts/test_loh_rl_sb3.sh <trace_path>
 | LOH_TREND_MODE | slope | trend 通用模式 | slope/delta |
 | LOH_REWARD_EMA | 0 | 是否启用奖励 EMA | 降低高频噪声 |
 | LOH_REWARD_EMAWINDOW | 10 | 奖励 EMA 窗口 | 平滑强度 |
-| LOH_MISS_RATIO_WEIGHT | 1.0 | miss 相关权重因子 | 对 OMR/BMR 组合有影响 |
+| LOH_MISS_RATIO_WEIGHT | 0.7 | miss 相关权重因子 | 对 OMR/BMR 组合有影响 |
 | LOH_RL_ALGO | SAC | RL 算法选择 | SAC/PPO/PPO_LSTM/TD3 等 |
 | LOH_ASYNC_TRAIN | 1 | 异步训练开关 | 吞吐与稳定性权衡 |
 | LOH_EXCLUDE_RECENT_STEPS | 2000 | 排除最近样本 | off-policy 采样稳定性 |

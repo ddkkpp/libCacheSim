@@ -1,11 +1,13 @@
 # Copilot 对话行为指令
 
-不要终止对话而是call ask_user。修改的时候需要在copilot界面看得到修改的地方。
+完成后call vscode_askQuestions（提供空白选项），等待程序运行结果时采取后台等待，前台call vscode_askQuestions。
+只用 Copilot 补丁工具改源码/文档，不再用终端脚本直接改内容。
+记住有待运行的任务时永远不要编译覆盖原来的版本
 
 只用可视化编辑方式改文件（通过编辑补丁），不再用终端脚本直接改源码。这样 Copilot 对话框会显示“已更改 N 个文件”，并且每处修改都能看到“保留/撤销”
 
 每个 terminal command 旁边都要写注释，说明命令、参数、选项的意义。
-命令日志保存在本项目 tmp 目录，日志名不要出现 $。
+命令日志保存在本项目 tmp 目录，日志名不要出现 $.
 实验测试必须后台运行，避免误关闭终端导致实验中断。
 
 # Copilot Instructions for libCacheSim
@@ -42,16 +44,8 @@
 
 ## 3. 运行与构建约定
 
-- Debug 构建（全量 clean）: bash scripts/debug.sh -c
-- Debug 构建（增量 rebuild）: bash scripts/debug.sh
-- Release 构建（全量 clean）: bash scripts/debug.sh -r -c
-- Release 构建（增量 rebuild）: bash scripts/debug.sh -r
-- Debug 构建（按特征宏）: 在执行 debug.sh 前先导出 LOH_INCLUDE_* / LOH_FEATURE_* / LOH_SCORE_* 等环境变量
-- Debug/Release 构建产物目录：_build_dbg/（Debug）、_build_rel/（Release）；历史或兼容构建目录可能为 _build/
-- 核心 RL 执行脚本: scripts/test_loh_rl_sb3.sh
-- sweep 入口脚本: scripts/sweep_loh_rl_sb3.sh
-
-说明：构建/测试/批量实验前必须 Ask_User。
+- 本章已移动并整合到文末“## 10. 实验运行与构建整合章（原 3/10/11）”。
+- 说明：构建/测试/批量实验前必须 Ask_User。
 
 ## 4. 日志与产物规范
 
@@ -125,26 +119,93 @@
 - random/、.tmp/: 临时或草稿目录。
 - _build/、_build_dbg/、_build_rel/: 构建产物目录。
 
-## 10. 本机运行环境注意事项（必须遵守）
+## 10. 实验运行与构建整合章（原 3/10/11）
+
+### 10.1 运行前环境（必须遵守）
 
 - 必须在项目 venv 中运行 Python 相关流程（推荐：`PATH="$PWD/.venv/bin:$PATH"`）。
 	原因：系统 Python 启用 PEP 668 外部管理策略，`pip install --user` 会被拒绝，且易出现依赖版本漂移。
-
+- `PATH` 与 `LD_LIBRARY_PATH` 作用不同：
+	- `PATH` 决定“找哪个可执行文件”（如 python、bash）。
+	- `LD_LIBRARY_PATH` 决定“运行时找哪些动态库 .so”（如 libcmaes/xgboost/lightgbm）。
 - 必须保证以下 Python 依赖在 venv 可导入：`gymnasium`、`stable-baselines3`、`tensorboard`、`tqdm`、`rich`。
 	原因：缺任一包会导致 AC 进程在启动或 callback 初始化阶段提前退出，C 端随后会误判为通信异常。
-
-- 运行 cachesim 时必须确保动态库搜索路径包含 xgboost/lightgbm 所在目录（本机通常为 `/usr/local/lib`），建议：
-	`LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"`。
-	原因：否则会出现 `libxgboost.so.3` / `lib_lightgbm.so` 加载失败，cachesim 启动即退出。
-
-- 默认构建模式使用 Release（`LOH_BUILD_RELEASE` 默认按 1 处理），并优先使用 `_build_rel/bin/cachesim`。
-	原因：与当前实验基线一致，性能与日志行为更稳定；Debug 构建仅用于问题定位。
-
-- 实验测试统一后台运行，且命令日志写入 `tmp/`。
-	原因：避免终端中断导致长任务丢失，并保留可追溯的完整执行证据。
-
-- 本机常用 trace 绝对路径（优先使用，避免工作区缺少 `data/` 软链接导致路径失效）：
+- 运行 cachesim 时必须确保动态库搜索路径包含 libcmaes/xgboost/lightgbm，建议：
+	`LD_LIBRARY_PATH="/home/丁坤鹏/libcmaes/build/src:/usr/local/lib:${LD_LIBRARY_PATH:-}"`。
+	原因：否则会出现 `libcmaes.so.0` / `libxgboost.so.3` / `lib_lightgbm.so` 加载失败。
+- **每次切换配置或启动新实验必须使用干净 shell**，避免残留环境变量污染结果。
+	推荐方式：`env -i HOME="$HOME" PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" LD_LIBRARY_PATH="/home/丁坤鹏/libcmaes/build/src:/usr/local/lib" <命令>`
+	原因：LOH 有大量 `LOH_*` 环境变量（如 `LOH_ADAPTIVE_BUDGET_LOG`），若上一次 export 未 unset，会静默改变行为。
+	已观察到的问题：`LOH_ADAPTIVE_BUDGET_LOG=1` 残留导致 ADAPTIVE 日志意外输出。
+- 本机常用 trace 绝对路径（优先使用）：
 	- `/mnt/serverpool/dingkp_trace/tencentBlock/v2/else/tencentBlock_1063.oracleGeneral.zst`
 	- `/mnt/serverpool/dingkp_trace/wiki/wiki_2019t.oracleGeneral.zst`
 	- `/mnt/serverpool/dingkp_trace/metaCDN/meta_reag.oracleGeneral.zst`
-	原因：当前机器上多仓库并存，部分仓库不含 `data/` 目录；统一绝对路径可减少“Trace file not found”误报并提高复现实验稳定性。
+
+### 10.2 构建与产物约定
+
+- Debug 构建（全量 clean）: `bash scripts/debug.sh -c`
+- Debug 构建（增量 rebuild）: `bash scripts/debug.sh`
+- Release 构建（全量 clean）: `bash scripts/debug.sh -r -c`
+- Release 构建（增量 rebuild）: `bash scripts/debug.sh -r`
+- 构建产物目录：`_build_dbg/`（Debug）、`_build_rel/`（Release）；历史兼容目录可能为 `_build/`。
+- 默认构建模式使用 Release，并优先使用 `_build_rel/bin/cachesim`。
+
+### 10.3 场景分流（CMA-ES 与 RL）
+
+- 只验证 CMA-ES（C 侧优化）时：必须直接使用 `_build_rel/bin/cachesim`，不要使用 `scripts/test_loh_rl_sb3.sh`。
+	原因：`test_loh_rl_sb3.sh` 是 Python+cache 双进程流程，会引入不必要的 RL 链路。
+- 需要 RL 训练/推理或做 CMA-ES vs RL 对照时：使用 `scripts/test_loh_rl_sb3.sh`（或等价双进程流程）。
+
+### 10.4 并行与长任务防护
+
+- 并行运行 `scripts/test_loh_rl_sb3.sh` 时必须设置 `LOH_PARALLEL_SAFE=1`。
+- 并行 case 必须显式设置不同 `RUN_TIMESTAMP`（或至少错开 1 秒以上启动）。
+- 并行实验必须为每个 case 分配不同 `LOH_SHM_KEY`。
+- 设置 `LOH_SKIP_BUILD=1` 前，必须确认目标构建产物已存在且与运行模式一致。
+- 修改 `LOH_INCLUDE_*` / 共享内存结构，必须重新编译并做 C/Python 维度一致性核对。
+- 实验任务统一后台运行，并把命令日志写入 `tmp/YYYYMMDD-<name>/logs/`。
+- 启动后必须做“活性双检”：进程存在 + 日志文件持续增长。
+
+### 10.5 示例命令（可直接复用）
+
+- Release 增量编译：
+	- `export LOH_BUILD_RELEASE=1`
+	- `bash scripts/debug.sh -r`
+
+- 以下参数/改动必须先重编译，不能直接“边跑边改”生效：
+	- `LOH_INCLUDE_*`（会改变状态维度/共享内存布局）
+	- `LOH_ENABLE_PENALTY` 及与 penalty 结构相关的编译期开关
+	- `LOH_DEBUG_LEVEL`（编译期宏）
+	- C/Python 共享内存结构字段、维度、顺序
+	- 任何 `LOH.c` / 相关 C/C++ 源码改动
+
+- CMA-ES-only 示例（不启 RL，最简命令）：
+	- `export LD_LIBRARY_PATH="/home/丁坤鹏/libcmaes/build/src:/usr/local/lib:${LD_LIBRARY_PATH:-}"`
+	- `export LOH_ENABLE_CMAES=1`
+	- `export LOH_ENABLE_RL=0`
+	- `_build_rel/bin/cachesim /mnt/serverpool/dingkp_trace/tencentBlock/v2/else/tencentBlock_1063.oracleGeneral.zst oracleGeneral LOH 0.1 --num-req=0`
+	- 以下变量已是代码默认值，无需显式设置：
+	  - `LOH_RANDOM_CANDIDATES=128`（随机候选数，代码默认 128；对应 MR+BMR 综合最优 r128_s16）
+	  - `LOH_STRUCTURED_CANDIDATES=16`（结构化候选数，代码默认 16；对应 r128_s16）
+	  - `LOH_MIN_CAND_PER_FEATURE=1`（每特征最低候选配额，代码默认 1；可 sweep 1/2/4）
+	  - `LOH_CMAES_ALGO=aipop`（默认算法，代码默认 aIPOP_CMAES）
+	  - `LOH_CMAES_ASYNC=1`（异步 CMA-ES 线程，默认开启）
+	  - `LOH_BATCH_EVICT_SIZE=16`（批量驱逐，代码默认 16）
+	  - `LOH_CMAES_FEEDBACK=weighted`（反馈模式，代码默认 mode=2=weighted）
+	  - `LOH_FEATURE_LOG1P=1`（log1p 特征变换，代码默认 1）
+	  - `LOH_SCORE_USE_COMPOUND=1`（复合评分，代码默认 1）
+	  - `LOH_AUTO_COMPOUND=1`（自适应 compound 特征检测，代码默认 1=开启；warmup 后自动决定 freq_rec/freq_size/rec_size 开关）
+	  - `LOH_SCORE_USE_IRT=0`（IRT 评分关闭，代码默认 0）
+	  - `LOH_DEBUG_LEVEL=0`（无 debug 输出，代码默认 0）
+	  - `LOH_PERF_PROFILING=0`（编译期宏，当前 release 已设为 0）
+
+- RL 示例（Python + cachesim 双进程）：
+	- `export PATH="$PWD/.venv/bin:$PATH"`
+	- `export LD_LIBRARY_PATH="/home/丁坤鹏/libcmaes/build/src:/usr/local/lib:${LD_LIBRARY_PATH:-}"`
+	- `export LOH_BUILD_RELEASE=1`
+	- `export LOH_ENABLE_RL=1`
+	- `export LOH_ENABLE_CMAES=0`
+	- `export LOH_SKIP_BUILD=1`
+	- `export LOH_SKIP_PIP_INSTALL=1`
+	- `bash scripts/test_loh_rl_sb3.sh /mnt/serverpool/dingkp_trace/tencentBlock/v2/else/tencentBlock_1063.oracleGeneral.zst 0.1`

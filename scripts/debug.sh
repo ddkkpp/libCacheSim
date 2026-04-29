@@ -87,7 +87,13 @@ echo "Configuring and building project in ${BUILD_MODE} mode..."
 #   - LOH_INCLUDE_REQUEST              (0/1) - 最近请求历史 (REQUEST_HISTORY_LEN×6 维)
 #   - LOH_DEBUG_LEVEL                  (0/1/2/3/4) - 调试级别
 # 注：前2维(hit_ratio, byte_hit_ratio)始终传递，不再通过宏控制
-# 如果未设置，则使用 C 源码中的默认值。
+# 如果未设置，LOH_DEBUG_LEVEL 默认使用 0；其余宏使用 C 源码默认值。
+
+if [ -z "${LOH_DEBUG_LEVEL:-}" ]; then
+	LOH_DEBUG_LEVEL=0
+	export LOH_DEBUG_LEVEL
+	echo "[debug.sh] LOH_DEBUG_LEVEL is unset; defaulting to 0"
+fi
 
 LOH_DEFS=""
 if [ -n "${LOH_INCLUDE_CACHE_FEATURES:-}" ]; then
@@ -132,6 +138,11 @@ fi
 if [[ ${BUILD_RELEASE} -eq 1 ]]; then
 	C_FLAGS="-O2 -DNDEBUG -DG_DISABLE_ASSERT -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable${LOH_DEFS}"
 	CXX_FLAGS="-O2 -DNDEBUG -DG_DISABLE_ASSERT -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable${LOH_DEFS}"
+	if [ "${LOH_DISABLE_WERROR:-0}" = "1" ]; then
+		C_FLAGS+=" -Wno-error"
+		CXX_FLAGS+=" -Wno-error -Wno-error=cast-user-defined -Wno-error=array-bounds"
+		echo "[debug.sh] LOH_DISABLE_WERROR=1: relaxing warnings-as-errors for Release build"
+	fi
 else
 	C_FLAGS="-Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wpedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wstrict-prototypes -Wold-style-definition -Wredundant-decls -Wnested-externs -Wmissing-include-dirs${LOH_DEFS}"
 	CXX_FLAGS="-Wall -Wextra -Werror -Wno-error=cast-user-defined -Wno-error=array-bounds -Wno-deprecated-copy -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-pedantic -Wformat=2 -Wformat-security -Wshadow -Wwrite-strings -Wmissing-include-dirs${LOH_DEFS}"

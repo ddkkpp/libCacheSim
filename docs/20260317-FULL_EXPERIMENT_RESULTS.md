@@ -1936,6 +1936,7 @@ LOH_ADAPTIVE_NORM_WARMUP=8192
 4. 与本章无关，但是容易犯的错误：skip_build，但是只编译了dbg没有编译rel而且使用的是rel
 5. 注意修改LOH_include*的状态后，需要重新编译，注意双方共享内存是否一致
 6. 后台运行，以免vscode闪退关闭终端
+7. 并行时shm_key要不同，避免共享内存冲突
 
 对应证据：
 

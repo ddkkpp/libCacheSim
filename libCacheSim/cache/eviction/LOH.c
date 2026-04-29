@@ -22,9 +22,9 @@
 //   个值时第 7 个默认为 0。
 //                            默认: 未设置（使用编译时内置默认权重
 //                                   LOH / LOH-mr-blocked 均为 [1,0,0,0,0,0]）
-//   - miss-ratio-weight    : 通过 cache_specific_params 传入，例如
-//                            "miss-ratio-weight=1.0"，控制奖励中 miss/byte 比例
-//                            默认: 1.0（只看对象 miss ratio）
+//   - LOH_MISS_RATIO_WEIGHT: 通过环境变量设置奖励中 miss 权重（范围 [0,1]）
+//                            默认: 0.7（byte 权重自动为 0.3）
+//   - miss-ratio-weight    : 已废弃；通过 cache_specific_params 传入时会被忽略
 //
 // 2) 共享内存 / 信号量相关
 //   - LOH_SHM_KEY          : 共享内存与信号量 key 后缀
@@ -140,14 +140,37 @@ static int loh_use_heuristic_signs =
 // 发送一个 eviction_to_access<0 的条目作为“安全驱逐”证据。
 // 默认关闭，避免改变既有实验语义。
 static int loh_penalty_send_positive = 0;  // ← LOH_PENALTY_SEND_POSITIVE
+// 仅发送 candidate pairwise 事件（event_type=2），关闭 type 0/1 传输。
+// 该开关用于在 Python 训练仅消费 type=2 时减少无效 IPC 负载。
+static int loh_penalty_send_only_pairwise =
+    1;  // ← LOH_REWARD_CANDIDATE_PAIRWISE_ONLY（与训练侧同开关）
+// C 侧反馈 TTL（按 version 差）：超过窗口直接在 C 侧丢弃，不再发给 Python。
+// 用于让反馈尽量在 exclude_recent 之前到达。
+static int64_t loh_penalty_ttl_versions =
+    0;  // ← LOH_PENALTY_TTL_VERSIONS / LOH_EXCLUDE_RECENT_STEPS
+static uint64_t loh_penalty_ttl_drops = 0;
+// Candidate-level pairwise 事件：在每次驱逐决策中记录 evicted vs kept 对照。
+// 事件类型编码：event_type=2。
+static int loh_penalty_candidate_pairwise =
+    1;  // ← LOH_PENALTY_CANDIDATE_PAIRWISE
+// 配对策略：0=runnerup, 1=random_kept。
+static int loh_penalty_pair_strategy = 0;  // ← LOH_PENALTY_PAIR_STRATEGY
+// 每次驱逐配对的 kept 数量（>=1）。
+static int loh_penalty_pair_kept_k = 1;  // ← LOH_PENALTY_PAIR_KEPT_K
+// 显式指定每次驱逐配对的 runnerup kept 数量（>=0；-1 表示沿用 legacy 规则）。
+static int loh_penalty_pair_runnerup_k = -1;  // ← LOH_PENALTY_PAIR_RUNNERUP_K
+// 显式指定每次驱逐配对的 random kept 数量（>=0；-1 表示沿用 legacy 规则）。
+static int loh_penalty_pair_random_k = -1;  // ← LOH_PENALTY_PAIR_RANDOM_K
+// 独立 pairwise 追踪级别：0=关闭, 1=关键链路, 2=详细字段。
+static int loh_pairwise_trace_level = 0;  // ← LOH_PAIRWISE_TRACE_LEVEL
 #endif
 
 // 评分特征选择相关开关：
 //   - loh_score_use_irt        ← LOH_SCORE_USE_IRT
 //   - loh_score_use_compound   ← LOH_SCORE_USE_COMPOUND
 // 语义：
-//   1) 默认配置：LOH_SCORE_USE_IRT 未设置或为真，LOH_SCORE_USE_COMPOUND=0
-//      - 评分使用 6 维基础特征：recency, freq, size, irt1, irt2, irt3
+//   1) 当前默认配置：LOH_SCORE_USE_IRT=0，LOH_SCORE_USE_COMPOUND=1
+//      - 默认走 compound 评分（不使用 IRT 分量）
 //   2) LOH_SCORE_USE_IRT=0 且 LOH_SCORE_USE_COMPOUND=0
 //      - 评分仅使用 3 维基础特征：recency, freq, size（忽略 3 个 IRT 分量）
 //   3) LOH_SCORE_USE_COMPOUND=1
@@ -174,8 +197,90 @@ static int loh_penalty_send_positive = 0;  // ← LOH_PENALTY_SEND_POSITIVE
 //      - 在该模式下，LOH_USE_HEURISTIC_SIGNS 对评分符号不再生效。
 static int loh_score_use_irt = 0;       // 默认关闭 IRT 评分（27.10）
 static int loh_score_use_compound = 1;  // 默认启用 compound 评分模式（27.10）
+// LOH_EVICT_SCORE_BY_SIZE: 淘汰时用 score/obj_size 替代 score 做比较
+// 目的：让大但低效用的对象优先被淘汰，改善 BMR（字节 miss ratio）
+static int loh_evict_score_by_size = 0;
 static int loh_score_compound_v2 =
     0;  // 对应环境 LOH_SCORE_COMPOUND_V2：compound 升级版（7权重）
+
+// 独立 compound 特征开关（消融实验用）：
+//   LOH_USE_SIZE=0/1      → 控制 size 项 (weights[2])
+//   LOH_USE_FREQ_REC=0/1  → 控制 freq/rec (或 freq*rec) 项 (weights[3])
+//   LOH_USE_FREQ_SIZE=0/1 → 控制 freq/size (或 freq*size) 项 (weights[4])
+//   LOH_USE_REC_SIZE=0/1  → 控制 rec*size 项 (weights[5])
+//   仅当 compound=1 时三个开关有效。默认全开。
+//   任意一个开关为 1 就自动启用 compound=1 代码路径（即使 compound
+//   未显式设置）。 全部为 0 等价于 compound=0。
+static int loh_use_size = 1;       // ← LOH_USE_SIZE
+static int loh_use_freq_rec = 1;   // ← LOH_USE_FREQ_REC
+static int loh_use_freq_size = 1;  // ← LOH_USE_FREQ_SIZE
+static int loh_use_rec_size = 1;   // ← LOH_USE_REC_SIZE
+
+// compound 模式下 IRT1 作为第7维独立特征（LOH_COMPOUND_USE_IRT1=1）：
+//   需配合 LOH_SCORE_COMPOUND_V2=1 使用（复用 slot 6）。
+//   启用后：slot 6 = irt1（独立特征），rec 保留在 slot 0。
+//   未启用时：slot 6 = freq_rec_size（原 v2 三项乘积）。
+//   目的：one-hit wonder 的 irt1 = 默认最大值(128e6)，天然低分淘汰，
+//         同时保留 recency 提供的时间局部性信息。
+static int loh_compound_use_irt1 = 0;  // ← LOH_COMPOUND_USE_IRT1
+
+// CMA-ES 活跃权重映射：loh_active_weight_map[i] = 第 i 个 CMA-ES 参数对应的
+// weights[] 下标 loh_active_weight_count = 有效权重数量（= CMA-ES 搜索维度）
+static int loh_active_weight_count = 6;
+static int loh_active_weight_map[7] = {0, 1, 2, 3, 4, 5, 6};
+
+// 自适应 compound 模式（LOH_AUTO_COMPOUND）— v5：
+//   在 warmup 结束时根据缓存统计自动决定 compound 特征配置。
+//   决策指标：r1 = Pearson(freq, freq/size), r2 = Pearson(rec, rec×size)
+//   规则 (v5)：
+//     bit0 (freq/rec):  固定开启（1111 trace 联合 MR+BMR 分析：FR 对 BMR
+//                       改善 -2%~-25%，远超对 MR 的微损 +0.1%~1%）
+//     bit1 (freq/size): r1 > 0.98 → 关（size 无变异 → freq/size 冗余）
+//     bit2 (rec×size):  r2 > 0.98 → 关（size 无变异 → rec×size 冗余）
+//   默认: f111;  r1>0.98: bit1关;  r2>0.98: bit2关
+//   可调参数：LOH_AUTO_COMPOUND_R_THRESHOLD (默认 0.98)
+static int loh_auto_compound =
+    0;  // LOH_AUTO_COMPOUND: 0=关闭, 1=启用（默认关闭）
+static int loh_auto_compound_resolved = 0;  // 内部标志：自适应检测已完成
+static int loh_warmup_diag_done = 0;        // 内部标志：warmup诊断扫描已完成
+static int loh_exit_after_warmup_diag =
+    0;  // LOH_EXIT_AFTER_WARMUP_DIAG: 1=输出诊断后立即退出
+
+// ─── Feature Selection Bandit (FSB) ───
+// 在 warmup 后，通过分块轮转 + 去趋势 UCB1 从 8 种 compound feature 配置中
+// 在线选出最优，再启动 CMA-ES 优化权重。
+// 启用 FSB 会 override auto_compound。
+// 环境变量：LOH_FSB=1 启用（默认关闭）
+#define FSB_N_ARMS 8
+typedef struct {
+  int freq_rec, freq_size, rec_size;  // feature 开关
+  double fixed_weights[7];            // 固定 0.5 权重（禁用维度=0）
+} fsb_arm_config_t;
+
+typedef struct {
+  int enabled;               // LOH_FSB=1
+  int phase;                 // 0=eval, 1=locked
+  int current_round;         // 当前轮次 (0-based)
+  int current_arm_idx;       // 当前轮内 arm 索引
+  int64_t block_req_count;   // 当前块已处理请求数
+  int64_t block_miss_count;  // 当前块 miss 数
+  int block_size;            // 每块请求数 (LOH_FSB_BLOCK_SIZE)
+  int min_rounds;            // 最少轮数 (LOH_FSB_MIN_ROUNDS, 默认 2)
+  int max_rounds;            // 最多轮数 (LOH_FSB_MAX_ROUNDS, 默认 8)
+  int warmup_rounds;  // 预热轮数: 前 N 轮不计入统计 (LOH_FSB_WARMUP_ROUNDS,
+                      // 默认 1)
+  double ucb_c;       // UCB 探索系数 (LOH_FSB_UCB_C, 默认 1.0)
+  int locked_arm;     // 收敛后选定的 arm (-1=未选定)
+  // Per-arm 统计
+  int pulls[FSB_N_ARMS];
+  double sum_relative_mr[FSB_N_ARMS];
+  // 当前轮的 MR
+  double round_mrs[FSB_N_ARMS];
+  // Arm 配置
+  fsb_arm_config_t arms[FSB_N_ARMS];
+} loh_fsb_state_t;
+
+static loh_fsb_state_t g_fsb = {0};
 
 // IRT 堆优化：compound 模式不使用 IRT 特征进行评分，
 // 因此可以跳过 IRT 堆的全部维护（insert/remove/update）以节省大量 CPU。
@@ -194,7 +299,53 @@ static int loh_feature_reciprocal = 0;  // 对应环境 LOH_FEATURE_RECIPROCAL
 static int loh_feature_log1p_reciprocal =
     0;                                // 对应环境 LOH_FEATURE_LOG1P_RECIPROCAL
 static int loh_feature_identity = 0;  // 对应环境 LOH_FEATURE_IDENTITY
-// 统一公式模式（默认开启）：
+// 注：loh_use_size_buckets / loh_enable_rl / loh_miss_ratio_weight /
+// loh_byte_miss_ratio_weight / loh_wait_mode_blocked 已在上方声明，此处不重复。
+#ifndef LOH_DEFAULT_MISS_RATIO_WEIGHT
+#define LOH_DEFAULT_MISS_RATIO_WEIGHT 1.0
+#endif
+#ifndef LOH_DEFAULT_BYTE_MISS_RATIO_WEIGHT
+#define LOH_DEFAULT_BYTE_MISS_RATIO_WEIGHT 0.0
+#endif
+static int loh_enable_cmaes = 1;
+static int loh_cmaes_lambda = 10;
+static double loh_cmaes_init_mean = 0.5;
+static double loh_cmaes_init_sigma = 0.2;
+static double loh_cmaes_weight_lb =
+    0.0;  // LOH_CMAES_WEIGHT_LB: 线性模型权重下界（默认 0）
+static double loh_cmaes_weight_ub =
+    1.0;  // LOH_CMAES_WEIGHT_UB: 线性模型权重上界（默认 1）
+static int loh_cmaes_skip_init_ask =
+    1;  // LOH_CMAES_SKIP_INIT_ASK: 跳过初始 ask()，首轮用系统权重
+static int loh_cmaes_init_from_weights =
+    0;  // LOH_CMAES_INIT_FROM_WEIGHTS: 1=v2(向量化初始均值), 0=v1(scalar mean)
+static int loh_cmaes_log =
+    0;  // LOH_CMAES_LOG: 1=每次 tell/ask 后打印 gen/sigma/mean/weights
+static int loh_cmaes_feedback_mode = 2;
+static double loh_cmaes_feedback_alpha = 1.0;
+static double loh_cmaes_feedback_beta = 1.0;
+static double loh_cmaes_feedback_gamma = 1.0;
+// MR 退化检测参数（环境变量控制）— 默认关闭
+static int loh_cmaes_degrade_detect = 0;          // LOH_CMAES_DEGRADE_DETECT
+static double loh_cmaes_degrade_threshold = 1.5;  // LOH_CMAES_DEGRADE_THRESHOLD
+static int loh_cmaes_degrade_patience = 5;        // LOH_CMAES_DEGRADE_PATIENCE
+static double loh_cmaes_degrade_ema_alpha = 0.3;  // LOH_CMAES_DEGRADE_EMA_ALPHA
+static int loh_cmaes_degrade_warmup = 20;         // LOH_CMAES_DEGRADE_WARMUP
+static int loh_cmaes_degrade_cooldown = 15;       // LOH_CMAES_DEGRADE_COOLDOWN
+
+static const char *loh_cmaes_feedback_mode_name(int mode) {
+  switch (mode) {
+    case 1:
+      return "byte";
+    case 2:
+      return "weighted";
+    case 3:
+      return "abg_delta";
+    default:
+      return "miss";
+  }
+}
+// 统一公式模式（默认关闭）：
 //   - frequency:  log1p(x) / (1 + log1p(x))
 //   - recency/size/IRT: 1 / (1 + log1p(x))
 // 该模式下不再根据 trace 在 LOG1P/RECIPROCAL 之间切换。
@@ -220,7 +371,7 @@ static double loh_unified_freq_cap = 4096.0;  // LOH_UNIFIED_FREQ_CAP
 static int loh_feature_normalize =
     0;  // 对应环境 LOH_ENABLE_FEATURE_NORMALIZATION
 
-// 自适应特征归一化（默认关闭）：
+// 自适应特征归一化（默认开启）：
 // 对“变换后的特征值”维护在线分位数区间 [lo_q, hi_q]，预热后映射到 [0,1]。
 static int loh_adaptive_feature_normalize =
     1;  // 对应环境 LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION
@@ -259,13 +410,59 @@ static int64_t loh_auto_detect_reqs = 200000;  // LOH_AUTO_DETECT_REQS
 static double loh_auto_cv_threshold = 2.5;     // LOH_AUTO_CV_THRESHOLD
 static int loh_auto_detected = 0;              // 内部标志：是否已检测
 
+// per-feature 特征模式覆盖
+//   门控: LOH_PER_FEATURE_MODE=1 时才解析下列三个环境变量（默认 0=关闭）
+//   -1 = 继承全局 (loh_feature_log1p / loh_feature_identity)
+//    0 = identity (不变换)
+//    1 = log1p
+// 环境变量: LOH_FEATURE_MODE_FREQ / LOH_FEATURE_MODE_REC /
+// LOH_FEATURE_MODE_SIZE
+static int loh_per_feature_mode = 0;    // LOH_PER_FEATURE_MODE 门控开关
+static int loh_feature_mode_freq = -1;  // frequency 特征模式
+static int loh_feature_mode_rec = -1;   // recency 特征模式
+static int loh_feature_mode_size = -1;  // size 特征模式
+
+// 自动 per-feature 模式检测（LOH_AUTO_PERFEAT）
+//   在 warmup 诊断时根据 cv_freq（log 域频率变异系数）自动决定每个特征维度
+//   的变换模式。校准数据来自 7 trace × 512 配置的 per-feature sweep。
+//   规则:
+//     FREQ: 固定 log1p（对 CDN 无损，对 KV 改善 +4.5%~+9.8%）
+//     REC / SIZE: cv_freq > threshold → log1p（KV-like）
+//                 cv_freq ≤ threshold → identity（CDN-like）
+//   cv_freq 完美分离 CDN (≈0.47) 和 KV (≈0.67-0.70)，默认阈值 0.55。
+//   环境变量: LOH_AUTO_PERFEAT=1 启用（默认 0=关闭）
+//            LOH_AUTO_PERFEAT_THRESHOLD（默认 0.55）
+static int loh_auto_perfeat = 0;                  // LOH_AUTO_PERFEAT 开关
+static double loh_auto_perfeat_threshold = 0.55;  // cv_freq 阈值
+
 // =============================
 // 4) 随机采样候选配置
 // =============================
-//   - loh_random_candidates  ← LOH_RANDOM_CANDIDATES（默认 96）
+//   - loh_random_candidates  ← LOH_RANDOM_CANDIDATES（默认 256）
 //     在结构化候选源之外额外从 hash table 随机采样 N 个候选。
 //     注意：这是 ADDITIVE 的，不减少原有结构化源的配额。
-static int loh_random_candidates = 96;  // 随机采样数量
+static int loh_random_candidates =
+  256;  // 随机采样数量（默认 256）
+
+// 每个特征的保守最低候选数量下限（LOH_MIN_CAND_PER_FEATURE，默认 1）
+// 当 loh_structured_candidates/n_sources 低于此值时，向上取整至此值。
+// sweep 推荐值：1（保守）、2（均衡）、4（激进）。
+static int loh_min_cand_per_feature = 1;  // per-feature 最低配额
+
+// ── 缓存的 wall-clock 时间，避免在每次 find/insert 中调用 time(NULL) ──
+// 仅用于 last_access_time / evict_time 等非关键路径，每 1024 次请求刷新一次。
+static time_t loh_cached_wall_time = 0;
+static uint64_t loh_cached_wall_time_counter = 0;
+static inline time_t loh_get_wall_time(void) {
+  if ((++loh_cached_wall_time_counter & 1023) == 0) {
+    loh_cached_wall_time = time(NULL);
+  }
+  return loh_cached_wall_time;
+}
+
+// 运行时总候选数上限（structured + random），默认 -1 表示不覆盖。
+// 对应环境变量：LOH_TOTAL_CANDIDATES（范围 1..MAX_CANDIDATES_LIMIT）
+static int loh_total_candidates = -1;
 // 当 loh_structured_candidates == 0
 // 时，跳过结构化候选，仅使用随机采样（等效于旧 RANDOM_ONLY 模式）
 
@@ -288,7 +485,7 @@ static double loh_tail_sample_decay = 0.99;
 // =============================
 // 4c) 自适应候选预算（实验性）
 // =============================
-//   - loh_adaptive_budget ← LOH_ADAPTIVE_BUDGET（默认 0 = 关闭）
+//   - loh_adaptive_budget ← LOH_ADAPTIVE_BUDGET（默认 1 = 开启）
 //     当启用时，跟踪每个特征源对驱逐的贡献，周期性重新分配预算。
 //     贡献多的源获更多候选名额，贡献少的减少。
 //   - 重平衡周期：每 LOH_ADAPTIVE_REBALANCE_PERIOD 次驱逐执行一次
@@ -306,6 +503,18 @@ static int loh_cand_source[2048 + 256];
 static double loh_source_win_score_sum[LOH_MAX_SOURCES];
 // 是否启用 score-based rebalance（默认 0 = 仅用 win-count，即 §19 行为）
 static int loh_use_score_rebalance = 0;
+// 是否将 random 源（src6）纳入自适应重分配（默认 0，保持历史行为）
+// 对应环境变量：LOH_ADAPTIVE_INCLUDE_RANDOM
+static int loh_adaptive_include_random = 0;
+// 是否强制打印自适应预算日志（默认 0）
+// 对应环境变量：LOH_ADAPTIVE_BUDGET_LOG
+// 说明：当该值为 1 时，即使 LOH_DEBUG_LEVEL=0 也打印 [ADAPTIVE][PRE/POST]
+static int loh_adaptive_budget_log = 0;
+
+// 热路径细分计时采样步长（仅影响 LOH_PERF_PROFILING 统计开销，不影响算法行为）
+// 对应环境变量：LOH_PERF_HOTPATH_SAMPLE_STRIDE，默认 16（每 16
+// 个候选采样一次细分计时）
+static int loh_perf_hotpath_sample_stride = 16;
 
 // 状态向量配置由编译期 -DLOH_INCLUDE_CACHE_FEATURES=0/1 控制
 // 若未显式定义，则在此默认关闭缓存特征：
@@ -364,7 +573,11 @@ static int loh_use_score_rebalance = 0;
 #define LOH_DEBUG_VERBOSE 4   // 完整调试信息
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_CONFIG
-#define LOH_DEBUG_PRINT_CONFIG(...) printf(__VA_ARGS__)
+#define LOH_DEBUG_PRINT_CONFIG(...) \
+  do {                              \
+    fprintf(stderr, __VA_ARGS__);   \
+    fflush(stderr);                 \
+  } while (0)
 #else
 #define LOH_DEBUG_PRINT_CONFIG(...) ((void)0)
 #endif
@@ -391,6 +604,15 @@ static int loh_use_score_rebalance = 0;
 #define LOH_DEBUG_PRINT_VERBOSE(...) printf(__VA_ARGS__)
 #else
 #define LOH_DEBUG_PRINT_VERBOSE(...) ((void)0)
+#endif
+
+#if LOH_ENABLE_PENALTY
+#define LOH_PAIRWISE_TRACE(level, ...)                            \
+  do {                                                            \
+    if (loh_pairwise_trace_level >= (level)) printf(__VA_ARGS__); \
+  } while (0)
+#else
+#define LOH_PAIRWISE_TRACE(level, ...) ((void)0)
 #endif
 
 // 调试映射维护总开关：发布构建关闭，调试构建打开
@@ -422,7 +644,16 @@ typedef struct {
 } perf_counter_t;
 
 typedef struct {
-  perf_counter_t calc_features;      // calculate_object_features()
+  perf_counter_t calc_features;  // calculate_object_features()
+  perf_counter_t calc_features_prepare;
+  perf_counter_t calc_features_prepare_extract;
+  perf_counter_t calc_features_prepare_route;
+  perf_counter_t calc_features_prepare_raw;
+  perf_counter_t calc_features_base;
+  perf_counter_t calc_features_base_recency;
+  perf_counter_t calc_features_base_freq;
+  perf_counter_t calc_features_base_size;
+  perf_counter_t calc_features_irt;
   perf_counter_t candidate_collect;  // 兼容字段（不再单独使用）
   // per-feature 候选收集计时（细分）
   perf_counter_t cand_collect_recency;
@@ -458,6 +689,20 @@ typedef struct {
   perf_counter_t sync_total;         // sync_with_actor_critic() 总耗时
   perf_counter_t sync_update_state;  // update_state_vector() 耗时
   perf_counter_t sync_misc;  // sync中除update_state_vector外的其他操作耗时
+  // CMA-ES 同步路径性能计时
+  perf_counter_t cmaes_sync_total;  // sync_with_cmaes() 总耗时
+  perf_counter_t cmaes_feedback;    // 反馈值计算耗时
+  perf_counter_t cmaes_tell;        // tell() 耗时
+  perf_counter_t cmaes_ask;         // ask() 首次调用耗时
+  perf_counter_t cmaes_retry;       // ask失败后的重试（ask-only）耗时
+  perf_counter_t cmaes_sanitize;    // next_w 校验/截断/回退耗时
+  // 桥接层 tell 细分（来自 loh_cmaes_bridge.cpp 内部计时）
+  perf_counter_t cmaes_tell_bridge_total;
+  perf_counter_t cmaes_tell_assign;
+  perf_counter_t cmaes_tell_prepare_solutions;
+  perf_counter_t cmaes_tell_optimizer;
+  perf_counter_t cmaes_tell_inc_iter;
+  perf_counter_t cmaes_tell_refill;
 #if LOH_ENABLE_PENALTY
   // Ghost cache & penalty 相关
   perf_counter_t ghost_cache_lookup;  // ghost_cache 查找
@@ -493,6 +738,14 @@ typedef struct {
     (params)->perf.field.total += _dt;                                     \
     if (_dt > (params)->perf.field.max) (params)->perf.field.max = _dt;    \
   } while (0)
+#define PERF_ADD_DT(params, field, dt)                                  \
+  do {                                                                  \
+    double _dt = (dt);                                                  \
+    if (!isfinite(_dt) || _dt < 0.0) _dt = 0.0;                         \
+    (params)->perf.field.count++;                                       \
+    (params)->perf.field.total += _dt;                                  \
+    if (_dt > (params)->perf.field.max) (params)->perf.field.max = _dt; \
+  } while (0)
 #else
 #define PERF_TS \
   struct {      \
@@ -500,6 +753,11 @@ typedef struct {
   }
 #define PERF_NOW(ts) ((void)0)
 #define PERF_ACCUM(params, field, ts0) ((void)0)
+#define PERF_ADD_DT(params, field, dt) ((void)0)
+#endif
+
+#ifndef LOH_PERF_EVICT_OUTER_ONLY
+#define LOH_PERF_EVICT_OUTER_ONLY 1
 #endif
 
 // 解析布尔环境变量工具：1/true/yes/on -> 1，0/false/no/off -> 0，其他保持默认
@@ -532,8 +790,13 @@ static int loh_parse_bool_env(const char *val, int default_value) {
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "cache/eviction/loh_cmaes_bridge.h"
 #include "dataStructure/hashtable/hashtable.h"
 #include "libCacheSim/evictionAlgo.h"
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
 
 /* perf summary printer declared/defined later after LOH_params_t */
 
@@ -564,8 +827,9 @@ static void LOH_print_cache(const cache_t *cache);
 
 #define IRT_HISTORY_SIZE 3
 // 定义 IRT（请求间隔时间）的历史数据结构
-#define MAX_CANDIDATES_LIMIT 256   // 编译期候选池数组上限
-#define MAX_CANDIDATES_DEFAULT 96  // 默认运行时候选池大小
+#define MAX_CANDIDATES_LIMIT \
+  512  // 编译期候选池数组上限（需 >= structured+random）
+#define MAX_CANDIDATES_DEFAULT 16  // 默认运行时结构化候选池大小
 // 运行时实际候选池大小（可通过环境变量 LOH_STRUCTURED_CANDIDATES 覆盖）
 static int loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
 // 向后兼容宏：编译期数组大小使用 MAX_CANDIDATES_LIMIT
@@ -747,7 +1011,22 @@ typedef struct {
   int64_t eviction_to_access;  // 驱逐到访问的距离（用于计算惩罚）
   int64_t obj_size;            // 对象大小（用于字节惩罚计算）
   uint64_t obj_id;             // 触发惩罚的对象ID（用于调试）
+  int32_t event_type;          // 0=ghost miss(负样本), 1=ghost aged-out(正样本)
+  int32_t reserved;            // 结构体对齐保留位
+  int64_t observed_lifetime;   // 观测到的生存时长（统一使用非负距离）
 } penalty_entry_t;
+
+typedef struct {
+  uint64_t penalty_version;
+  obj_id_t evicted_obj_id;
+  int64_t evicted_obj_size;
+  obj_id_t kept_obj_id;
+  int64_t decision_timestamp;
+  int64_t evicted_lifetime;
+  int64_t kept_lifetime;
+  bool have_evicted;
+  bool have_kept;
+} loh_candidate_pair_t;
 
 // C 与 Python 共享的 Actor-Critic（行为者-评论者）网络结构
 typedef struct {
@@ -786,11 +1065,6 @@ typedef struct {
   int mlp_hidden;     // 隐层大小（<=LOH_MLP_MAX_HIDDEN）
   int mlp_param_len;  // mlp_params 的有效长度
   double mlp_params[LOH_MLP_MAX_PARAMS];
-
-  // ===== 分簇动作（Segmented Actions）参数 =====
-  int segment_mode;
-  int num_segments;
-  double segmented_weights[8][WEIGHT_DIM];
 } shm_data_t;
 
 #define FREQ_MAX 255         // 单独跟踪的最大频率
@@ -925,11 +1199,6 @@ typedef struct {
   int mlp_param_len;
   double mlp_params[LOH_MLP_MAX_PARAMS];
 
-  // ===== 分簇动作（Segmented Actions）参数 =====
-  int segment_mode;
-  int num_segments;
-  double segmented_weights[8][WEIGHT_DIM];
-
   cache_obj_t *candidates[MAX_CANDIDATES];
   int n_candidates;
 
@@ -1000,6 +1269,23 @@ typedef struct {
   // RL 训练相关参数
   int64_t rl_update_interval;  // 更新状态与权重的间隔（触发间隔）
   int64_t requests_since_rl_update;
+  // CMA-ES 在线调度状态
+  void *cmaes_handle;
+  int cmaes_enabled;
+  int cmaes_output_dim;  // CMA-ES 优化维度（线性=6/7, MLP=mlp_param_len）
+  int cmaes_last_generation;
+  int cmaes_feedback_hist_inited;
+  double cmaes_feedback_base_obj_miss_ratio;
+  double cmaes_feedback_base_byte_miss_ratio;
+  double cmaes_feedback_prev_obj_miss_ratio;
+  double cmaes_feedback_prev_byte_miss_ratio;
+  // MR 退化检测 + CMA-ES 重启
+  double cmaes_mr_ema;           // EMA of interval obj_miss_ratio
+  double cmaes_mr_best;          // best EMA MR seen (after warmup)
+  int cmaes_mr_epoch_count;      // total epochs for warmup gate
+  int cmaes_degrade_count;       // consecutive degraded epochs
+  int cmaes_restart_count;       // total CMA-ES restarts performed
+  int cmaes_restart_cooldown;    // remaining cooldown epochs after restart
   double epoch_start_time;       // 当前训练周期的起始时间
   double epoch_obj_miss_count;   // RL 训练：累积失误计数，用于计算长期 miss
                                  // ratio 奖励
@@ -1056,7 +1342,28 @@ typedef struct {
   int penalty_queue_size;          // 队列当前大小
   int penalty_queue_capacity;      // 队列容量
   int pending_penalty_count;       // 待处理的惩罚计数
+
+  // Candidate-level pairwise 跟踪：两张表分别按 evicted/kept 对象索引。
+  GHashTable *pair_track_by_evicted;
+  GHashTable *pair_track_by_kept;
+  // 按 penalty_version 索引 pair，用于固定窗口版本的 TTL 定点检查。
+  GHashTable *pair_track_by_version;
+  int pair_track_count;
 #endif
+
+  // ---- 批量淘汰队列 (Batch Eviction Queue) ----
+  // 一次 LOH_to_evict 评分后保存 top-K 最差对象，后续 K-1 次淘汰直接取队列
+  // 队列跨请求持久化，消费时验证对象未被访问（防止淘汰刚命中的对象）
+  // batch_evict_size 由 LOH_BATCH_EVICT_SIZE 环境变量控制（默认 16，最大 64）
+  // batch_max_age 由 LOH_BATCH_MAX_AGE 控制（默认 0=不限；单位：请求数）
+#define BATCH_EVICT_MAX 64
+  cache_obj_t *evict_queue[BATCH_EVICT_MAX];  // 预评分的待淘汰对象
+  int64_t evict_queue_lac[BATCH_EVICT_MAX];   // 入队时的 last_access_counter
+  int evict_queue_len;                        // 队列有效长度
+  int evict_queue_pos;                        // 下次取的位置
+  int batch_evict_size;            // 运行时批量大小 (1..BATCH_EVICT_MAX)
+  int64_t batch_max_age;           // 队列最大年龄（请求数），0=不限
+  int64_t evict_queue_fill_vtime;  // 队列填充时的 current_timestamp
 
   // Flat object array for O(1) random sampling (replaces hashtable_rand_obj)
   cache_obj_t **obj_array;
@@ -1105,8 +1412,8 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
 
   if (cache->n_obj < 100) {
     // 缓存对象太少，无法检测
-    printf("[LOH AUTO-DETECT] Skipped: too few objects (%ld)\n",
-           (long)cache->n_obj);
+    LOH_DEBUG_PRINT_CONFIG("[LOH AUTO-DETECT] Skipped: too few objects (%ld)\n",
+                           (long)cache->n_obj);
     return;
   }
 
@@ -1155,8 +1462,9 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
   int max_ac = (int)accum.max_access_count;
 
   if (actual_samples < 50) {
-    printf("[LOH AUTO-DETECT] Skipped: insufficient samples (%d)\n",
-           actual_samples);
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH AUTO-DETECT] Skipped: insufficient samples (%d)\n",
+        actual_samples);
     return;
   }
 
@@ -1186,12 +1494,12 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
       (mean_freq > 0 && var_freq > 0) ? sqrt(var_freq) / mean_freq : 0.0;
   double one_hit_ratio = (double)accum.one_hit_count / n;
 
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH AUTO-DETECT] n_req=%ld, n_obj=%ld, samples=%d, "
       "mean_freq=%.2f, cv=%.3f, max_ac=%d\n",
       (long)cache->n_req, (long)cache->n_obj, actual_samples, mean_freq, cv,
       max_ac);
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH AUTO-DETECT] LOG-FEATURE STATS: "
       "mean_log=%.4f, std_log=%.4f, skewness=%.4f, "
       "excess_kurtosis=%.4f, one_hit=%.4f\n",
@@ -1223,14 +1531,15 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
   double log10_cv = (cv > 0.0) ? log10(cv) : 0.0;
   double score = 3.0 * (one_hit_ratio - 0.5) - 0.5 * log10_cv;
 
-  printf("[LOH AUTO-DETECT] SCORE = 3*(%.4f - 0.5) - 0.5*log10(%.3f) = %.4f\n",
-         one_hit_ratio, cv, score);
+  LOH_DEBUG_PRINT_CONFIG(
+      "[LOH AUTO-DETECT] SCORE = 3*(%.4f - 0.5) - 0.5*log10(%.3f) = %.4f\n",
+      one_hit_ratio, cv, score);
 
   if (score > 0.0) {
     loh_feature_log1p = 0;
     loh_feature_reciprocal = 1;
     loh_feature_log1p_reciprocal = 1;
-    printf(
+    LOH_DEBUG_PRINT_CONFIG(
         "[LOH AUTO-DETECT] DECISION: LOG1P_RECIPROCAL mode "
         "(score=%.4f > 0)\n",
         score);
@@ -1238,18 +1547,20 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
     loh_feature_log1p = 1;
     loh_feature_reciprocal = 0;
     loh_feature_log1p_reciprocal = 0;
-    printf(
+    LOH_DEBUG_PRINT_CONFIG(
         "[LOH AUTO-DETECT] DECISION: LOG1P mode "
         "(score=%.4f <= 0)\n",
         score);
   }
 
   // === 自动设置其他配置 ===
-  if (!loh_score_use_compound) {
+  // 当 auto_compound 激活时，compound 模式由 warmup 自适应决定，此处不覆盖
+  if (!loh_auto_compound && !loh_score_use_compound) {
     loh_score_use_compound = 1;
     loh_score_use_irt = 0;
     loh_irt_heap_enabled = 0;  // compound 模式下禁用 IRT 堆以提升吞吐量
-    printf("[LOH AUTO-DETECT] Auto-enabled: COMPOUND=1 (IRT heaps disabled)\n");
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH AUTO-DETECT] Auto-enabled: COMPOUND=1 (IRT heaps disabled)\n");
   }
 
   // === 分析各模式下的特征值分布 ===
@@ -1260,28 +1571,33 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
   double log_rec_max = log1p((double)accum.max_recency);
 
   // 在三种模式下的特征范围：
-  printf("[LOH FEATURE RANGES] === 三种模式下 frequency 特征范围 ===\n");
-  printf("  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_freq_min,
-         log_freq_max);
-  printf("  LOG1P_RECIP:  [%.3f, %.3f] (log1p(f)/(log1p(f)+1), bounded)\n",
-         log_freq_min / (log_freq_min + 1.0),
-         log_freq_max / (log_freq_max + 1.0));
-  printf("  RECIP_RAW:    [%.3f, %.3f] (f/(f+1), bounded)\n",
-         1.0 / 2.0, /* f=1 → 1/2 */
-         (double)max_ac / ((double)max_ac + 1.0));
-  printf("[LOH FEATURE RANGES] === 三种模式下 recency 特征范围 ===\n");
-  printf("  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_rec_min,
-         log_rec_max);
-  printf("  LOG1P_RECIP:  [%.3f, %.3f] (1/(1+log1p(v)), bounded)\n",
-         (log_rec_max > 0) ? 1.0 / (1.0 + log_rec_max) : 0.0,
-         (log_rec_min > 0) ? 1.0 / (1.0 + log_rec_min) : 1.0);
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
+      "[LOH FEATURE RANGES] === 三种模式下 frequency 特征范围 ===\n");
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_freq_min,
+      log_freq_max);
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOG1P_RECIP:  [%.3f, %.3f] (log1p(f)/(log1p(f)+1), bounded)\n",
+      log_freq_min / (log_freq_min + 1.0), log_freq_max / (log_freq_max + 1.0));
+  LOH_DEBUG_PRINT_CONFIG("  RECIP_RAW:    [%.3f, %.3f] (f/(f+1), bounded)\n",
+                         1.0 / 2.0, /* f=1 → 1/2 */
+                         (double)max_ac / ((double)max_ac + 1.0));
+  LOH_DEBUG_PRINT_CONFIG(
+      "[LOH FEATURE RANGES] === 三种模式下 recency 特征范围 ===\n");
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOG1P:        [%.3f, %.3f] (raw log1p, unbounded)\n", log_rec_min,
+      log_rec_max);
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOG1P_RECIP:  [%.3f, %.3f] (1/(1+log1p(v)), bounded)\n",
+      (log_rec_max > 0) ? 1.0 / (1.0 + log_rec_max) : 0.0,
+      (log_rec_min > 0) ? 1.0 / (1.0 + log_rec_min) : 1.0);
+  LOH_DEBUG_PRINT_CONFIG(
       "  RECIP_RAW:    [%.6f, %.3f] (1/(1+v), bounded)\n",
       (accum.max_recency > 0) ? 1.0 / (1.0 + (double)accum.max_recency) : 0.0,
       (accum.min_recency > 0 && accum.min_recency < INT64_MAX)
           ? 1.0 / (1.0 + (double)accum.min_recency)
           : 1.0);
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH FEATURE RANGES] LOG1P scale ratio: freq_range=%.2f, "
       "rec_range=%.2f, ratio=%.2f\n",
       log_freq_max - log_freq_min, log_rec_max - log_rec_min,
@@ -1289,13 +1605,13 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
           ? (log_rec_max - log_rec_min) / (log_freq_max - log_freq_min)
           : 0.0);
   // 硬编码 max 下的归一化结果
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH FEATURE RANGES] 硬编码 max 归一化: freq=[%.4f, %.4f] (max=1e6), "
       "rec=[%.4f, %.4f] (max=128e6)\n",
       log_freq_min / log1p(1e6), log_freq_max / log1p(1e6),
       log_rec_min / log1p(128e6), log_rec_max / log1p(128e6));
   // 自适应 max 归一化结果
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH FEATURE RANGES] 自适应 max 归一化: freq=[%.4f, %.4f] (max=%d), "
       "rec=[%.4f, %.4f] (max=%ld)\n",
       log_freq_min / log_freq_max, 1.0, max_ac,
@@ -1305,22 +1621,24 @@ static void loh_auto_detect_and_switch(cache_t *cache) {
   // === 归一化：不自动启用 ===
   // 实验表明 NORMALIZE=0 在所有 trace 上表现最佳（LOG1P 和 RECIPROCAL
   // 均如此）。 仅在用户显式设置 LOH_ENABLE_FEATURE_NORMALIZATION=1 时才启用。
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH AUTO-DETECT] NORMALIZE kept at %d (not auto-changed; "
       "best results use NORMALIZE=0)\n",
       loh_feature_normalize);
 
-  // === RSC（随机采样候选）：默认已设为 96 ===
+  // === RSC（随机采样候选）：默认已设为 256 ===
   // 实验表明随机候选在所有最佳配置中都被使用
 
-  printf(
+  LOH_DEBUG_PRINT_CONFIG(
       "[LOH AUTO-DETECT] Final config: UNIFIED=%d, IDENTITY=%d, "
       "LOG1P=%d, RECIPROCAL=%d, LOG1P_RECIPROCAL=%d, "
-      "NORMALIZE=%d, COMPOUND=%d, COMPOUND_V2=%d, RSC=%d\n",
+      "NORMALIZE=%d, COMPOUND=%d, COMPOUND_V2=%d, RSC=%d, "
+      "PER_FEAT(freq=%d,rec=%d,size=%d)\n",
       loh_feature_unified_formula, loh_feature_identity, loh_feature_log1p,
       loh_feature_reciprocal, loh_feature_log1p_reciprocal,
       loh_feature_normalize, loh_score_use_compound, loh_score_compound_v2,
-      loh_random_candidates);
+      loh_random_candidates, loh_feature_mode_freq, loh_feature_mode_rec,
+      loh_feature_mode_size);
 }
 
 // === 基础特征计算函数（RECENCY / FREQUENCY / SIZE / IRT） ===
@@ -1583,6 +1901,10 @@ static double calculate_recency(LOH_params_t *params, int64_t recency_raw) {
   double out;
   if (loh_feature_unified_formula) {
     out = loh_unified_bad_feature(0, v);
+  } else if (loh_feature_mode_rec == 0) {
+    out = v;  // per-feature override: identity
+  } else if (loh_feature_mode_rec == 1) {
+    out = log1p(v);  // per-feature override: log1p
   } else if (loh_feature_identity) {
     out = v;
   } else if (loh_feature_log1p) {
@@ -1608,6 +1930,10 @@ static double calculate_frequency(LOH_params_t *params, int64_t freq_raw) {
   double out;
   if (loh_feature_unified_formula) {
     out = loh_unified_good_feature(f);
+  } else if (loh_feature_mode_freq == 0) {
+    out = f;  // per-feature override: identity
+  } else if (loh_feature_mode_freq == 1) {
+    out = log1p(f);  // per-feature override: log1p
   } else if (loh_feature_identity) {
     out = f;
   } else if (loh_feature_log1p) {
@@ -1634,6 +1960,10 @@ static double calculate_size(LOH_params_t *params, int64_t size_bytes) {
   if (loh_feature_unified_formula) {
     double size_mb = size_bytes_d / (1024.0 * 1024.0);
     out = loh_unified_bad_feature(2, size_mb);
+  } else if (loh_feature_mode_size == 0) {
+    out = size_bytes_d;  // per-feature override: identity
+  } else if (loh_feature_mode_size == 1) {
+    out = log1p(size_bytes_d);  // per-feature override: log1p
   } else if (loh_feature_identity) {
     out = size_bytes_d;
   } else if (loh_feature_log1p) {
@@ -1730,7 +2060,9 @@ static void loh_print_perf_summary(LOH_params_t *params) {
   PRINT_TOP(find, "find");
   PRINT_TOP(insert, "insert");
   PRINT_TOP(evict, "evict");
-  PRINT_TOP(sync_total, "sync_total");
+  PRINT_TOP(cmaes_sync_total, "cmaes_sync_total");
+
+#if !LOH_PERF_EVICT_OUTER_ONLY
 
   // 嵌套在 to_evict() 内的子阶段：按 to_evict_total 百分比展示
   printf("-- Eviction breakdown (percent of to_evict_total=%.3f s) --\n",
@@ -1768,6 +2100,50 @@ static void loh_print_perf_summary(LOH_params_t *params) {
       params->perf.cand_collect_irt3.max;
   PRINT_TE(candidate_collect, "candidate_collect");
   PRINT_TE(calc_features, "calc_features");
+  {
+    const double calc_features_total = params->perf.calc_features.total;
+    const unsigned long long calc_features_count =
+        (unsigned long long)params->perf.calc_features.count;
+    const double calc_features_prepare_extract =
+        params->perf.calc_features_prepare_extract.total;
+    const double calc_features_misc = calc_features_total -
+                                      calc_features_prepare_extract -
+                                      params->perf.calc_features_base.total -
+                                      params->perf.calc_features_irt.total;
+    const double calc_features_misc_pct =
+        (calc_features_total > 0.0
+             ? (calc_features_misc / calc_features_total * 100.0)
+             : 0.0);
+    printf("-- Calc features breakdown (percent of calc_features=%.3f s) --\n",
+           calc_features_total);
+#define PRINT_CF(field, name)                                                 \
+  do {                                                                        \
+    const double _tot = params->perf.field.total;                             \
+    const unsigned long long _cnt =                                           \
+        (unsigned long long)params->perf.field.count;                         \
+    const double _avg_ms = (_cnt ? (_tot / (double)_cnt) * 1e3 : 0.0);        \
+    const double _pct =                                                       \
+        (calc_features_total > 0.0 ? (_tot / calc_features_total * 100.0)     \
+                                   : 0.0);                                    \
+    printf("%-18s total=%10.3f  count=%12llu  avg=%7.3f ms  %6.2f%%\n", name, \
+           _tot, _cnt, _avg_ms, _pct);                                        \
+  } while (0)
+    PRINT_CF(calc_features_prepare_extract, "  prepare_exact");
+    PRINT_CF(calc_features_prepare_route, "    route");
+    PRINT_CF(calc_features_prepare_raw, "    raw_extract");
+    PRINT_CF(calc_features_base, "  base_transform");
+    PRINT_CF(calc_features_base_recency, "    recency_transform");
+    PRINT_CF(calc_features_base_freq, "    frequency_transform");
+    PRINT_CF(calc_features_base_size, "    size_transform");
+    PRINT_CF(calc_features_irt, "  irt_transform");
+    printf(
+        "%-18s total=%10.3f  count=%12llu  avg=%7.3f ms  %6.2f%%\n", "  misc",
+        calc_features_misc, calc_features_count,
+        (calc_features_count ? (calc_features_misc / calc_features_count) * 1e3
+                             : 0.0),
+        calc_features_misc_pct);
+#undef PRINT_CF
+  }
   PRINT_TE(calc_score, "calc_score");
   PRINT_TE(to_evict, "to_evict_total");
 
@@ -1808,6 +2184,7 @@ static void loh_print_perf_summary(LOH_params_t *params) {
   PRINT_TE(cand_dedup_irt1, "  irt1_dedup");
   PRINT_TE(cand_dedup_irt2, "  irt2_dedup");
   PRINT_TE(cand_dedup_irt3, "  irt3_dedup");
+#endif
 
   // 原子操作（通常很小），仅展示平均时间
 #define PRINT_ATOM(field, name)                                              \
@@ -1823,7 +2200,9 @@ static void loh_print_perf_summary(LOH_params_t *params) {
   printf("-- Atomic ops (per-call cost) --\n");
   PRINT_ATOM(atomic_insert, "atomic_insert");
   PRINT_ATOM(atomic_update, "atomic_update");
+#if !LOH_PERF_EVICT_OUTER_ONLY
   PRINT_ATOM(atomic_remove, "atomic_remove");
+#endif
 
   // atomic_update 细分（按 atomic_update.total 百分比）
   if (params->perf.atomic_update.count > 0) {
@@ -1889,6 +2268,62 @@ static void loh_print_perf_summary(LOH_params_t *params) {
     PRINT_SYNC(sync_update_state, "  update_state_vec");
     PRINT_SYNC(sync_misc, "  sync_misc");
 #undef PRINT_SYNC
+  }
+
+  // CMA-ES sync 性能统计
+  if (params->perf.cmaes_sync_total.count > 0) {
+    const double cmaes_tot = params->perf.cmaes_sync_total.total;
+    printf("-- CMA-ES sync breakdown (percent of cmaes_sync_total=%.3f s) --\n",
+           cmaes_tot);
+#define PRINT_CMAES(field, name)                                              \
+  do {                                                                        \
+    const double _tot = params->perf.field.total;                             \
+    const unsigned long long _cnt =                                           \
+        (unsigned long long)params->perf.field.count;                         \
+    const double _avg_ms = (_cnt ? (_tot / (double)_cnt) * 1e3 : 0.0);        \
+    const double _max_ms = params->perf.field.max * 1e3;                      \
+    const double _pct = (cmaes_tot > 0.0 ? (_tot / cmaes_tot * 100.0) : 0.0); \
+    printf(                                                                   \
+        "%-22s total=%10.3f  count=%12llu  avg=%7.3f ms  max=%7.3f ms  "      \
+        "%6.2f%%\n",                                                          \
+        name, _tot, _cnt, _avg_ms, _max_ms, _pct);                            \
+  } while (0)
+
+    PRINT_CMAES(cmaes_feedback, "  feedback_calc");
+    PRINT_CMAES(cmaes_tell, "  cmaes_tell");
+    PRINT_CMAES(cmaes_ask, "  cmaes_ask");
+    PRINT_CMAES(cmaes_retry, "  cmaes_retry");
+    PRINT_CMAES(cmaes_sanitize, "  sanitize_next_w");
+#undef PRINT_CMAES
+
+    if (params->perf.cmaes_tell_bridge_total.count > 0) {
+      const double tell_bridge_tot = params->perf.cmaes_tell_bridge_total.total;
+      const double tell_host_tot = params->perf.cmaes_tell.total;
+      printf(
+          "-- CMA-ES tell bridge breakdown (percent of bridge_total=%.3f s, "
+          "host_tell_total=%.3f s) --\n",
+          tell_bridge_tot, tell_host_tot);
+#define PRINT_CMAES_TELL_BR(field, name)                                  \
+  do {                                                                    \
+    const double _tot = params->perf.field.total;                         \
+    const unsigned long long _cnt =                                       \
+        (unsigned long long)params->perf.field.count;                     \
+    const double _avg_ms = (_cnt ? (_tot / (double)_cnt) * 1e3 : 0.0);    \
+    const double _max_ms = params->perf.field.max * 1e3;                  \
+    const double _pct =                                                   \
+        (tell_bridge_tot > 0.0 ? (_tot / tell_bridge_tot * 100.0) : 0.0); \
+    printf(                                                               \
+        "%-24s total=%10.3f  count=%12llu  avg=%7.3f ms  max=%7.3f ms  "  \
+        "%6.2f%%\n",                                                      \
+        name, _tot, _cnt, _avg_ms, _max_ms, _pct);                        \
+  } while (0)
+      PRINT_CMAES_TELL_BR(cmaes_tell_assign, "  tell_assign");
+      PRINT_CMAES_TELL_BR(cmaes_tell_prepare_solutions, "  tell_prepare_sol");
+      PRINT_CMAES_TELL_BR(cmaes_tell_optimizer, "  tell_optimizer");
+      PRINT_CMAES_TELL_BR(cmaes_tell_inc_iter, "  tell_inc_iter");
+      PRINT_CMAES_TELL_BR(cmaes_tell_refill, "  tell_refill");
+#undef PRINT_CMAES_TELL_BR
+    }
   }
 
   // seen 去重统计
@@ -1975,7 +2410,23 @@ static void free_ghost_cache(LOH_params_t *params) {
 #if LOH_ENABLE_PENALTY
 static bool enqueue_penalty(LOH_params_t *params, uint64_t penalty_version,
                             int64_t eviction_to_access, int64_t obj_size,
-                            uint64_t obj_id);
+                            uint64_t obj_id, int32_t event_type,
+                            int64_t observed_lifetime);
+static uint64_t loh_current_state_version(LOH_params_t *params);
+
+static void loh_pair_track_on_evicted_event(LOH_params_t *params,
+                                            obj_id_t evicted_obj_id,
+                                            int64_t lifetime);
+static void loh_pair_track_on_kept_hit(LOH_params_t *params,
+                                       obj_id_t kept_obj_id, int64_t lifetime);
+static void loh_pair_track_on_kept_evict(LOH_params_t *params,
+                                         obj_id_t kept_obj_id,
+                                         int64_t lifetime);
+static void loh_pair_track_create(LOH_params_t *params,
+                                  cache_obj_t *evicted_obj,
+                                  cache_obj_t *kept_obj);
+static void loh_pair_track_ttl_check_window(LOH_params_t *params,
+                                            uint64_t current_version);
 #endif
 
 // 将 ghost 条目添加到队列头部（最新的）
@@ -2021,14 +2472,19 @@ static void ghost_evict_tail(LOH_params_t *params) {
   LOH_ghost_entry_t *tail = params->ghost_tail;
 
 #if LOH_ENABLE_PENALTY
-  // 正样本：ghost entry 在 ghost cache 中“活到被淘汰”仍未被再次访问
-  // 发送 eviction_to_access<0 的事件（Python 端将其作为正反馈证据处理）。
-  if (loh_penalty_send_positive && tail->eviction_version != 0) {
+  // Ghost tail 仅做容量回收，不再直接触发 pairwise penalty。
+  // pairwise 未完成样本统一交给 ttl_check_window 在固定版本窗口处补齐/结束。
+  if (tail->eviction_version != 0) {
     int64_t dist = params->current_timestamp - tail->eviction_timestamp;
     if (dist < 0) dist = 0;
-    // 负距离作为 sentinel：表示“未被再次访问”
-    (void)enqueue_penalty(params, tail->eviction_version, -dist, tail->obj_size,
-                          tail->obj_id);
+
+    // 正样本：ghost entry 在 ghost cache 中“活到被淘汰”仍未被再次访问。
+    if (!loh_penalty_send_only_pairwise && loh_penalty_send_positive &&
+        params->is_warmed_up) {
+      // 负距离作为 sentinel：表示“未被再次访问”
+      (void)enqueue_penalty(params, tail->eviction_version, -dist,
+                            tail->obj_size, tail->obj_id, 1, dist);
+    }
   }
 #endif
 
@@ -2104,22 +2560,19 @@ static void add_to_ghost_cache(LOH_params_t *params, cache_obj_t *obj,
   for (int i = 0; i < 3; i++) {
     ghost_entry->irt_values[i] = obj->LOH.irt_values[i];
   }
-  ghost_entry->evict_time = time(NULL);
+  ghost_entry->evict_time = loh_get_wall_time();
 
 #if LOH_ENABLE_PENALTY
   // 【新增】记录驱逐版本号和时间戳（用于penalty机制）
-  if (params->shm_file != NULL) {
-    shm_data_t shm_data;
-    rewind(params->shm_file);
-    if (fread(&shm_data, sizeof(shm_data_t), 1, params->shm_file) == 1) {
-      ghost_entry->eviction_version = shm_data.state_version;
-    } else {
-      ghost_entry->eviction_version = 0;  // 读取失败时使用0
-    }
-  } else {
-    ghost_entry->eviction_version = 0;  // 无共享内存时使用0
-  }
+  // 统一通过 loh_current_state_version 取值，避免 nonblocked+mmap 路径下
+  // FILE* 读取到陈旧 state_version（常见卡在 1）。
+  ghost_entry->eviction_version = loh_current_state_version(params);
   ghost_entry->eviction_timestamp = params->current_timestamp;
+  LOH_DEBUG_PRINT_BASIC(
+      "[C-EVICT-VERSION] obj_id=%llu eviction_version=%llu evict_ts=%lld\n",
+      (unsigned long long)ghost_entry->obj_id,
+      (unsigned long long)ghost_entry->eviction_version,
+      (long long)ghost_entry->eviction_timestamp);
 #endif
 
 #if LOH_ENABLE_PENALTY
@@ -2167,7 +2620,7 @@ static bool restore_from_ghost_cache(LOH_params_t *params, cache_obj_t *obj) {
     }
 
     // 【修复】：更新时间戳为当前时间
-    obj->LOH.last_access_time = time(NULL);
+    obj->LOH.last_access_time = loh_get_wall_time();
     obj->LOH.last_access_counter = params->current_timestamp;
 
     // 从链表中移除
@@ -2256,11 +2709,21 @@ static void write_shared_memory(LOH_params_t *params, const shm_data_t *data) {
  */
 static bool enqueue_penalty(LOH_params_t *params, uint64_t penalty_version,
                             int64_t eviction_to_access, int64_t obj_size,
-                            uint64_t obj_id) {
+                            uint64_t obj_id, int32_t event_type,
+                            int64_t observed_lifetime) {
   PERF_TS ts_enqueue;
   PERF_NOW(ts_enqueue);
 
   if (params == NULL) return false;
+
+  // 保护：version=0 视为无效版本，绝不进入 penalty 队列。
+  // 这可避免 Python 侧出现 queue_missing_version version=0。
+  if (penalty_version == 0) {
+    LOH_DEBUG_PRINT_DETAILED(
+        "[LOH] Skip invalid penalty_version=0 (obj=%llu, type=%d)\n",
+        (unsigned long long)obj_id, (int)event_type);
+    return false;
+  }
 
   // 检查队列是否需要扩容
   if (params->penalty_queue_size >= params->penalty_queue_capacity) {
@@ -2289,16 +2752,319 @@ static bool enqueue_penalty(LOH_params_t *params, uint64_t penalty_version,
   params->penalty_queue[idx].eviction_to_access = eviction_to_access;
   params->penalty_queue[idx].obj_size = obj_size;
   params->penalty_queue[idx].obj_id = obj_id;
+  params->penalty_queue[idx].event_type = event_type;
+  params->penalty_queue[idx].reserved = 0;
+  params->penalty_queue[idx].observed_lifetime =
+      observed_lifetime >= 0 ? observed_lifetime : -observed_lifetime;
   params->penalty_queue_size++;
+
+  if (event_type == 2) {
+    LOH_PAIRWISE_TRACE(
+        1,
+        "[PAIRWISE][C] enqueue version=%llu evicted=%llu evicted_life=%ld "
+        "kept_life=%ld q=%d\n",
+        (unsigned long long)penalty_version, (unsigned long long)obj_id,
+        (long)(eviction_to_access >= 0 ? eviction_to_access
+                                       : -eviction_to_access),
+        (long)(observed_lifetime >= 0 ? observed_lifetime : -observed_lifetime),
+        params->penalty_queue_size);
+  }
 
   LOH_DEBUG_PRINT_BASIC(
       "[C→Queue] 📝 Penalty #%d: version=%lu, evict_to_access=%ld, "
-      "size=%ld, obj_id=%lu (queue: %d/%d)\n",
-      idx, penalty_version, eviction_to_access, obj_size, obj_id,
+      "size=%ld, obj_id=%lu, type=%d, lifetime=%ld (queue: %d/%d)\n",
+      idx, penalty_version, eviction_to_access, obj_size, obj_id, event_type,
+      observed_lifetime >= 0 ? observed_lifetime : -observed_lifetime,
       params->penalty_queue_size, params->penalty_queue_capacity);
 
   PERF_ACCUM(params, penalty_enqueue, ts_enqueue);
   return true;
+}
+
+static uint64_t loh_current_state_version(LOH_params_t *params) {
+  if (params == NULL) return 0;
+  if (params->shm_mmap != NULL) {
+    uint64_t v =
+        __atomic_load_n(&params->shm_mmap->state_version, __ATOMIC_ACQUIRE);
+    return v;
+  }
+  if (params->shm_file != NULL) {
+    shm_data_t shm_data;
+    rewind(params->shm_file);
+    if (fread(&shm_data, sizeof(shm_data_t), 1, params->shm_file) == 1) {
+      return shm_data.state_version;
+    }
+  }
+  return 0;
+}
+
+static GSList *loh_pair_track_get_list(GHashTable *table, obj_id_t obj_id) {
+  if (table == NULL) return NULL;
+  return (GSList *)g_hash_table_lookup(table, GINT_TO_POINTER((int)obj_id));
+}
+
+static GSList *loh_pair_track_get_list_by_version(GHashTable *table,
+                                                  uint64_t version) {
+  if (table == NULL) return NULL;
+  return (GSList *)g_hash_table_lookup(table, GUINT_TO_POINTER((guint)version));
+}
+
+static void loh_pair_track_add_ref(GHashTable *table, obj_id_t obj_id,
+                                   loh_candidate_pair_t *pair) {
+  if (table == NULL || pair == NULL) return;
+  GSList *list = loh_pair_track_get_list(table, obj_id);
+  list = g_slist_prepend(list, pair);
+  g_hash_table_insert(table, GINT_TO_POINTER((int)obj_id), list);
+}
+
+static void loh_pair_track_add_ref_by_version(GHashTable *table,
+                                              uint64_t version,
+                                              loh_candidate_pair_t *pair) {
+  if (table == NULL || pair == NULL) return;
+  GSList *list = loh_pair_track_get_list_by_version(table, version);
+  list = g_slist_prepend(list, pair);
+  g_hash_table_insert(table, GUINT_TO_POINTER((guint)version), list);
+}
+
+static void loh_pair_track_del_ref(GHashTable *table, obj_id_t obj_id,
+                                   loh_candidate_pair_t *pair) {
+  if (table == NULL || pair == NULL) return;
+  GSList *list = loh_pair_track_get_list(table, obj_id);
+  if (list == NULL) return;
+  GSList *next = g_slist_remove(list, pair);
+  if (next == NULL) {
+    g_hash_table_remove(table, GINT_TO_POINTER((int)obj_id));
+  } else if (next != list) {
+    g_hash_table_insert(table, GINT_TO_POINTER((int)obj_id), next);
+  }
+}
+
+static void loh_pair_track_del_ref_by_version(GHashTable *table,
+                                              uint64_t version,
+                                              loh_candidate_pair_t *pair) {
+  if (table == NULL || pair == NULL) return;
+  GSList *list = loh_pair_track_get_list_by_version(table, version);
+  if (list == NULL) return;
+  GSList *next = g_slist_remove(list, pair);
+  if (next == NULL) {
+    g_hash_table_remove(table, GUINT_TO_POINTER((guint)version));
+  } else if (next != list) {
+    g_hash_table_insert(table, GUINT_TO_POINTER((guint)version), next);
+  }
+}
+
+static void loh_pair_track_remove(LOH_params_t *params,
+                                  loh_candidate_pair_t *pair) {
+  if (params == NULL || pair == NULL) return;
+
+  if (params->pair_track_by_evicted != NULL) {
+    loh_pair_track_del_ref(params->pair_track_by_evicted, pair->evicted_obj_id,
+                           pair);
+  }
+  if (params->pair_track_by_kept != NULL) {
+    loh_pair_track_del_ref(params->pair_track_by_kept, pair->kept_obj_id, pair);
+  }
+  if (params->pair_track_by_version != NULL) {
+    loh_pair_track_del_ref_by_version(params->pair_track_by_version,
+                                      pair->penalty_version, pair);
+  }
+
+  if (params->pair_track_count > 0) params->pair_track_count--;
+  g_free(pair);
+}
+
+static void loh_pair_track_try_emit(LOH_params_t *params,
+                                    loh_candidate_pair_t *pair) {
+  if (params == NULL || pair == NULL) return;
+  uint64_t penalty_version = pair->penalty_version;
+
+  if (!pair->have_evicted || !pair->have_kept) return;
+
+  int64_t evicted_life = pair->evicted_lifetime >= 0 ? pair->evicted_lifetime
+                                                     : -pair->evicted_lifetime;
+  int64_t kept_life =
+      pair->kept_lifetime >= 0 ? pair->kept_lifetime : -pair->kept_lifetime;
+  LOH_PAIRWISE_TRACE(1,
+                     "[PAIRWISE][C] emit_ready version=%llu evicted=%llu "
+                     "kept=%llu evicted_life=%ld kept_life=%ld\n",
+                     (unsigned long long)penalty_version,
+                     (unsigned long long)pair->evicted_obj_id,
+                     (unsigned long long)pair->kept_obj_id, (long)evicted_life,
+                     (long)kept_life);
+  (void)enqueue_penalty(params, penalty_version, evicted_life,
+                        pair->evicted_obj_size, pair->evicted_obj_id, 2,
+                        kept_life);
+  LOH_DEBUG_PRINT_DETAILED(
+      "[LOH Pairwise] emit pair version=%llu evicted=%llu kept=%llu "
+      "ev_life=%ld kept_life=%ld\n",
+      (unsigned long long)penalty_version,
+      (unsigned long long)pair->evicted_obj_id,
+      (unsigned long long)pair->kept_obj_id, (long)evicted_life,
+      (long)kept_life);
+
+  loh_pair_track_remove(params, pair);
+}
+
+static void loh_pair_track_on_evicted_event(LOH_params_t *params,
+                                            obj_id_t evicted_obj_id,
+                                            int64_t lifetime) {
+  if (params == NULL || params->pair_track_by_evicted == NULL) return;
+  GSList *list =
+      loh_pair_track_get_list(params->pair_track_by_evicted, evicted_obj_id);
+  GSList *it = list;
+  while (it != NULL) {
+    loh_candidate_pair_t *pair = (loh_candidate_pair_t *)it->data;
+    it = it->next;
+    if (pair == NULL) continue;
+
+    pair->evicted_lifetime = lifetime >= 0 ? lifetime : -lifetime;
+    pair->have_evicted = true;
+    LOH_PAIRWISE_TRACE(
+        2,
+        "[PAIRWISE][C] evicted_observed evicted=%llu life=%ld version=%llu\n",
+        (unsigned long long)evicted_obj_id, (long)pair->evicted_lifetime,
+        (unsigned long long)pair->penalty_version);
+    loh_pair_track_try_emit(params, pair);
+  }
+}
+
+static void loh_pair_track_on_kept_hit(LOH_params_t *params,
+                                       obj_id_t kept_obj_id, int64_t lifetime) {
+  if (params == NULL || params->pair_track_by_kept == NULL) return;
+  (void)lifetime;
+  GSList *list =
+      loh_pair_track_get_list(params->pair_track_by_kept, kept_obj_id);
+  GSList *it = list;
+  while (it != NULL) {
+    loh_candidate_pair_t *pair = (loh_candidate_pair_t *)it->data;
+    it = it->next;
+    if (pair == NULL || pair->have_kept) continue;
+
+    int64_t kept_life = params->current_timestamp - pair->decision_timestamp;
+    if (kept_life < 0) kept_life = 0;
+    pair->kept_lifetime = kept_life;
+    pair->have_kept = true;
+    LOH_PAIRWISE_TRACE(
+        2, "[PAIRWISE][C] kept_hit_observed kept=%llu life=%ld version=%llu\n",
+        (unsigned long long)kept_obj_id, (long)pair->kept_lifetime,
+        (unsigned long long)pair->penalty_version);
+    loh_pair_track_try_emit(params, pair);
+  }
+}
+
+static void loh_pair_track_on_kept_evict(LOH_params_t *params,
+                                         obj_id_t kept_obj_id,
+                                         int64_t lifetime) {
+  if (params == NULL || params->pair_track_by_kept == NULL) return;
+  (void)lifetime;
+  GSList *list =
+      loh_pair_track_get_list(params->pair_track_by_kept, kept_obj_id);
+  GSList *it = list;
+  while (it != NULL) {
+    loh_candidate_pair_t *pair = (loh_candidate_pair_t *)it->data;
+    it = it->next;
+    if (pair == NULL || pair->have_kept) continue;
+
+    int64_t kept_life = params->current_timestamp - pair->decision_timestamp;
+    if (kept_life < 0) kept_life = 0;
+    pair->kept_lifetime = kept_life;
+    pair->have_kept = true;
+    LOH_PAIRWISE_TRACE(
+        2, "[PAIRWISE][C] kept_miss_observed kept=%llu life=%ld version=%llu\n",
+        (unsigned long long)kept_obj_id, (long)pair->kept_lifetime,
+        (unsigned long long)pair->penalty_version);
+    loh_pair_track_try_emit(params, pair);
+  }
+}
+
+static void loh_pair_track_create(LOH_params_t *params,
+                                  cache_obj_t *evicted_obj,
+                                  cache_obj_t *kept_obj) {
+  if (params == NULL || evicted_obj == NULL || kept_obj == NULL) return;
+  if (!loh_penalty_candidate_pairwise) return;
+  if (params->pair_track_by_evicted == NULL ||
+      params->pair_track_by_kept == NULL)
+    return;
+
+  obj_id_t evicted_id = evicted_obj->obj_id;
+  obj_id_t kept_id = kept_obj->obj_id;
+  if (evicted_id == kept_id) return;
+
+  loh_candidate_pair_t *pair = g_new0(loh_candidate_pair_t, 1);
+  pair->penalty_version = loh_current_state_version(params);
+  pair->evicted_obj_id = evicted_id;
+  pair->evicted_obj_size = (int64_t)evicted_obj->obj_size;
+  pair->kept_obj_id = kept_id;
+  pair->decision_timestamp = params->current_timestamp;
+
+  LOH_PAIRWISE_TRACE(1,
+                     "[PAIRWISE][C] create version=%llu evicted=%llu kept=%llu "
+                     "decision_ts=%llu\n",
+                     (unsigned long long)pair->penalty_version,
+                     (unsigned long long)pair->evicted_obj_id,
+                     (unsigned long long)pair->kept_obj_id,
+                     (unsigned long long)pair->decision_timestamp);
+
+  loh_pair_track_add_ref(params->pair_track_by_evicted, evicted_id, pair);
+  loh_pair_track_add_ref(params->pair_track_by_kept, kept_id, pair);
+  loh_pair_track_add_ref_by_version(params->pair_track_by_version,
+                                    pair->penalty_version, pair);
+  params->pair_track_count++;
+}
+
+static void loh_pair_track_ttl_check_window(LOH_params_t *params,
+                                            uint64_t current_version) {
+  if (params == NULL || params->pair_track_by_version == NULL) return;
+  if (loh_penalty_ttl_versions <= 0) return;
+  if (current_version == 0) return;
+
+  // 仅检查固定窗口前那个版本（current - exclude_recent）。
+  if (current_version <= (uint64_t)loh_penalty_ttl_versions) return;
+  uint64_t target_version =
+      current_version - (uint64_t)loh_penalty_ttl_versions;
+
+  GSList *list = loh_pair_track_get_list_by_version(
+      params->pair_track_by_version, target_version);
+  GSList *it = list;
+  while (it != NULL) {
+    loh_candidate_pair_t *pair = (loh_candidate_pair_t *)it->data;
+    it = it->next;
+    if (pair == NULL) continue;
+    if (pair->have_evicted && pair->have_kept) continue;
+
+    loh_penalty_ttl_drops++;
+    int64_t now_life = params->current_timestamp - pair->decision_timestamp;
+    if (now_life < 0) now_life = 0;
+    if (!pair->have_evicted && pair->have_kept) {
+      pair->evicted_lifetime = now_life;
+      pair->have_evicted = true;
+      LOH_PAIRWISE_TRACE(1,
+                         "[PAIRWISE][C] ttl_fill_missing version=%llu "
+                         "evicted_filled=1 kept_filled=0 life=%ld\n",
+                         (unsigned long long)pair->penalty_version,
+                         (long)now_life);
+    } else if (pair->have_evicted && !pair->have_kept) {
+      pair->kept_lifetime = now_life;
+      pair->have_kept = true;
+      LOH_PAIRWISE_TRACE(1,
+                         "[PAIRWISE][C] ttl_fill_missing version=%llu "
+                         "evicted_filled=0 kept_filled=1 life=%ld\n",
+                         (unsigned long long)pair->penalty_version,
+                         (long)now_life);
+    } else {
+      // Neither side observed before TTL: fill both lifetimes with TTL age.
+      pair->evicted_lifetime = now_life;
+      pair->kept_lifetime = now_life;
+      pair->have_evicted = true;
+      pair->have_kept = true;
+      LOH_PAIRWISE_TRACE(1,
+                         "[PAIRWISE][C] ttl_fill_missing version=%llu "
+                         "evicted_filled=1 kept_filled=1 life=%ld\n",
+                         (unsigned long long)pair->penalty_version,
+                         (long)now_life);
+    }
+    loh_pair_track_try_emit(params, pair);
+  }
 }
 #endif  // LOH_ENABLE_PENALTY
 
@@ -2978,6 +3744,10 @@ static void update_state_vector(LOH_params_t *params) {
 // ===== 非阻塞 mmap 快速同步路径 =====
 // 完全绕过 stdio 缓冲、fcntl 锁、clock_gettime，直接通过 mmap 指针读写。
 // 仅在 nonblocked 模式且 mmap 可用时使用。
+static void loh_log_received_weights(const char *tag, uint64_t ack_version,
+                                     const double *weights);
+static void loh_log_first_weights_applied_once(uint64_t ack_version,
+                                               const double *weights);
 static void sync_with_actor_critic_fast(LOH_params_t *params) {
   shm_data_t *m = params->shm_mmap;
 
@@ -2990,11 +3760,6 @@ static void sync_with_actor_critic_fast(LOH_params_t *params) {
   // 读取上一轮 Python 写回的权重（无锁，直接内存读取）
   if (__atomic_load_n(&m->weights_updated, __ATOMIC_ACQUIRE)) {
     memcpy(params->weights, m->weights, sizeof(double) * WEIGHT_DIM);
-    params->segment_mode = m->segment_mode;
-    params->num_segments = m->num_segments;
-    if (params->segment_mode > 0 && params->num_segments > 0) {
-      memcpy(params->segmented_weights, m->segmented_weights, sizeof(double) * 8 * WEIGHT_DIM);
-    }
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         m->score_model == LOH_SCORE_MODEL_MLP) {
       int plen = m->mlp_param_len;
@@ -3014,6 +3779,8 @@ static void sync_with_actor_critic_fast(LOH_params_t *params) {
     LOH_DEBUG_PRINT_BASIC(
         "[NON-BLOCK-FAST] Applied pending weights (ack_version=%llu)\n",
         (unsigned long long)m->ack_version);
+    loh_log_received_weights("C RX WEIGHTS", m->ack_version, params->weights);
+    loh_log_first_weights_applied_once(m->ack_version, params->weights);
   }
 
   // 跳过冗余 sync：如果 Python 尚未消费上一个 state，则不覆盖、不重算
@@ -3063,6 +3830,11 @@ static void sync_with_actor_critic_fast(LOH_params_t *params) {
   m->mlp_param_len = params->mlp_param_len;
   memcpy(m->mlp_params, params->mlp_params, sizeof(params->mlp_params));
   m->state_version += 1;
+#if LOH_ENABLE_PENALTY
+  if (loh_penalty_candidate_pairwise) {
+    loh_pair_track_ttl_check_window(params, m->state_version);
+  }
+#endif
   m->timestamp = params->current_timestamp;
 
   // 发布 ready 标志（memory fence 确保前面的写入对 Python 可见）
@@ -3083,17 +3855,298 @@ static void sync_with_actor_critic_fast(LOH_params_t *params) {
   PERF_ACCUM(params, sync_total, ts_sync_total);
 }
 
+// 前向声明：活跃权重映射函数（定义在 LOH_init 之前）
+static void loh_rebuild_active_weight_map(void);
+static void loh_map_cmaes_to_weights(const double *cmaes_w, int cmaes_dim,
+                                     double *weights);
+
+static void sync_with_cmaes(LOH_params_t *params) {
+  if (!params || !params->cmaes_enabled || params->cmaes_handle == NULL) {
+    return;
+  }
+
+  const int cmaes_output_dim = params->cmaes_output_dim;
+
+  PERF_TS ts_cmaes_total;
+  PERF_NOW(ts_cmaes_total);
+
+  PERF_TS ts_feedback;
+  PERF_NOW(ts_feedback);
+
+  // cmaes 最小化 feedback_value
+  const double eps = 1e-12;
+  double obj_miss_ratio = 0.0;
+  double byte_miss_ratio = 0.0;
+
+  if (params->epoch_obj_count > 0.0) {
+    obj_miss_ratio = params->epoch_obj_miss_count / params->epoch_obj_count;
+  }
+  if (params->epoch_byte_count > 0.0) {
+    byte_miss_ratio = params->epoch_byte_miss_count / params->epoch_byte_count;
+  }
+
+  // ── MR 退化检测 + CMA-ES 冷重启 ──
+  if (loh_cmaes_degrade_detect) {
+    params->cmaes_mr_epoch_count++;
+
+    // 更新 EMA
+    if (params->cmaes_mr_epoch_count == 1) {
+      params->cmaes_mr_ema = obj_miss_ratio;
+    } else {
+      params->cmaes_mr_ema =
+          loh_cmaes_degrade_ema_alpha * obj_miss_ratio +
+          (1.0 - loh_cmaes_degrade_ema_alpha) * params->cmaes_mr_ema;
+    }
+
+    if (params->cmaes_restart_cooldown > 0) {
+      // 冷却期：只更新 EMA，不检测退化
+      params->cmaes_restart_cooldown--;
+    } else if (params->cmaes_mr_epoch_count > loh_cmaes_degrade_warmup) {
+      // 更新历史最佳 EMA
+      if (params->cmaes_mr_best < 1e-15 ||
+          params->cmaes_mr_ema < params->cmaes_mr_best) {
+        params->cmaes_mr_best = params->cmaes_mr_ema;
+        params->cmaes_degrade_count = 0;
+      } else if (params->cmaes_mr_ema >
+                 params->cmaes_mr_best * loh_cmaes_degrade_threshold) {
+        params->cmaes_degrade_count++;
+      } else {
+        params->cmaes_degrade_count = 0;
+      }
+
+      // 连续退化次数达标 → 触发冷重启
+      if (params->cmaes_degrade_count >= loh_cmaes_degrade_patience) {
+        LOH_DEBUG_PRINT_BASIC(
+            "[CMAES RESTART] MR degradation: ema=%.6f best=%.6f "
+            "ratio=%.2f, restart #%d\n",
+            params->cmaes_mr_ema, params->cmaes_mr_best,
+            params->cmaes_mr_ema /
+                (params->cmaes_mr_best > 1e-15 ? params->cmaes_mr_best : 1.0),
+            params->cmaes_restart_count + 1);
+
+        loh_cmaes_full_restart(params->cmaes_handle, loh_cmaes_init_mean,
+                               loh_cmaes_init_sigma);
+        params->cmaes_restart_count++;
+        params->cmaes_degrade_count = 0;
+        params->cmaes_restart_cooldown = loh_cmaes_degrade_cooldown;
+        params->cmaes_mr_best = 0.0;
+        params->cmaes_mr_epoch_count = 0;
+        params->cmaes_feedback_hist_inited = 0;
+
+        // 从重启后的优化器获取新权重
+        double fresh_w[LOH_MLP_MAX_PARAMS] = {0.0};
+        if (loh_cmaes_ask(params->cmaes_handle, fresh_w, cmaes_output_dim)) {
+          if (params->score_model == LOH_SCORE_MODEL_MLP) {
+            for (int i = 0; i < cmaes_output_dim && i < LOH_MLP_MAX_PARAMS;
+                 ++i) {
+              params->mlp_params[i] = fresh_w[i];
+            }
+          } else {
+            loh_map_cmaes_to_weights(fresh_w, cmaes_output_dim,
+                                     params->weights);
+          }
+        }
+
+        PERF_ACCUM(params, cmaes_sync_total, ts_cmaes_total);
+        return;  // 跳过本轮 tell/ask，重启后从下一个 epoch 开始
+      }
+    }
+  }
+
+  double feedback_value = 0.0;
+  if (loh_cmaes_feedback_mode == 1) {
+    // byte miss ratio
+    feedback_value = byte_miss_ratio;
+  } else if (loh_cmaes_feedback_mode == 2) {
+    // weighted miss ratio
+    feedback_value = loh_miss_ratio_weight * obj_miss_ratio +
+                     loh_byte_miss_ratio_weight * byte_miss_ratio;
+  } else if (loh_cmaes_feedback_mode == 3) {
+    // alpha * ((B_i - B_0) * B_{i-1}) / (B_0 * B_i)
+    // + beta * ((O_i - O_0) * O_{i-1}) / (O_0 * O_i)
+    // + gamma * ((O_{i-1} - O_i) / O_{i-1} - (B_{i-1} - B_i) / B_{i-1})
+    if (!params->cmaes_feedback_hist_inited) {
+      params->cmaes_feedback_hist_inited = 1;
+      params->cmaes_feedback_base_obj_miss_ratio = obj_miss_ratio;
+      params->cmaes_feedback_base_byte_miss_ratio = byte_miss_ratio;
+      params->cmaes_feedback_prev_obj_miss_ratio = obj_miss_ratio;
+      params->cmaes_feedback_prev_byte_miss_ratio = byte_miss_ratio;
+      feedback_value = 0.0;
+    } else {
+      const double O0 = params->cmaes_feedback_base_obj_miss_ratio;
+      const double B0 = params->cmaes_feedback_base_byte_miss_ratio;
+      const double Oprev = params->cmaes_feedback_prev_obj_miss_ratio;
+      const double Bprev = params->cmaes_feedback_prev_byte_miss_ratio;
+      const double Oi = obj_miss_ratio;
+      const double Bi = byte_miss_ratio;
+
+      double term1 = 0.0;
+      double term2 = 0.0;
+      double term3 = 0.0;
+
+      if (fabs(B0) > eps && fabs(Bi) > eps) {
+        term1 = ((Bi - B0) * Bprev) / (B0 * Bi);
+      }
+      if (fabs(O0) > eps && fabs(Oi) > eps) {
+        term2 = ((Oi - O0) * Oprev) / (O0 * Oi);
+      }
+
+      double obj_delta = 0.0;
+      double byte_delta = 0.0;
+      if (fabs(Oprev) > eps) {
+        obj_delta = (Oprev - Oi) / Oprev;
+      }
+      if (fabs(Bprev) > eps) {
+        byte_delta = (Bprev - Bi) / Bprev;
+      }
+      term3 = obj_delta - byte_delta;
+
+      feedback_value = loh_cmaes_feedback_alpha * term1 +
+                       loh_cmaes_feedback_beta * term2 +
+                       loh_cmaes_feedback_gamma * term3;
+
+      params->cmaes_feedback_prev_obj_miss_ratio = Oi;
+      params->cmaes_feedback_prev_byte_miss_ratio = Bi;
+    }
+  } else {
+    // object miss ratio
+    feedback_value = obj_miss_ratio;
+  }
+  PERF_ACCUM(params, cmaes_feedback, ts_feedback);
+
+  PERF_TS ts_tell;
+  PERF_NOW(ts_tell);
+  int gen_before = loh_cmaes_get_generation(params->cmaes_handle);
+  int gen_after = loh_cmaes_tell(params->cmaes_handle, feedback_value);
+  PERF_ACCUM(params, cmaes_tell, ts_tell);
+
+#if LOH_PERF_PROFILING
+  double bridge_assign = 0.0;
+  double bridge_prepare = 0.0;
+  double bridge_optimizer = 0.0;
+  double bridge_inc_iter = 0.0;
+  double bridge_refill = 0.0;
+  double bridge_total = 0.0;
+  if (loh_cmaes_get_last_tell_timing(
+          params->cmaes_handle, &bridge_assign, &bridge_prepare,
+          &bridge_optimizer, &bridge_inc_iter, &bridge_refill, &bridge_total)) {
+    PERF_ADD_DT(params, cmaes_tell_bridge_total, bridge_total);
+    PERF_ADD_DT(params, cmaes_tell_assign, bridge_assign);
+    PERF_ADD_DT(params, cmaes_tell_prepare_solutions, bridge_prepare);
+    PERF_ADD_DT(params, cmaes_tell_optimizer, bridge_optimizer);
+    PERF_ADD_DT(params, cmaes_tell_inc_iter, bridge_inc_iter);
+    PERF_ADD_DT(params, cmaes_tell_refill, bridge_refill);
+  }
+#endif
+
+  // 每个窗口结束后请求下一组候选权重。
+  double next_w[LOH_MLP_MAX_PARAMS] = {0.0};
+  PERF_TS ts_ask;
+  PERF_NOW(ts_ask);
+  int ask_ok = loh_cmaes_ask(params->cmaes_handle, next_w, cmaes_output_dim);
+  // blocked 模式下若 ask 失败（async worker 忙），busy-wait 重试
+  if (!ask_ok && loh_wait_mode_blocked) {
+    while (!ask_ok) {
+      usleep(100);  // 100μs 间隔避免 CPU 空转
+      ask_ok = loh_cmaes_ask(params->cmaes_handle, next_w, cmaes_output_dim);
+    }
+  }
+  PERF_ACCUM(params, cmaes_ask, ts_ask);
+  if (!ask_ok) {
+    // Async mode: worker thread may still be computing new population.
+    // Keep current weights and return — this is normal, not an error.
+    if (loh_cmaes_log) {
+      fprintf(stderr,
+              "[CMAES LOG] ask_SKIP gen=%d feedback=%.6f "
+              "weights=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f] (worker busy)\n",
+              loh_cmaes_get_generation(params->cmaes_handle), feedback_value,
+              params->weights[0], params->weights[1], params->weights[2],
+              params->weights[3], params->weights[4], params->weights[5]);
+    }
+    PERF_ACCUM(params, cmaes_sync_total, ts_cmaes_total);
+    return;
+  }
+
+  PERF_TS ts_sanitize;
+  PERF_NOW(ts_sanitize);
+  int invalid_next_w = 0;
+
+  if (params->score_model == LOH_SCORE_MODEL_MLP) {
+    // MLP 模式：CMA-ES 输出写入 mlp_params（允许负值，bounds 由 CMA-ES
+    // 内部控制）
+    for (int i = 0; i < cmaes_output_dim && i < LOH_MLP_MAX_PARAMS; ++i) {
+      if (!isfinite(next_w[i])) {
+        invalid_next_w++;
+        next_w[i] =
+            isfinite(params->mlp_params[i]) ? params->mlp_params[i] : 0.0;
+      }
+      params->mlp_params[i] = next_w[i];
+    }
+  } else {
+    // 线性模式：使用活跃权重映射
+    for (int i = 0; i < cmaes_output_dim; ++i) {
+      if (!isfinite(next_w[i])) {
+        invalid_next_w++;
+        int wi = loh_active_weight_map[i];
+        if (isfinite(params->weights[wi])) {
+          next_w[i] = params->weights[wi];
+        } else {
+          next_w[i] = 0.5;
+        }
+      }
+    }
+    loh_map_cmaes_to_weights(next_w, cmaes_output_dim, params->weights);
+  }
+  PERF_ACCUM(params, cmaes_sanitize, ts_sanitize);
+
+  if (invalid_next_w > 0) {
+    LOH_DEBUG_PRINT_ERROR(
+        "[CMAES WARNING] invalid next_w count=%d, applied finite fallback\n",
+        invalid_next_w);
+  }
+
+  if (gen_after > gen_before) {
+    params->cmaes_last_generation = gen_after;
+  }
+
+  LOH_DEBUG_PRINT_BASIC(
+      "[CMAES] gen=%d feedback=%.6f(%s) "
+      "next_w=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
+      params->cmaes_last_generation, feedback_value,
+      loh_cmaes_feedback_mode_name(loh_cmaes_feedback_mode), params->weights[0],
+      params->weights[1], params->weights[2], params->weights[3],
+      params->weights[4], params->weights[5]);
+
+  // 运行时详细日志：LOH_CMAES_LOG=1 时输出 gen/sigma/mean/weights
+  // 注意异步模式下 gen/sigma/mean 可能有延迟（worker 线程尚未更新完毕）
+  if (loh_cmaes_log && params->cmaes_handle) {
+    int cur_gen = loh_cmaes_get_generation(params->cmaes_handle);
+    double sigma = loh_cmaes_get_sigma(params->cmaes_handle);
+    double mean[WEIGHT_DIM] = {0.0};
+    int mdim = loh_cmaes_get_mean(params->cmaes_handle, mean,
+                                  params->cmaes_output_dim);
+    fprintf(stderr,
+            "[CMAES LOG] gen=%d sigma=%.6f feedback=%.6f "
+            "mean=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f] "
+            "weights=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
+            cur_gen, sigma, feedback_value, mdim > 0 ? mean[0] : 0.0,
+            mdim > 1 ? mean[1] : 0.0, mdim > 2 ? mean[2] : 0.0,
+            mdim > 3 ? mean[3] : 0.0, mdim > 4 ? mean[4] : 0.0,
+            mdim > 5 ? mean[5] : 0.0, params->weights[0], params->weights[1],
+            params->weights[2], params->weights[3], params->weights[4],
+            params->weights[5]);
+  }
+
+  PERF_ACCUM(params, cmaes_sync_total, ts_cmaes_total);
+}
+
 // 将状态发送到 Actor-Critic 网络并获取更新的权重
 // 【核心修复】：重构此函数以修复死锁问题，并优化等待时间
 static void sync_with_actor_critic(LOH_params_t *params) {
   if (!loh_enable_rl) return;  // 关闭RL时直接返回，无需计时
   if (params->shm_file == NULL && params->shm_mmap == NULL) return;
 
-  // 非阻塞模式 + mmap 可用时使用快速路径
-  if (!loh_wait_mode_blocked && params->shm_mmap != NULL) {
-    sync_with_actor_critic_fast(params);
-    return;
-  }
+  // fast 路径已禁用：统一走普通 sync 逻辑，便于完整日志与一致行为。
 
   // 开始sync总计时
   PERF_TS ts_sync_total;
@@ -3125,11 +4178,6 @@ static void sync_with_actor_critic(LOH_params_t *params) {
   // 会在这次 sync 的读取中被发现并应用
   if (!loh_wait_mode_blocked && shm_data.weights_updated) {
     memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
-    params->segment_mode = shm_data.segment_mode;
-    params->num_segments = shm_data.num_segments;
-    if (params->segment_mode > 0 && params->num_segments > 0) {
-      memcpy(params->segmented_weights, shm_data.segmented_weights, sizeof(double) * 8 * WEIGHT_DIM);
-    }
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         shm_data.score_model == LOH_SCORE_MODEL_MLP) {
       int plen = shm_data.mlp_param_len;
@@ -3150,6 +4198,9 @@ static void sync_with_actor_critic(LOH_params_t *params) {
         "[NON-BLOCK] Applied pending weights from previous sync "
         "(ack_version=%llu)\n",
         (unsigned long long)shm_data.ack_version);
+    loh_log_received_weights("C RX WEIGHTS", shm_data.ack_version,
+                             params->weights);
+    loh_log_first_weights_applied_once(shm_data.ack_version, params->weights);
   }
 
   memcpy(shm_data.state, params->context_state, sizeof(double) * CONTEXT_DIM);
@@ -3183,6 +4234,11 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
   // 简化版本管理：仅用于日志对齐，不用于ACK校验
   shm_data.state_version += 1;
+#if LOH_ENABLE_PENALTY
+  if (loh_penalty_candidate_pairwise) {
+    loh_pair_track_ttl_check_window(params, shm_data.state_version);
+  }
+#endif
   shm_data.timestamp = params->current_timestamp;
 
   // 本次交互的序号（用于两端对齐日志）
@@ -3689,11 +4745,6 @@ static void sync_with_actor_critic(LOH_params_t *params) {
 
     lock_shared_memory(params);
     memcpy(params->weights, shm_data.weights, sizeof(double) * WEIGHT_DIM);
-    params->segment_mode = shm_data.segment_mode;
-    params->num_segments = shm_data.num_segments;
-    if (params->segment_mode > 0 && params->num_segments > 0) {
-      memcpy(params->segmented_weights, shm_data.segmented_weights, sizeof(double) * 8 * WEIGHT_DIM);
-    }
     if (params->score_model == LOH_SCORE_MODEL_MLP &&
         shm_data.score_model == LOH_SCORE_MODEL_MLP) {
       int plen = shm_data.mlp_param_len;
@@ -3905,7 +4956,7 @@ static void loh_debug_check_membership(LOH_params_t *params, cache_obj_t *obj,
 #endif
 
 // 轻量去重 seen 表：使用 generation-tag 避免每轮清零
-#define LOH_SEEN_CAP 1024  // 足以支持 MAX_CANDIDATES_LIMIT=256 的 4x 负载因子
+#define LOH_SEEN_CAP 1024  // 支持 MAX_CANDIDATES_LIMIT=512 的 2x 负载因子
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert((LOH_SEEN_CAP & (LOH_SEEN_CAP - 1)) == 0,
                "LOH_SEEN_CAP must be a power of two");
@@ -4091,6 +5142,317 @@ static void loh_record_request_features(LOH_params_t *params,
 }
 #endif
 
+// ─── 活跃权重映射计算 ───
+// 根据 loh_score_use_compound / loh_use_size / loh_use_freq_rec /
+// loh_use_freq_size / loh_use_rec_size 设置 loh_active_weight_count 和
+// loh_active_weight_map。 必须在 compound/IRT 配置最终确定后调用（初始化末尾 +
+// auto_compound 决策后）。
+static void loh_rebuild_active_weight_map(void) {
+  int idx = 0;
+  // rec/freq 始终参与；size 由 LOH_USE_SIZE 控制
+  loh_active_weight_map[idx++] = 0;                    // rec
+  loh_active_weight_map[idx++] = 1;                    // freq
+  if (loh_use_size) loh_active_weight_map[idx++] = 2;  // size
+  if (loh_score_use_compound) {
+    if (loh_use_freq_rec) loh_active_weight_map[idx++] = 3;
+    if (loh_use_freq_size) loh_active_weight_map[idx++] = 4;
+    if (loh_use_rec_size) loh_active_weight_map[idx++] = 5;
+    if (loh_score_compound_v2) loh_active_weight_map[idx++] = 6;
+  } else if (loh_score_use_irt) {
+    loh_active_weight_map[idx++] = 3;  // irt1
+    loh_active_weight_map[idx++] = 4;  // irt2
+    loh_active_weight_map[idx++] = 5;  // irt3
+  }
+  loh_active_weight_count = idx;
+}
+
+static const char *loh_weight_slot_name(int idx) {
+  switch (idx) {
+    case 0:
+      return "rec";
+    case 1:
+      return "freq";
+    case 2:
+      return "size";
+    case 3:
+      if (loh_score_use_compound) return "freq_rec";
+      return "irt1";
+    case 4:
+      return loh_score_use_compound ? "freq_size" : "irt2";
+    case 5:
+      if (loh_score_use_compound) return "rec_size";
+      return "irt3";
+    case 6:
+      return loh_compound_use_irt1 ? "irt1" : "freq_rec_size";
+    default:
+      return "unknown";
+  }
+}
+
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
+static void loh_log_active_weight_map(const char *tag) {
+  char map_buf[256];
+  int off = 0;
+  map_buf[0] = '\0';
+  for (int i = 0; i < loh_active_weight_count; i++) {
+    int wi = loh_active_weight_map[i];
+    int n = snprintf(map_buf + off, sizeof(map_buf) - (size_t)off, "%s%d:%s",
+                     (i == 0 ? "" : ","), wi, loh_weight_slot_name(wi));
+    if (n <= 0) break;
+    if (off + n >= (int)sizeof(map_buf)) {
+      off = (int)sizeof(map_buf) - 1;
+      map_buf[off] = '\0';
+      break;
+    }
+    off += n;
+  }
+
+  LOH_DEBUG_PRINT_BASIC(
+      "[%s] active_weight_count=%d map={%s} "
+      "score_mode(compound=%d,irt=%d,compound_v2=%d)\n",
+      tag, loh_active_weight_count, map_buf, loh_score_use_compound,
+      loh_score_use_irt, loh_score_compound_v2);
+}
+
+static void loh_log_received_weights(const char *tag, uint64_t ack_version,
+                                     const double *weights) {
+  char active_buf[256];
+  int off = 0;
+  active_buf[0] = '\0';
+  for (int i = 0; i < loh_active_weight_count; i++) {
+    int wi = loh_active_weight_map[i];
+    int n = snprintf(active_buf + off, sizeof(active_buf) - (size_t)off,
+                     "%s%s=%.6f", (i == 0 ? "" : ","), loh_weight_slot_name(wi),
+                     weights[wi]);
+    if (n <= 0) break;
+    if (off + n >= (int)sizeof(active_buf)) {
+      off = (int)sizeof(active_buf) - 1;
+      active_buf[off] = '\0';
+      break;
+    }
+    off += n;
+  }
+
+  LOH_DEBUG_PRINT_BASIC(
+      "[%s] ack=%llu c_weight_dim=%d shm_weight_dim=%d active={%s} "
+      "full=[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f]\n",
+      tag, (unsigned long long)ack_version, loh_active_weight_count, WEIGHT_DIM,
+      active_buf, weights[0], weights[1], weights[2], weights[3], weights[4],
+      weights[5], weights[6]);
+}
+#else
+static void loh_log_active_weight_map(const char *tag) { (void)tag; }
+
+static void loh_log_received_weights(const char *tag, uint64_t ack_version,
+                                     const double *weights) {
+  (void)tag;
+  (void)ack_version;
+  (void)weights;
+}
+#endif
+
+static void loh_log_first_weights_applied_once(uint64_t ack_version,
+                                               const double *weights) {
+  static int logged = 0;
+  if (logged) return;
+  logged = 1;
+  LOH_DEBUG_PRINT_CONFIG(
+      "[LOH CONFIG] FIRST_WEIGHTS_APPLIED: ack=%llu c_weight_dim=%d/%d "
+      "full=[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f]\n",
+      (unsigned long long)ack_version, loh_active_weight_count, WEIGHT_DIM,
+      weights[0], weights[1], weights[2], weights[3], weights[4], weights[5],
+      weights[6]);
+}
+
+// 将 CMA-ES 输出映射到完整权重数组（线性模型专用）
+static void loh_map_cmaes_to_weights(const double *cmaes_w, int cmaes_dim,
+                                     double *weights) {
+  for (int i = 0; i < WEIGHT_DIM; ++i) weights[i] = 0.0;
+  int n = (cmaes_dim < loh_active_weight_count) ? cmaes_dim
+                                                : loh_active_weight_count;
+  for (int i = 0; i < n; ++i) {
+    double v = cmaes_w[i];
+    if (v < 0.0) v = 0.0;
+    if (v > 1.0) v = 1.0;
+    weights[loh_active_weight_map[i]] = v;
+  }
+}
+
+// ─── Feature Selection Bandit (FSB) 核心函数 ───
+
+// 初始化 8 个 arm 的配置（feature flag + fixed weights 0.5/0）
+static void fsb_init_arms(void) {
+  for (int i = 0; i < FSB_N_ARMS; i++) {
+    int fr = (i >> 2) & 1;  // bit2 = freq_rec
+    int fs = (i >> 1) & 1;  // bit1 = freq_size
+    int rs = i & 1;         // bit0 = rec_size
+    g_fsb.arms[i].freq_rec = fr;
+    g_fsb.arms[i].freq_size = fs;
+    g_fsb.arms[i].rec_size = rs;
+    g_fsb.arms[i].fixed_weights[0] = 0.5;  // rec
+    g_fsb.arms[i].fixed_weights[1] = 0.5;  // freq
+    g_fsb.arms[i].fixed_weights[2] = 0.5;  // size
+    g_fsb.arms[i].fixed_weights[3] = fr ? 0.5 : 0.0;
+    g_fsb.arms[i].fixed_weights[4] = fs ? 0.5 : 0.0;
+    g_fsb.arms[i].fixed_weights[5] = rs ? 0.5 : 0.0;
+    g_fsb.arms[i].fixed_weights[6] = 0.0;  // v2 compound 不使用
+  }
+}
+
+// 切换 feature config 到指定 arm，设置权重
+static void fsb_apply_arm(LOH_params_t *params, int arm_idx) {
+  const fsb_arm_config_t *arm = &g_fsb.arms[arm_idx];
+  loh_use_freq_rec = arm->freq_rec;
+  loh_use_freq_size = arm->freq_size;
+  loh_use_rec_size = arm->rec_size;
+  for (int k = 0; k < WEIGHT_DIM; k++)
+    params->weights[k] = arm->fixed_weights[k];
+  // 不重建 active_weight_map，因为 FSB 期间 CMA-ES 未运行
+  fprintf(
+      stderr,
+      "[FSB] apply arm %d (f%d%d%d) weights=[%.1f,%.1f,%.1f,%.1f,%.1f,%.1f]\n",
+      arm_idx, arm->freq_rec, arm->freq_size, arm->rec_size, params->weights[0],
+      params->weights[1], params->weights[2], params->weights[3],
+      params->weights[4], params->weights[5]);
+}
+
+// 一轮结束时，计算去趋势 UCB1 统计
+static void fsb_end_round(void) {
+  // 计算本轮均值
+  double sum = 0.0;
+  for (int i = 0; i < FSB_N_ARMS; i++) sum += g_fsb.round_mrs[i];
+  double mean = sum / FSB_N_ARMS;
+
+  int is_warmup = (g_fsb.current_round < g_fsb.warmup_rounds);
+
+  // 预热轮仅打印不计入统计
+  if (!is_warmup) {
+    for (int i = 0; i < FSB_N_ARMS; i++) {
+      double rel_mr = g_fsb.round_mrs[i] - mean;
+      g_fsb.pulls[i]++;
+      g_fsb.sum_relative_mr[i] += rel_mr;
+    }
+  }
+
+  fprintf(stderr, "[FSB] round %d%s complete: MRs=[", g_fsb.current_round,
+          is_warmup ? " (warmup, not counted)" : "");
+  for (int i = 0; i < FSB_N_ARMS; i++)
+    fprintf(stderr, "%.6f%s", g_fsb.round_mrs[i],
+            i < FSB_N_ARMS - 1 ? "," : "");
+  fprintf(stderr, "] mean=%.6f\n", mean);
+
+  // 打印累计排名
+  if (!is_warmup) {
+    fprintf(stderr, "[FSB] cumulative avg_relative_mr: [");
+    for (int i = 0; i < FSB_N_ARMS; i++) {
+      double avg = (g_fsb.pulls[i] > 0)
+                       ? g_fsb.sum_relative_mr[i] / g_fsb.pulls[i]
+                       : 0.0;
+      fprintf(stderr, "f%d%d%d:%.6f%s", (i >> 2) & 1, (i >> 1) & 1, i & 1, avg,
+              i < FSB_N_ARMS - 1 ? ", " : "");
+    }
+    fprintf(stderr, "]\n");
+  }
+}
+
+// 检查是否收敛：选择平均相对 MR 最低的 arm
+static int fsb_check_convergence(void) {
+  // 预热轮不检查收敛
+  if (g_fsb.current_round < g_fsb.warmup_rounds) return -1;
+
+  // 有效轮数 = 总轮数 - 预热轮数
+  int effective_rounds = g_fsb.current_round + 1 - g_fsb.warmup_rounds;
+  if (effective_rounds < g_fsb.min_rounds) return -1;
+
+  // 找最低平均相对 MR 的 arm
+  int best = 0;
+  double best_avg = g_fsb.sum_relative_mr[0] / g_fsb.pulls[0];
+  for (int i = 1; i < FSB_N_ARMS; i++) {
+    double avg = g_fsb.sum_relative_mr[i] / g_fsb.pulls[i];
+    if (avg < best_avg) {
+      best_avg = avg;
+      best = i;
+    }
+  }
+
+  // 达到最大轮数则无条件锁定
+  if (g_fsb.current_round + 1 >= g_fsb.max_rounds) return best;
+
+  // UCB1 置信度检查：best arm 的 UCB 是否低于所有其他 arm 的 LCB
+  double total_pulls = 0;
+  for (int i = 0; i < FSB_N_ARMS; i++) total_pulls += g_fsb.pulls[i];
+  double ln_total = log(total_pulls);
+  double best_ucb = best_avg + g_fsb.ucb_c * sqrt(ln_total / g_fsb.pulls[best]);
+
+  for (int i = 0; i < FSB_N_ARMS; i++) {
+    if (i == best) continue;
+    double avg_i = g_fsb.sum_relative_mr[i] / g_fsb.pulls[i];
+    double lcb_i = avg_i - g_fsb.ucb_c * sqrt(ln_total / g_fsb.pulls[i]);
+    if (best_ucb >= lcb_i) return -1;  // 置信区间重叠，继续探索
+  }
+  return best;  // 所有其他 arm 的 LCB > best 的 UCB → 收敛
+}
+
+// FSB 每个请求的步进函数，返回 1 表示刚切换了 arm/locked
+static int fsb_step(LOH_params_t *params, int is_miss) {
+  if (!g_fsb.enabled || g_fsb.phase != 0) return 0;
+
+  g_fsb.block_req_count++;
+  g_fsb.block_miss_count += is_miss ? 1 : 0;
+
+  // 块未满则继续
+  if (g_fsb.block_req_count < g_fsb.block_size) return 0;
+
+  // ── 块结束 ──
+  double block_mr = (double)g_fsb.block_miss_count / g_fsb.block_req_count;
+  g_fsb.round_mrs[g_fsb.current_arm_idx] = block_mr;
+  g_fsb.block_req_count = 0;
+  g_fsb.block_miss_count = 0;
+
+  // 前进到下一个 arm
+  g_fsb.current_arm_idx++;
+
+  if (g_fsb.current_arm_idx >= FSB_N_ARMS) {
+    // ── 轮结束 ──
+    fsb_end_round();
+
+    int winner = fsb_check_convergence();
+    if (winner >= 0) {
+      // ── 收敛，锁定 ──
+      g_fsb.locked_arm = winner;
+      g_fsb.phase = 1;
+      const fsb_arm_config_t *arm = &g_fsb.arms[winner];
+
+      // 设置全局 feature flags 为赢者配置
+      loh_use_freq_rec = arm->freq_rec;
+      loh_use_freq_size = arm->freq_size;
+      loh_use_rec_size = arm->rec_size;
+      loh_score_use_compound = 1;
+      loh_auto_compound_resolved = 1;
+
+      // 重建 active weight map (CMA-ES 需要)
+      loh_rebuild_active_weight_map();
+
+      fprintf(stderr,
+              "[FSB] LOCKED arm %d (f%d%d%d) after %d rounds, "
+              "avg_rel_mr=%.6f, active_dim=%d\n",
+              winner, arm->freq_rec, arm->freq_size, arm->rec_size,
+              g_fsb.current_round + 1,
+              g_fsb.sum_relative_mr[winner] / g_fsb.pulls[winner],
+              loh_active_weight_count);
+      return 1;
+    }
+
+    // 开始新一轮
+    g_fsb.current_round++;
+    g_fsb.current_arm_idx = 0;
+  }
+
+  // 应用下一个 arm 的配置
+  fsb_apply_arm(params, g_fsb.current_arm_idx);
+  return 1;
+}
+
 /**
  * @brief 初始化 LOH 缓存
  *
@@ -4151,6 +5513,11 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       getenv("LOH_STRUCTURED_CANDIDATES") ? getenv("LOH_STRUCTURED_CANDIDATES")
                                           : "(unset)",
       MAX_CANDIDATES_DEFAULT, MAX_CANDIDATES_LIMIT);
+  LOH_DEBUG_PRINT_CONFIG(
+      "  LOH_TOTAL_CANDIDATES=%s (default=disabled, limit=%d)\n",
+      getenv("LOH_TOTAL_CANDIDATES") ? getenv("LOH_TOTAL_CANDIDATES")
+                                     : "(unset)",
+      MAX_CANDIDATES_LIMIT);
 
   cache_t *cache =
       cache_struct_init("LOH", ccache_params, cache_specific_params);
@@ -4182,8 +5549,25 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->n_candidates = 0;
   params->is_warmed_up = false;               // 初始为未预热状态
   params->history_capacity_adjusted = false;  // 历史容量未调整
+  params->cmaes_handle = NULL;
+  params->cmaes_enabled = 0;
+  params->cmaes_last_generation = 0;
   // ===【读取候选池大小环境变量（必须在所有数据结构初始化之前）】===
   {
+    const char *tc_str = getenv("LOH_TOTAL_CANDIDATES");
+    if (tc_str != NULL && tc_str[0] != '\0') {
+      int tc_val = atoi(tc_str);
+      if (tc_val >= 1 && tc_val <= MAX_CANDIDATES_LIMIT) {
+        loh_total_candidates = tc_val;
+      } else {
+        fprintf(stderr,
+                "LOH WARNING: LOH_TOTAL_CANDIDATES=%d out of range [1, %d], "
+                "disabled\n",
+                tc_val, MAX_CANDIDATES_LIMIT);
+        loh_total_candidates = -1;
+      }
+    }
+
     const char *mc_str = getenv("LOH_STRUCTURED_CANDIDATES");
     if (mc_str != NULL) {
       int mc_val = atoi(mc_str);
@@ -4197,9 +5581,26 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         loh_structured_candidates = MAX_CANDIDATES_DEFAULT;
       }
     }
-    printf("LOH_STRUCTURED_CANDIDATES=%d (default=%d, limit=%d)\n",
-           loh_structured_candidates, MAX_CANDIDATES_DEFAULT,
-           MAX_CANDIDATES_LIMIT);
+
+    if (loh_total_candidates > 0 &&
+        loh_structured_candidates > loh_total_candidates) {
+      fprintf(stderr,
+              "LOH WARNING: LOH_STRUCTURED_CANDIDATES=%d exceeds "
+              "LOH_TOTAL_CANDIDATES=%d, clamped to total\n",
+              loh_structured_candidates, loh_total_candidates);
+      loh_structured_candidates = loh_total_candidates;
+    }
+
+    LOH_DEBUG_PRINT_CONFIG(
+        "LOH_STRUCTURED_CANDIDATES=%d (default=%d, limit=%d)\n",
+        loh_structured_candidates, MAX_CANDIDATES_DEFAULT,
+        MAX_CANDIDATES_LIMIT);
+    if (loh_total_candidates > 0) {
+      LOH_DEBUG_PRINT_CONFIG("LOH_TOTAL_CANDIDATES=%d (enabled)\n",
+                             loh_total_candidates);
+    } else {
+      LOH_DEBUG_PRINT_CONFIG("LOH_TOTAL_CANDIDATES=disabled\n");
+    }
   }
 
   // 初始化 frequency 表
@@ -4225,6 +5626,41 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->obj_array = (cache_obj_t **)malloc(params->obj_array_capacity *
                                              sizeof(cache_obj_t *));
 
+  // 初始化批量淘汰队列
+  params->evict_queue_len = 0;
+  params->evict_queue_pos = 0;
+  params->evict_queue_fill_vtime = 0;
+  // LOH_BATCH_EVICT_SIZE: 运行时批量大小（默认 16，最大 BATCH_EVICT_MAX=64）
+  {
+    int bs = 16;
+    const char *bs_str = getenv("LOH_BATCH_EVICT_SIZE");
+    if (bs_str) {
+      bs = atoi(bs_str);
+      if (bs < 1) bs = 1;
+      if (bs > BATCH_EVICT_MAX) bs = BATCH_EVICT_MAX;
+    }
+    params->batch_evict_size = bs;
+  }
+  // LOH_BATCH_MAX_AGE: 队列最大年龄（请求数），0=不限（默认 0）
+  {
+    int64_t age = 0;
+    const char *age_str = getenv("LOH_BATCH_MAX_AGE");
+    if (age_str) age = atoll(age_str);
+    if (age < 0) age = 0;
+    params->batch_max_age = age;
+  }
+  LOH_DEBUG_PRINT_CONFIG("[LOH INIT] batch_evict_size=%d, batch_max_age=%lld\n",
+                         params->batch_evict_size,
+                         (long long)params->batch_max_age);
+
+  // LOH_EVICT_SCORE_BY_SIZE: 用 score/obj_size 做淘汰比较（改善 BMR）
+  {
+    const char *esbs = getenv("LOH_EVICT_SCORE_BY_SIZE");
+    loh_evict_score_by_size = loh_parse_bool_env(esbs, loh_evict_score_by_size);
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] evict_score_by_size=%d\n",
+                           loh_evict_score_by_size);
+  }
+
   // 初始化特征权重（默认的平衡初值）
   params->weights[0] = 1.0;  // recency
   params->weights[1] = 0.0;  // frequency
@@ -4245,7 +5681,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         params->weights[i] = atof(tok);
         tok = strtok(NULL, ",");
       }
-      printf(
+      LOH_DEBUG_PRINT_CONFIG(
           "LOH: initial weights overridden to [%.4f, %.4f, %.4f, %.4f, %.4f, "
           "%.4f]\n",
           params->weights[0], params->weights[1], params->weights[2],
@@ -4440,13 +5876,10 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     g_free(buf);
   }
 
-  // 初始化reward权重（默认只考虑miss ratio）
-  loh_miss_ratio_weight = 1.0;       // 默认权重：只考虑对象miss ratio
-  loh_byte_miss_ratio_weight = 0.0;  // 默认权重：不考虑字节miss ratio
-
   // ============================================================
   // 运行时环境变量覆盖（集中处理）
-  //   1) RL / 权重相关（LOH_ENABLE_RL；LOH_FIXED_WEIGHTS / miss-ratio-weight）
+  //   1) RL / 权重相关（LOH_ENABLE_RL；LOH_FIXED_WEIGHTS；
+  //      LOH_MISS_RATIO_WEIGHT）
   //   2) 共享内存 / 信号量 / 等待模式
   //   3) 特征变换 / 归一化相关
   // ============================================================
@@ -4454,6 +5887,31 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   // 1) RL / 权重相关
   // 初始化文件式共享内存：默认启用 RL，可通过 LOH_ENABLE_RL / enable-rl 覆盖
   loh_enable_rl = 1;
+
+  // 1.0) 运行时环境：通过 LOH_MISS_RATIO_WEIGHT 覆盖 reward 默认权重
+  {
+    // 先落默认值，再按环境变量覆盖
+    loh_miss_ratio_weight = LOH_DEFAULT_MISS_RATIO_WEIGHT;
+    loh_byte_miss_ratio_weight = LOH_DEFAULT_BYTE_MISS_RATIO_WEIGHT;
+
+    const char *env_mw = getenv("LOH_MISS_RATIO_WEIGHT");
+    if (env_mw && env_mw[0] != '\0') {
+      double mw = atof(env_mw);
+      if (mw >= 0.0 && mw <= 1.0) {
+        loh_miss_ratio_weight = mw;
+        loh_byte_miss_ratio_weight = 1.0 - mw;
+      } else {
+        fprintf(stderr,
+                "LOH WARNING: LOH_MISS_RATIO_WEIGHT=%.6f out of range [0, 1], "
+                "keeping default %.3f\n",
+                mw, LOH_DEFAULT_MISS_RATIO_WEIGHT);
+      }
+    }
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Reward default after env: miss_ratio_weight=%.3f, "
+        "byte_miss_ratio_weight=%.3f (LOH_MISS_RATIO_WEIGHT)\n",
+        loh_miss_ratio_weight, loh_byte_miss_ratio_weight);
+  }
 
   // 1.1) 运行时环境：通过 LOH_ENABLE_RL 覆盖开关
   {
@@ -4465,8 +5923,168 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
                            loh_enable_rl);
   }
 
+  // 1.1.1) 运行时环境：CMA-ES 在线调度（与 RL 互斥）
+  {
+    const char *env_cmaes = getenv("LOH_ENABLE_CMAES");
+    const char *env_lambda = getenv("LOH_CMAES_LAMBDA");
+    const char *env_mean = getenv("LOH_CMAES_INIT_MEAN");
+    const char *env_sigma = getenv("LOH_CMAES_INIT_SIGMA");
+    const char *env_algo = getenv("LOH_CMAES_ALGO");
+    const char *env_feedback = getenv("LOH_CMAES_FEEDBACK");
+    const char *env_alpha = getenv("LOH_CMAES_FEEDBACK_ALPHA");
+    const char *env_beta = getenv("LOH_CMAES_FEEDBACK_BETA");
+    const char *env_gamma = getenv("LOH_CMAES_FEEDBACK_GAMMA");
+
+    if (env_feedback && env_feedback[0]) {
+      if (strcasecmp(env_feedback, "byte") == 0) {
+        loh_cmaes_feedback_mode = 1;
+      } else if (strcasecmp(env_feedback, "weighted") == 0 ||
+                 strcasecmp(env_feedback, "mix") == 0 ||
+                 strcasecmp(env_feedback, "weighted_mix") == 0) {
+        loh_cmaes_feedback_mode = 2;
+      } else if (strcasecmp(env_feedback, "abg") == 0 ||
+                 strcasecmp(env_feedback, "delta3") == 0 ||
+                 strcasecmp(env_feedback, "abg_delta") == 0) {
+        loh_cmaes_feedback_mode = 3;
+      } else {
+        loh_cmaes_feedback_mode = 0;
+      }
+    }
+    if (env_alpha && env_alpha[0] != '\0') {
+      loh_cmaes_feedback_alpha = atof(env_alpha);
+    }
+    if (env_beta && env_beta[0] != '\0') {
+      loh_cmaes_feedback_beta = atof(env_beta);
+    }
+    if (env_gamma && env_gamma[0] != '\0') {
+      loh_cmaes_feedback_gamma = atof(env_gamma);
+    }
+
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] CMA-ES feedback mode=%s alpha=%.6f beta=%.6f gamma=%.6f "
+        "(LOH_CMAES_FEEDBACK, *_ALPHA/BETA/GAMMA)\n",
+        loh_cmaes_feedback_mode_name(loh_cmaes_feedback_mode),
+        loh_cmaes_feedback_alpha, loh_cmaes_feedback_beta,
+        loh_cmaes_feedback_gamma);
+
+    loh_enable_cmaes = loh_parse_bool_env(env_cmaes, loh_enable_cmaes);
+    if (env_lambda && env_lambda[0] != '\0') {
+      int v = atoi(env_lambda);
+      if (v >= 2 && v <= 512) loh_cmaes_lambda = v;
+    }
+    if (env_mean && env_mean[0] != '\0') {
+      loh_cmaes_init_mean = atof(env_mean);
+    }
+    if (env_sigma && env_sigma[0] != '\0') {
+      loh_cmaes_init_sigma = atof(env_sigma);
+    }
+
+    if (loh_cmaes_init_mean < -2.0) loh_cmaes_init_mean = -2.0;
+    if (loh_cmaes_init_mean > 2.0) loh_cmaes_init_mean = 2.0;
+    if (loh_cmaes_init_sigma < 0.01) loh_cmaes_init_sigma = 0.01;
+
+    // LOH_CMAES_WEIGHT_LB / LOH_CMAES_WEIGHT_UB: 线性模型权重搜索范围
+    // 默认 [0,1]；设 LB=-1 允许 CMA-ES 学到 "反转 sign" 的权重（用于 BMR 优化）
+    {
+      const char *env_wlb = getenv("LOH_CMAES_WEIGHT_LB");
+      const char *env_wub = getenv("LOH_CMAES_WEIGHT_UB");
+      if (env_wlb && env_wlb[0] != '\0') loh_cmaes_weight_lb = atof(env_wlb);
+      if (env_wub && env_wub[0] != '\0') loh_cmaes_weight_ub = atof(env_wub);
+      if (loh_cmaes_weight_lb >= loh_cmaes_weight_ub) {
+        fprintf(
+            stderr,
+            "[LOH WARNING] CMAES_WEIGHT_LB(%.2f) >= UB(%.2f), reset to [0,1]\n",
+            loh_cmaes_weight_lb, loh_cmaes_weight_ub);
+        loh_cmaes_weight_lb = 0.0;
+        loh_cmaes_weight_ub = 1.0;
+      }
+    }
+
+    // LOH_CMAES_SKIP_INIT_ASK: 跳过创建时的 ask()，首轮用系统初始权重
+    {
+      const char *env_skip = getenv("LOH_CMAES_SKIP_INIT_ASK");
+      loh_cmaes_skip_init_ask =
+          loh_parse_bool_env(env_skip, loh_cmaes_skip_init_ask);
+    }
+
+    // LOH_CMAES_INIT_FROM_WEIGHTS: 1=用 params->weights 做向量化均值(v2), 0=用
+    // scalar mean(v1)
+    {
+      const char *env_ifw = getenv("LOH_CMAES_INIT_FROM_WEIGHTS");
+      loh_cmaes_init_from_weights =
+          loh_parse_bool_env(env_ifw, loh_cmaes_init_from_weights);
+    }
+
+    // LOH_CMAES_LOG: 1=每次 tell/ask 后打印 gen/sigma/mean/weights 到 stderr
+    {
+      const char *env_log = getenv("LOH_CMAES_LOG");
+      loh_cmaes_log = loh_parse_bool_env(env_log, loh_cmaes_log);
+    }
+
+    if (loh_enable_cmaes) {
+      int score_use_irt =
+          loh_parse_bool_env(getenv("LOH_SCORE_USE_IRT"), loh_score_use_irt);
+      int score_use_compound = loh_parse_bool_env(
+          getenv("LOH_SCORE_USE_COMPOUND"), loh_score_use_compound);
+      int score_compound_v2 = loh_parse_bool_env(
+          getenv("LOH_SCORE_COMPOUND_V2"), loh_score_compound_v2);
+      int cmaes_output_dim;
+      if (params->score_model == LOH_SCORE_MODEL_MLP) {
+        cmaes_output_dim = params->mlp_param_len;
+      } else {
+        cmaes_output_dim = loh_active_weight_count;
+        if (cmaes_output_dim < 0) cmaes_output_dim = 0;
+        if (cmaes_output_dim > WEIGHT_DIM) cmaes_output_dim = WEIGHT_DIM;
+      }
+
+      loh_enable_rl = 0;
+      params->cmaes_enabled = 1;
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] CMA-ES enabled: dim=%d lambda=%d mean=%.3f sigma=%.3f "
+          "algo=%s model=%s bounds=[%.2f,%.2f] (RL disabled)\n",
+          cmaes_output_dim, loh_cmaes_lambda, loh_cmaes_init_mean,
+          loh_cmaes_init_sigma,
+          (env_algo && env_algo[0] != '\0') ? env_algo : "aipop",
+          params->score_model == LOH_SCORE_MODEL_MLP ? "mlp" : "linear",
+          loh_cmaes_weight_lb, loh_cmaes_weight_ub);
+    }
+  }
+
+  // 1.1.2) MR 退化检测参数
+  {
+    const char *v;
+    v = getenv("LOH_CMAES_DEGRADE_DETECT");
+    if (v && v[0]) loh_cmaes_degrade_detect = loh_parse_bool_env(v, 1);
+    v = getenv("LOH_CMAES_DEGRADE_THRESHOLD");
+    if (v && v[0]) loh_cmaes_degrade_threshold = atof(v);
+    v = getenv("LOH_CMAES_DEGRADE_PATIENCE");
+    if (v && v[0]) loh_cmaes_degrade_patience = atoi(v);
+    v = getenv("LOH_CMAES_DEGRADE_EMA_ALPHA");
+    if (v && v[0]) loh_cmaes_degrade_ema_alpha = atof(v);
+    v = getenv("LOH_CMAES_DEGRADE_WARMUP");
+    if (v && v[0]) loh_cmaes_degrade_warmup = atoi(v);
+    v = getenv("LOH_CMAES_DEGRADE_COOLDOWN");
+    if (v && v[0]) loh_cmaes_degrade_cooldown = atoi(v);
+
+    if (loh_cmaes_degrade_threshold < 1.01) loh_cmaes_degrade_threshold = 1.01;
+    if (loh_cmaes_degrade_patience < 1) loh_cmaes_degrade_patience = 1;
+    if (loh_cmaes_degrade_ema_alpha < 0.01) loh_cmaes_degrade_ema_alpha = 0.01;
+    if (loh_cmaes_degrade_ema_alpha > 1.0) loh_cmaes_degrade_ema_alpha = 1.0;
+    if (loh_cmaes_degrade_warmup < 1) loh_cmaes_degrade_warmup = 1;
+    if (loh_cmaes_degrade_cooldown < 0) loh_cmaes_degrade_cooldown = 0;
+
+    if (loh_enable_cmaes && loh_cmaes_degrade_detect) {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] CMA-ES degrade detect: threshold=%.2f patience=%d "
+          "ema_alpha=%.2f warmup=%d cooldown=%d\n",
+          loh_cmaes_degrade_threshold, loh_cmaes_degrade_patience,
+          loh_cmaes_degrade_ema_alpha, loh_cmaes_degrade_warmup,
+          loh_cmaes_degrade_cooldown);
+    }
+  }
+
   // 1.2) cache_specific_params：learning-interval / enable-rl /
-  //      rl-update-interval / miss-ratio-weight
+  //      rl-update-interval
   if (cache_specific_params != NULL) {
     char *params_str = g_strdup(cache_specific_params);
     char *old_params_str = params_str;
@@ -4485,17 +6103,23 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       } else if (strcmp(key, "rl-update-interval") == 0) {
         params->rl_update_interval = atoll(value);
       } else if (strcmp(key, "miss-ratio-weight") == 0) {
-        loh_miss_ratio_weight = atof(value);
-        // 自动设置byte_miss_ratio_weight为互补权重
-        loh_byte_miss_ratio_weight = 1.0 - loh_miss_ratio_weight;
         LOH_DEBUG_PRINT_CONFIG(
-            "[LOH INIT] Set miss_ratio_weight=%.3f, "
-            "byte_miss_ratio_weight=%.3f\n",
-            loh_miss_ratio_weight, loh_byte_miss_ratio_weight);
+            "[LOH INIT] WARNING: cache_specific_params 'miss-ratio-weight' "
+            "is deprecated and ignored; use LOH_MISS_RATIO_WEIGHT\n");
       }
     }
 
     g_free(old_params_str);
+  }
+
+  LOH_DEBUG_PRINT_CONFIG(
+      "[LOH INIT] Reward weight: miss_ratio_weight=%.3f, "
+      "byte_miss_ratio_weight=%.3f\n",
+      loh_miss_ratio_weight, loh_byte_miss_ratio_weight);
+
+  if (loh_enable_cmaes) {
+    loh_enable_rl = 0;
+    params->cmaes_enabled = 1;
   }
 
   // 2) 共享内存 / 信号量 / 等待模式
@@ -4604,11 +6228,11 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       } else {
         LOH_DEBUG_PRINT_CONFIG(
             "[LOH INIT] WARNING: Invalid LOH_WAIT_MODE='%s', using default "
-            "(BLOCKED)\n",
+            "(NON-BLOCKED)\n",
             wait_mode_str);
       }
     } else {
-      LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Wait mode: default (BLOCKED)\n");
+      LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Wait mode: default (NON-BLOCKED)\n");
     }
   }
 
@@ -4625,6 +6249,234 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
             val);
       }
     }
+  }
+
+  // 统一提前解析 LOH_AUTO_COMPOUND：
+  // 需要覆盖 RL-only 路径（params->cmaes_enabled=0）下的默认值，
+  // 确保 warmup 后 auto_compound 决策在 RL / CMA-ES 两种模式都可触发。
+  {
+    const char *env_ac_global = getenv("LOH_AUTO_COMPOUND");
+    if (env_ac_global && env_ac_global[0] != '\0') {
+      loh_auto_compound = loh_parse_bool_env(env_ac_global, 0);
+    }
+  }
+
+  // CMA-ES 初始化：生成首个窗口使用的候选权重。
+  if (params->cmaes_enabled) {
+    int score_use_irt = loh_score_use_irt;
+    int score_use_compound = loh_score_use_compound;
+    int score_compound_v2 = loh_score_compound_v2;
+    const char *env_irt = getenv("LOH_SCORE_USE_IRT");
+    const char *env_comp = getenv("LOH_SCORE_USE_COMPOUND");
+    const char *env_comp_v2 = getenv("LOH_SCORE_COMPOUND_V2");
+    if (env_irt) {
+      if (strcmp(env_irt, "1") == 0 || strcasecmp(env_irt, "true") == 0 ||
+          strcasecmp(env_irt, "yes") == 0)
+        score_use_irt = 1;
+      else if (strcmp(env_irt, "0") == 0 || strcasecmp(env_irt, "false") == 0 ||
+               strcasecmp(env_irt, "no") == 0)
+        score_use_irt = 0;
+    }
+    if (env_comp) {
+      if (strcmp(env_comp, "1") == 0 || strcasecmp(env_comp, "true") == 0 ||
+          strcasecmp(env_comp, "yes") == 0)
+        score_use_compound = 1;
+      else if (strcmp(env_comp, "0") == 0 ||
+               strcasecmp(env_comp, "false") == 0 ||
+               strcasecmp(env_comp, "no") == 0)
+        score_use_compound = 0;
+    }
+    if (env_comp_v2) {
+      if (strcmp(env_comp_v2, "1") == 0 ||
+          strcasecmp(env_comp_v2, "true") == 0 ||
+          strcasecmp(env_comp_v2, "yes") == 0)
+        score_compound_v2 = 1;
+      else if (strcmp(env_comp_v2, "0") == 0 ||
+               strcasecmp(env_comp_v2, "false") == 0 ||
+               strcasecmp(env_comp_v2, "no") == 0)
+        score_compound_v2 = 0;
+    }
+
+    int cmaes_output_dim;
+    double cmaes_lb =
+        loh_cmaes_weight_lb;  // CMA-ES 搜索空间下界（受环境变量控制）
+    double cmaes_ub =
+        loh_cmaes_weight_ub;  // CMA-ES 搜索空间上界（受环境变量控制）
+
+    if (params->score_model == LOH_SCORE_MODEL_MLP) {
+      // MLP 模式：CMA-ES 优化全部 MLP 参数（W1, b1, W2, b2）
+      cmaes_output_dim = params->mlp_param_len;
+      cmaes_lb = -2.0;  // MLP 权重/偏置需要负值
+      cmaes_ub = 2.0;
+      // MLP 模式下 init_mean 默认 0（权重对称初始化）
+      if (loh_cmaes_init_mean > 0.4 && loh_cmaes_init_mean < 0.6) {
+        loh_cmaes_init_mean = 0.0;
+      }
+      // MLP 维度高，如果用户没显式设 lambda（仍为默认 10）则自动增大
+      if (loh_cmaes_lambda <= 10 && cmaes_output_dim > WEIGHT_DIM) {
+        int auto_lambda = 4 + (int)(3.0 * log((double)cmaes_output_dim));
+        if (auto_lambda < loh_cmaes_lambda) auto_lambda = loh_cmaes_lambda;
+        loh_cmaes_lambda = auto_lambda;
+      }
+    } else {
+      // 线性模式：使用活跃权重映射决定搜索维度
+      // 提前将 local compound setting 同步到全局 + 解析特征开关
+      loh_score_use_compound = score_use_compound;
+      loh_score_use_irt = score_use_irt;
+      loh_score_compound_v2 = score_compound_v2;
+      {
+        const char *e_sz = getenv("LOH_USE_SIZE");
+        const char *e_fr = getenv("LOH_USE_FREQ_REC");
+        const char *e_fs = getenv("LOH_USE_FREQ_SIZE");
+        const char *e_rs = getenv("LOH_USE_REC_SIZE");
+        const char *e_irt1 = getenv("LOH_COMPOUND_USE_IRT1");
+        if (e_sz && e_sz[0])
+          loh_use_size = loh_parse_bool_env(e_sz, loh_use_size);
+        if (e_fr && e_fr[0])
+          loh_use_freq_rec = loh_parse_bool_env(e_fr, loh_use_freq_rec);
+        if (e_fs && e_fs[0])
+          loh_use_freq_size = loh_parse_bool_env(e_fs, loh_use_freq_size);
+        if (e_rs && e_rs[0])
+          loh_use_rec_size = loh_parse_bool_env(e_rs, loh_use_rec_size);
+        if (e_irt1 && e_irt1[0])
+          loh_compound_use_irt1 =
+              loh_parse_bool_env(e_irt1, loh_compound_use_irt1);
+        // irt1 作为第 7 维需要 compound_v2 的 slot 6，自动联动
+        if (loh_compound_use_irt1) loh_score_compound_v2 = 1;
+        if (loh_use_freq_rec || loh_use_freq_size || loh_use_rec_size)
+          loh_score_use_compound = 1;
+      }
+      loh_rebuild_active_weight_map();
+      cmaes_output_dim = loh_active_weight_count;
+      if (cmaes_output_dim < 0) cmaes_output_dim = 0;
+      if (cmaes_output_dim > WEIGHT_DIM) cmaes_output_dim = WEIGHT_DIM;
+    }
+
+    params->cmaes_output_dim = cmaes_output_dim;
+
+    // 提前解析 LOH_AUTO_COMPOUND，确保 DEFERRED 判断使用正确的值
+    // （修复: 原先解析在 DEFERRED 之后，导致 AC=0 时 CMA-ES 仍被跳过）
+    {
+      const char *env_ac_early = getenv("LOH_AUTO_COMPOUND");
+      if (env_ac_early && env_ac_early[0] != '\0') {
+        loh_auto_compound = loh_parse_bool_env(env_ac_early, 0);
+      }
+    }
+
+    // ── FSB 环境变量解析 ──
+    {
+      const char *env_fsb = getenv("LOH_FSB");
+      if (env_fsb && env_fsb[0] != '\0') {
+        g_fsb.enabled = loh_parse_bool_env(env_fsb, 0);
+      }
+      if (g_fsb.enabled) {
+        // FSB 替代 auto_compound
+        loh_auto_compound = 0;
+        g_fsb.block_size = 0;  // 0=稍后根据 cache 对象数自动设定
+        g_fsb.min_rounds = 2;
+        g_fsb.max_rounds = 5;
+        g_fsb.warmup_rounds = 0;  // v2 默认不跳过 warmup
+        g_fsb.ucb_c = 1.0;
+        const char *e;
+        if ((e = getenv("LOH_FSB_BLOCK_SIZE")) && e[0])
+          g_fsb.block_size = atoi(e);
+        if ((e = getenv("LOH_FSB_MIN_ROUNDS")) && e[0])
+          g_fsb.min_rounds = atoi(e);
+        if ((e = getenv("LOH_FSB_MAX_ROUNDS")) && e[0])
+          g_fsb.max_rounds = atoi(e);
+        if ((e = getenv("LOH_FSB_WARMUP_ROUNDS")) && e[0])
+          g_fsb.warmup_rounds = atoi(e);
+        if ((e = getenv("LOH_FSB_UCB_C")) && e[0]) g_fsb.ucb_c = atof(e);
+        if (g_fsb.warmup_rounds < 0) g_fsb.warmup_rounds = 0;
+        if (g_fsb.min_rounds < 1) g_fsb.min_rounds = 1;
+        if (g_fsb.max_rounds < g_fsb.min_rounds + g_fsb.warmup_rounds)
+          g_fsb.max_rounds = g_fsb.min_rounds + g_fsb.warmup_rounds;
+        fprintf(stderr,
+                "[LOH INIT] FSB enabled: block_size=%d min_rounds=%d "
+                "max_rounds=%d warmup_rounds=%d ucb_c=%.2f (auto_compound "
+                "disabled)\n",
+                g_fsb.block_size, g_fsb.min_rounds, g_fsb.max_rounds,
+                g_fsb.warmup_rounds, g_fsb.ucb_c);
+      }
+    }
+
+    // 自适应 compound: 延迟 CMA-ES 创建到 warmup 完成后
+    if (loh_auto_compound || g_fsb.enabled) {
+      params->cmaes_handle = NULL;
+      // warmup 期间使用默认权重 [1,0,0]（compound=0, 3维线性）
+      params->weights[0] = 1.0;
+      for (int i = 1; i < WEIGHT_DIM; ++i) params->weights[i] = 0.0;
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] CMA-ES creation DEFERRED (auto_compound pending)\n");
+    } else {
+      if (loh_cmaes_init_from_weights) {
+        // v2: 从 params->weights 构建 CMA-ES 每维初始均值向量
+        double x0[WEIGHT_DIM] = {0.0};
+        for (int i = 0; i < cmaes_output_dim && i < loh_active_weight_count;
+             i++) {
+          x0[i] = params->weights[loh_active_weight_map[i]];
+        }
+        params->cmaes_handle = loh_cmaes_create_bounded_v(
+            cmaes_output_dim, loh_cmaes_lambda, x0, loh_cmaes_init_sigma,
+            cmaes_lb, cmaes_ub);
+      } else {
+        // v1: scalar mean=0.5 均匀初始化（对 size-dominant trace 探索更充分）
+        params->cmaes_handle = loh_cmaes_create_bounded(
+            cmaes_output_dim, loh_cmaes_lambda, loh_cmaes_init_mean,
+            loh_cmaes_init_sigma, cmaes_lb, cmaes_ub);
+      }
+      if (params->cmaes_handle == NULL) {
+        params->cmaes_enabled = 0;
+        LOH_DEBUG_PRINT_ERROR(
+            "[LOH INIT] failed to create CMA-ES optimizer, fallback to static "
+            "weights\n");
+      } else {
+        if (params->score_model == LOH_SCORE_MODEL_MLP) {
+          // MLP 模式：初始候选写入 mlp_params
+          double init_p[LOH_MLP_MAX_PARAMS] = {0.0};
+          if (loh_cmaes_ask(params->cmaes_handle, init_p, cmaes_output_dim)) {
+            for (int i = 0; i < cmaes_output_dim && i < LOH_MLP_MAX_PARAMS;
+                 ++i) {
+              params->mlp_params[i] = init_p[i];
+            }
+          }
+          LOH_DEBUG_PRINT_CONFIG(
+              "[LOH INIT] CMA-ES+MLP: dim=%d hidden=%d lambda=%d "
+              "bounds=[%.1f,%.1f] "
+              "mean=%.3f sigma=%.3f\n",
+              cmaes_output_dim, params->mlp_hidden, loh_cmaes_lambda, cmaes_lb,
+              cmaes_ub, loh_cmaes_init_mean, loh_cmaes_init_sigma);
+        } else {
+          if (loh_cmaes_skip_init_ask) {
+            // 跳过初始 ask()：首轮使用系统权重（默认 [1,0,0,0,0,0]），
+            // CMA-ES 从下一个周期开始 ask/tell（pending_idx_=-1 → 首次 tell
+            // 被安全忽略）
+            LOH_DEBUG_PRINT_CONFIG(
+                "[LOH INIT] CMA-ES created (dim=%d), SKIP_INIT_ASK=1, using "
+                "system "
+                "weights=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
+                cmaes_output_dim, params->weights[0], params->weights[1],
+                params->weights[2], params->weights[3], params->weights[4],
+                params->weights[5]);
+          } else {
+            // 默认行为：init 时 ask() 获取第一组候选权重
+            double init_w[WEIGHT_DIM] = {0.0};
+            if (loh_cmaes_ask(params->cmaes_handle, init_w, cmaes_output_dim)) {
+              loh_map_cmaes_to_weights(init_w, cmaes_output_dim,
+                                       params->weights);
+            }
+            LOH_DEBUG_PRINT_CONFIG(
+                "[LOH INIT] CMA-ES created (dim=%d), init "
+                "weights=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
+                cmaes_output_dim, params->weights[0], params->weights[1],
+                params->weights[2], params->weights[3], params->weights[4],
+                params->weights[5]);
+          }
+        }
+        params->cmaes_last_generation =
+            loh_cmaes_get_generation(params->cmaes_handle);
+      }
+    }  // end else (non-auto_compound)
   }
 
   // ===【打印 Size 数据结构模式（已在前面初始化时读取环境变量）】===
@@ -4664,6 +6516,15 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     // 当 unified 开启时，不再改写 LOG1P/RECIPROCAL 相关开关；
     // 仅在计算路径上优先走 unified，避免语义误导。
     if (loh_feature_unified_formula) {
+      loh_auto_feature_mode = 0;
+    }
+
+    // identity 模式下必须清零 LOG1P/RECIPROCAL，否则 compound 评分
+    // 会误用 ratio 形式（freq/rec）而非 product 形式（freq*rec）
+    if (loh_feature_identity) {
+      loh_feature_log1p = 0;
+      loh_feature_reciprocal = 0;
+      loh_feature_log1p_reciprocal = 0;
       loh_auto_feature_mode = 0;
     }
 
@@ -4771,13 +6632,74 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       loh_auto_feature_mode = 0;
     }
     if (loh_auto_feature_mode) {
-      printf(
+      LOH_DEBUG_PRINT_CONFIG(
           "[LOH INIT] AUTO_FEATURE_MODE enabled: detect after %ld reqs, "
           "CV threshold=%.2f\n",
           (long)loh_auto_detect_reqs, loh_auto_cv_threshold);
       // auto 模式下，如果用户没有显式设 LOG1P 或 RECIPROCAL，
       // 先用默认的 reciprocal 模式（LOH_FEATURE_LOG1P=0, RECIPROCAL=0），
       // 等检测完后再切换
+    }
+  }
+
+  // 3.1b) per-feature 特征模式覆盖（LOH_PER_FEATURE_MODE 门控）
+  {
+    const char *env_pfm = getenv("LOH_PER_FEATURE_MODE");
+    loh_per_feature_mode = loh_parse_bool_env(env_pfm, loh_per_feature_mode);
+    if (loh_per_feature_mode) {
+      // 值: "identity" → 0, "log1p" → 1, 其他/未设 → -1(继承全局)
+      const char *env_fm_freq = getenv("LOH_FEATURE_MODE_FREQ");
+      if (env_fm_freq && env_fm_freq[0] != '\0') {
+        if (strcmp(env_fm_freq, "identity") == 0)
+          loh_feature_mode_freq = 0;
+        else if (strcmp(env_fm_freq, "log1p") == 0)
+          loh_feature_mode_freq = 1;
+      }
+      const char *env_fm_rec = getenv("LOH_FEATURE_MODE_REC");
+      if (env_fm_rec && env_fm_rec[0] != '\0') {
+        if (strcmp(env_fm_rec, "identity") == 0)
+          loh_feature_mode_rec = 0;
+        else if (strcmp(env_fm_rec, "log1p") == 0)
+          loh_feature_mode_rec = 1;
+      }
+      const char *env_fm_size = getenv("LOH_FEATURE_MODE_SIZE");
+      if (env_fm_size && env_fm_size[0] != '\0') {
+        if (strcmp(env_fm_size, "identity") == 0)
+          loh_feature_mode_size = 0;
+        else if (strcmp(env_fm_size, "log1p") == 0)
+          loh_feature_mode_size = 1;
+      }
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] PER_FEATURE_MODE enabled: freq=%d rec=%d size=%d "
+          "(-1=inherit, 0=identity, 1=log1p)\n",
+          loh_feature_mode_freq, loh_feature_mode_rec, loh_feature_mode_size);
+    }
+  }
+
+  // 3.1c) 自动 per-feature 模式检测（LOH_AUTO_PERFEAT）
+  //   在 warmup 诊断时根据 cv_freq 自动决定 per-feature 模式。
+  //   如果用户已经通过 LOH_PER_FEATURE_MODE=1 显式设置了
+  //   per-feature，则不启用。
+  {
+    const char *env_ap = getenv("LOH_AUTO_PERFEAT");
+    if (env_ap) {
+      loh_auto_perfeat = loh_parse_bool_env(env_ap, 0);
+    }
+    const char *env_apt = getenv("LOH_AUTO_PERFEAT_THRESHOLD");
+    if (env_apt && env_apt[0] != '\0') {
+      loh_auto_perfeat_threshold = atof(env_apt);
+    }
+    if (loh_auto_perfeat && loh_per_feature_mode) {
+      // 用户显式设置了 per-feature 模式，auto_perfeat 不覆盖
+      loh_auto_perfeat = 0;
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] AUTO_PERFEAT disabled: PER_FEATURE_MODE already set\n");
+    }
+    if (loh_auto_perfeat) {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] AUTO_PERFEAT enabled: cv_freq threshold=%.2f "
+          "(decision deferred to warmup diag)\n",
+          loh_auto_perfeat_threshold);
     }
   }
 
@@ -4831,6 +6753,125 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         "[LOH INIT] Penalty positive events: %s (LOH_PENALTY_SEND_POSITIVE)\n",
         loh_penalty_send_positive ? "ENABLED" : "DISABLED");
   }
+
+  {
+    // 与 Python 训练侧使用同一开关，避免训练/传输语义分裂。
+    const char *env_pair_only = getenv("LOH_REWARD_CANDIDATE_PAIRWISE_ONLY");
+    loh_penalty_send_only_pairwise =
+        loh_parse_bool_env(env_pair_only, loh_penalty_send_only_pairwise) ? 1
+                                                                          : 0;
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Penalty transport pairwise-only: %s "
+        "(LOH_REWARD_CANDIDATE_PAIRWISE_ONLY)\n",
+        loh_penalty_send_only_pairwise ? "ENABLED" : "DISABLED");
+  }
+
+  {
+    const char *env_ttl = getenv("LOH_PENALTY_TTL_VERSIONS");
+    if (env_ttl == NULL || env_ttl[0] == '\0') {
+      env_ttl = getenv("LOH_EXCLUDE_RECENT_STEPS");
+    }
+    if (env_ttl && env_ttl[0] != '\0') {
+      long long v = atoll(env_ttl);
+      if (v < 0) v = 0;
+      loh_penalty_ttl_versions = (int64_t)v;
+    }
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Penalty feedback TTL versions: %lld "
+        "(LOH_PENALTY_TTL_VERSIONS|LOH_EXCLUDE_RECENT_STEPS)\n",
+        (long long)loh_penalty_ttl_versions);
+  }
+
+  {
+    const char *env_pair = getenv("LOH_PENALTY_CANDIDATE_PAIRWISE");
+    loh_penalty_candidate_pairwise =
+        loh_parse_bool_env(env_pair, loh_penalty_candidate_pairwise) ? 1 : 0;
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Penalty candidate pairwise: %s "
+        "(LOH_PENALTY_CANDIDATE_PAIRWISE)\n",
+        loh_penalty_candidate_pairwise ? "ENABLED" : "DISABLED");
+  }
+
+  {
+    const char *env_pair_strategy = getenv("LOH_PENALTY_PAIR_STRATEGY");
+    if (env_pair_strategy && env_pair_strategy[0] != '\0') {
+      if (strcmp(env_pair_strategy, "random") == 0 ||
+          strcmp(env_pair_strategy, "1") == 0) {
+        loh_penalty_pair_strategy = 1;
+      } else {
+        loh_penalty_pair_strategy = 0;
+      }
+    }
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Penalty pair strategy: %s (LOH_PENALTY_PAIR_STRATEGY)\n",
+        loh_penalty_pair_strategy == 1 ? "random_kept" : "runnerup");
+  }
+
+  {
+    const char *env_pair_k = getenv("LOH_PENALTY_PAIR_KEPT_K");
+    if (env_pair_k && env_pair_k[0] != '\0') {
+      int v = atoi(env_pair_k);
+      if (v < 1) v = 1;
+      if (v > MAX_CANDIDATES) v = MAX_CANDIDATES;
+      loh_penalty_pair_kept_k = v;
+    }
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Penalty pair kept_k: %d (LOH_PENALTY_PAIR_KEPT_K)\n",
+        loh_penalty_pair_kept_k);
+  }
+
+  {
+    const char *env_runnerup_k = getenv("LOH_PENALTY_PAIR_RUNNERUP_K");
+    if (env_runnerup_k && env_runnerup_k[0] != '\0') {
+      int v = atoi(env_runnerup_k);
+      if (v < 0) v = 0;
+      if (v > MAX_CANDIDATES) v = MAX_CANDIDATES;
+      loh_penalty_pair_runnerup_k = v;
+    }
+    if (loh_penalty_pair_runnerup_k >= 0) {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] Penalty pair runnerup_k: %d "
+          "(LOH_PENALTY_PAIR_RUNNERUP_K)\n",
+          loh_penalty_pair_runnerup_k);
+    } else {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] Penalty pair runnerup_k: AUTO(legacy) "
+          "(LOH_PENALTY_PAIR_RUNNERUP_K)\n");
+    }
+  }
+
+  {
+    const char *env_random_k = getenv("LOH_PENALTY_PAIR_RANDOM_K");
+    if (env_random_k && env_random_k[0] != '\0') {
+      int v = atoi(env_random_k);
+      if (v < 0) v = 0;
+      if (v > MAX_CANDIDATES) v = MAX_CANDIDATES;
+      loh_penalty_pair_random_k = v;
+    }
+    if (loh_penalty_pair_random_k >= 0) {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] Penalty pair random_k: %d "
+          "(LOH_PENALTY_PAIR_RANDOM_K)\n",
+          loh_penalty_pair_random_k);
+    } else {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] Penalty pair random_k: AUTO(legacy) "
+          "(LOH_PENALTY_PAIR_RANDOM_K)\n");
+    }
+  }
+
+  {
+    const char *env_pair_trace = getenv("LOH_PAIRWISE_TRACE_LEVEL");
+    if (env_pair_trace && env_pair_trace[0] != '\0') {
+      int v = atoi(env_pair_trace);
+      if (v < 0) v = 0;
+      if (v > 2) v = 2;
+      loh_pairwise_trace_level = v;
+    }
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Pairwise trace level: %d (LOH_PAIRWISE_TRACE_LEVEL)\n",
+        loh_pairwise_trace_level);
+  }
 #endif
 
   // 3.4) 评分特征模式（LOH_SCORE_USE_IRT / LOH_SCORE_USE_COMPOUND）
@@ -4844,7 +6885,7 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     const char *env_comp = getenv("LOH_SCORE_USE_COMPOUND");
     const char *env_comp_v2 = getenv("LOH_SCORE_COMPOUND_V2");
 
-    // 若未设置则保持默认：use_irt=1, use_compound=0
+    // 若未设置则保持默认：use_irt=0, use_compound=1
     loh_score_use_irt = loh_parse_bool_env(env_irt, loh_score_use_irt);
     loh_score_use_compound =
         loh_parse_bool_env(env_comp, loh_score_use_compound);
@@ -4856,6 +6897,34 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       loh_score_use_compound = 1;
     }
 
+    // 3.4.0.1) 独立 compound 特征开关（消融实验）
+    {
+      const char *e_sz = getenv("LOH_USE_SIZE");
+      const char *e_fr = getenv("LOH_USE_FREQ_REC");
+      const char *e_fs = getenv("LOH_USE_FREQ_SIZE");
+      const char *e_rs = getenv("LOH_USE_REC_SIZE");
+      const char *e_irt1 = getenv("LOH_COMPOUND_USE_IRT1");
+      if (e_sz && e_sz[0])
+        loh_use_size = loh_parse_bool_env(e_sz, loh_use_size);
+      if (e_fr && e_fr[0])
+        loh_use_freq_rec = loh_parse_bool_env(e_fr, loh_use_freq_rec);
+      if (e_fs && e_fs[0])
+        loh_use_freq_size = loh_parse_bool_env(e_fs, loh_use_freq_size);
+      if (e_rs && e_rs[0])
+        loh_use_rec_size = loh_parse_bool_env(e_rs, loh_use_rec_size);
+      if (e_irt1 && e_irt1[0])
+        loh_compound_use_irt1 =
+            loh_parse_bool_env(e_irt1, loh_compound_use_irt1);
+
+      // irt1 作为第 7 维需要 compound_v2 的 slot 6，自动联动
+      if (loh_compound_use_irt1) loh_score_compound_v2 = 1;
+
+      // 任意 compound 特征打开 → 强制 compound=1
+      if (loh_use_freq_rec || loh_use_freq_size || loh_use_rec_size) {
+        loh_score_use_compound = 1;
+      }
+    }
+
     if (loh_score_use_compound) {
       // compound 模式下不再使用 IRT 分量参与评分
       loh_score_use_irt = 0;
@@ -4863,30 +6932,109 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
 
     LOH_DEBUG_PRINT_CONFIG(
         "[LOH INIT] Score feature mode: USE_IRT=%d, USE_COMPOUND=%d, "
-        "COMPOUND_V2=%d\n",
-        loh_score_use_irt, loh_score_use_compound, loh_score_compound_v2);
+        "COMPOUND_V2=%d, COMPOUND_USE_IRT1=%d\n",
+        loh_score_use_irt, loh_score_use_compound, loh_score_compound_v2,
+        loh_compound_use_irt1);
+
+    // 3.4.1) 自适应 compound 模式：LOH_AUTO_COMPOUND
+    // 注意: LOH_AUTO_COMPOUND 已在 CMA-ES DEFERRED 判断前提前解析
+    {
+      if (loh_auto_compound) {
+        // 自适应模式：warmup 期间暂用 compound=0（3维线性），
+        // warmup 结束后根据 size 分布 (within_2× + median) 决定最终 compound
+        // 模式
+        loh_score_use_compound = 0;
+        loh_score_use_irt = 0;
+        loh_auto_compound_resolved = 0;
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH INIT] AUTO_COMPOUND enabled: "
+            "using compound=0 until warmup\n");
+      }
+    }
+
+    // LOH_EXIT_AFTER_WARMUP_DIAG: 仅输出 warmup
+    // 诊断指标后立即退出（用于批量收集诊断）
+    {
+      const char *env_ew = getenv("LOH_EXIT_AFTER_WARMUP_DIAG");
+      if (env_ew && env_ew[0] != '\0') {
+        loh_exit_after_warmup_diag = loh_parse_bool_env(env_ew, 0);
+      }
+    }
 
     // compound 模式下不需要 IRT 堆来收集候选（评分不使用 IRT 特征），
     // 跳过 IRT 堆维护可节省每次访问 3×O(log n) 的堆操作开销
     loh_irt_heap_enabled = loh_score_use_irt;
     if (!loh_irt_heap_enabled) {
-      printf("[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)\n");
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] IRT heaps DISABLED (compound mode, no IRT scoring)\n");
     }
+
+    // 计算活跃权重映射（必须在 compound/IRT/auto_compound 配置确认后调用）
+    loh_rebuild_active_weight_map();
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Feature toggles: size=%d freq_rec=%d freq_size=%d "
+        "rec_size=%d "
+        "→ active_weight_count=%d\n",
+        loh_use_size, loh_use_freq_rec, loh_use_freq_size, loh_use_rec_size,
+        loh_active_weight_count);
+    loh_log_active_weight_map("LOH SCORE FEATURES");
   }
 
   // 3.5) 随机采样候选配置
   {
     const char *env_rsc = getenv("LOH_RANDOM_CANDIDATES");
+    int random_from_env = 0;
     if (env_rsc && env_rsc[0] != '\0') {
+      random_from_env = 1;
       int rsc_val = atoi(env_rsc);
       if (rsc_val >= 0 && rsc_val <= MAX_CANDIDATES_LIMIT)
         loh_random_candidates = rsc_val;
     }
 
+    if (loh_total_candidates > 0) {
+      int random_cap = loh_total_candidates - loh_structured_candidates;
+      if (random_cap < 0) random_cap = 0;
+      if (random_from_env) {
+        if (loh_random_candidates > random_cap) {
+          fprintf(stderr,
+                  "LOH WARNING: LOH_RANDOM_CANDIDATES=%d exceeds remaining "
+                  "total budget=%d, clamped\n",
+                  loh_random_candidates, random_cap);
+          loh_random_candidates = random_cap;
+        }
+      } else {
+        loh_random_candidates = random_cap;
+      }
+    }
+
     LOH_DEBUG_PRINT_CONFIG("[LOH INIT] Random sampling: COUNT=%d\n",
                            loh_random_candidates);
-    printf("LOH: structured candidates = %d, random candidates = %d\n",
-           loh_structured_candidates, loh_random_candidates);
+    LOH_DEBUG_PRINT_CONFIG(
+        "LOH: structured candidates = %d, random candidates = %d",
+        loh_structured_candidates, loh_random_candidates);
+    if (loh_total_candidates > 0) {
+      LOH_DEBUG_PRINT_CONFIG(", total candidates = %d\n", loh_total_candidates);
+    } else {
+      LOH_DEBUG_PRINT_CONFIG("\n");
+    }
+  }
+
+  // 3.55) 每特征最低候选配额配置（LOH_MIN_CAND_PER_FEATURE）
+  {
+    const char *env_mcp = getenv("LOH_MIN_CAND_PER_FEATURE");
+    if (env_mcp && env_mcp[0] != '\0') {
+      int mcp_val = atoi(env_mcp);
+      if (mcp_val >= 0 && mcp_val <= 64) {
+        loh_min_cand_per_feature = mcp_val;
+      } else {
+        fprintf(stderr,
+                "LOH WARNING: LOH_MIN_CAND_PER_FEATURE=%d out of range [0,64], "
+                "using default 1\n",
+                mcp_val);
+      }
+    }
+    LOH_DEBUG_PRINT_CONFIG("[LOH INIT] min_cand_per_feature=%d\n",
+                           loh_min_cand_per_feature);
   }
 
   // 3.6) 衰减尾部采样配置
@@ -4908,11 +7056,11 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       }
     }
     if (loh_tail_sample_enabled) {
-      printf(
+      LOH_DEBUG_PRINT_CONFIG(
           "[LOH INIT] Decay sampling ENABLED for ALL structured sources: "
           "decay=%.4f\n",
           loh_tail_sample_decay);
-      printf(
+      LOH_DEBUG_PRINT_CONFIG(
           "[LOH INIT]   Random sampling remains UNIFORM (not affected by "
           "decay)\n");
     }
@@ -4934,12 +7082,33 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
     if (env_sr && env_sr[0] != '\0') {
       loh_use_score_rebalance = atoi(env_sr);
     }
-    if (loh_adaptive_budget) {
-      printf(
-          "[LOH INIT] Adaptive budget ENABLED: rebalance period=%d, "
-          "score_rebalance=%d\n",
-          LOH_ADAPTIVE_REBALANCE_PERIOD, loh_use_score_rebalance);
+    const char *env_air = getenv("LOH_ADAPTIVE_INCLUDE_RANDOM");
+    if (env_air && env_air[0] != '\0') {
+      loh_adaptive_include_random = atoi(env_air);
     }
+    const char *env_abl = getenv("LOH_ADAPTIVE_BUDGET_LOG");
+    if (env_abl && env_abl[0] != '\0') {
+      loh_adaptive_budget_log = atoi(env_abl);
+    }
+    if (loh_adaptive_budget) {
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH INIT] Adaptive budget ENABLED: rebalance period=%d, "
+          "score_rebalance=%d, include_random=%d, budget_log=%d\n",
+          LOH_ADAPTIVE_REBALANCE_PERIOD, loh_use_score_rebalance,
+          loh_adaptive_include_random, loh_adaptive_budget_log);
+    }
+
+    const char *env_perf_stride = getenv("LOH_PERF_HOTPATH_SAMPLE_STRIDE");
+    if (env_perf_stride && env_perf_stride[0] != '\0') {
+      int parsed = atoi(env_perf_stride);
+      if (parsed >= 1 && parsed <= 1024) {
+        loh_perf_hotpath_sample_stride = parsed;
+      }
+    }
+    LOH_DEBUG_PRINT_CONFIG(
+        "[LOH INIT] Perf hotpath sampling stride=%d "
+        "(LOH_PERF_HOTPATH_SAMPLE_STRIDE)\n",
+        loh_perf_hotpath_sample_stride);
   }
 
   {
@@ -4971,6 +7140,13 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
         "[LOH INIT] Penalty queue initialized (capacity=%d)\n",
         PENALTY_QUEUE_INIT_CAPACITY);
   }
+
+  params->pair_track_by_evicted =
+      g_hash_table_new(g_direct_hash, g_direct_equal);
+  params->pair_track_by_kept = g_hash_table_new(g_direct_hash, g_direct_equal);
+  params->pair_track_by_version =
+      g_hash_table_new(g_direct_hash, g_direct_equal);
+  params->pair_track_count = 0;
 #endif
 
   if (loh_enable_rl && params->shm_file == NULL) {
@@ -5064,22 +7240,13 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
 
   // 打印初始化时的 RL 同步间隔，便于调试与确认运行时值
   LOH_DEBUG_PRINT_CONFIG(
-      "[LOH INIT] rl_update_interval=%ld, enable_rl=%d, sem_requested=%d\n",
-      (long)params->rl_update_interval, loh_enable_rl, params->sem_requested);
+      "[LOH INIT] rl_update_interval=%ld, enable_rl=%d, enable_cmaes=%d, "
+      "sem_requested=%d\n",
+      (long)params->rl_update_interval, loh_enable_rl, params->cmaes_enabled,
+      params->sem_requested);
 
-  // 根据权重设置缓存名字（类似 ThreeLCache 的做法）
-  if (loh_miss_ratio_weight == 1.0 && loh_byte_miss_ratio_weight == 0.0) {
-    // 纯对象级优化
-    snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "LOH-OMR");
-  } else if (loh_miss_ratio_weight == 0.0 &&
-             loh_byte_miss_ratio_weight == 1.0) {
-    // 纯字节级优化
-    snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "LOH-BMR");
-  } else {
-    // 混合优化，显示权重比例
-    snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "LOH-Mix(%.1f/%.1f)",
-             loh_miss_ratio_weight, loh_byte_miss_ratio_weight);
-  }
+  // 统一结果名，避免因权重变化导致算法名分叉。
+  snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "LOH");
 
   cache->eviction_params = params;
   return cache;
@@ -5092,6 +7259,11 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
  */
 static void LOH_free(cache_t *cache) {
   LOH_params_t *params = (LOH_params_t *)(cache->eviction_params);
+
+  if (params->cmaes_handle != NULL) {
+    loh_cmaes_destroy(params->cmaes_handle);
+    params->cmaes_handle = NULL;
+  }
 
   // 释放共享内存前通知 Python 端终止。
   if (params->shm_mmap != NULL) {
@@ -5155,6 +7327,47 @@ static void LOH_free(cache_t *cache) {
     params->penalty_queue = NULL;
     LOH_DEBUG_PRINT_BASIC("[LOH FREE] Penalty queue freed\n");
   }
+
+  if (params->pair_track_by_evicted) {
+    GHashTableIter iter;
+    gpointer key = NULL;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iter, params->pair_track_by_evicted);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      GSList *list = (GSList *)value;
+      for (GSList *it = list; it != NULL; it = it->next) {
+        if (it->data) g_free(it->data);
+      }
+      g_slist_free(list);
+    }
+    g_hash_table_destroy(params->pair_track_by_evicted);
+    params->pair_track_by_evicted = NULL;
+  }
+  if (params->pair_track_by_kept) {
+    GHashTableIter iter;
+    gpointer key = NULL;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iter, params->pair_track_by_kept);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      GSList *list = (GSList *)value;
+      g_slist_free(list);
+    }
+    g_hash_table_destroy(params->pair_track_by_kept);
+    params->pair_track_by_kept = NULL;
+  }
+  if (params->pair_track_by_version) {
+    GHashTableIter iter;
+    gpointer key = NULL;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iter, params->pair_track_by_version);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      GSList *list = (GSList *)value;
+      g_slist_free(list);
+    }
+    g_hash_table_destroy(params->pair_track_by_version);
+    params->pair_track_by_version = NULL;
+  }
+  params->pair_track_count = 0;
 #endif
 
 #if LOH_PERF_PROFILING
@@ -5194,15 +7407,7 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   static int64_t request_count = 0;
   request_count++;
 
-  // 自动特征模式检测：在指定请求数后且 cache 至少 80% 满时触发一次
-  // 必须等 cache 填充充分，否则频率分布不具代表性
-  // 注意：cache_size 和 occupied_byte 都是字节单位，不能与 n_obj 混用
-  if (loh_auto_feature_mode && !loh_auto_detected &&
-      request_count >= loh_auto_detect_reqs &&
-      cache->occupied_byte >= (int64_t)(cache->cache_size * 0.8)) {
-    loh_auto_detect_and_switch(cache);
-    loh_auto_detected = 1;
-  }
+  // 自动特征模式检测已合并到 WARMUP_DIAG（缓存 warmup 完成时统一触发）
 
   LOH_DEBUG_PRINT_DETAILED("[LOH_get]: request #%ld for obj_id %lu\n",
                            request_count, req->obj_id);
@@ -5218,7 +7423,11 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   // RL 周期结束，与 RL 端同步
   if (params->is_warmed_up &&
       params->requests_since_rl_update >= params->rl_update_interval) {
-    sync_with_actor_critic(params);
+    if (params->cmaes_enabled) {
+      sync_with_cmaes(params);
+    } else {
+      sync_with_actor_critic(params);
+    }
     params->requests_since_rl_update = 0;
     params->epoch_start_time = time(NULL);
 
@@ -5280,13 +7489,571 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   if (!params->is_warmed_up &&
       cache_get_occupied_byte_default(cache) >= cache->cache_size) {
     params->is_warmed_up = true;
-    LOH_DEBUG_PRINT_BASIC(
+    LOH_DEBUG_PRINT_CONFIG(
         "[LOH] Cache warmed up - occupied: %ld bytes (threshold: %ld), "
         "n_obj: %ld, timestamp: %ld\n",
         cache_get_occupied_byte_default(cache), cache->cache_size,
         /* prefer accessor if available */
         (long)(cache->get_n_obj ? cache->get_n_obj(cache) : cache->n_obj),
         params->current_timestamp);
+
+    // 自适应 compound: warmup 完成时通过多重共线性检测决定 compound 模式
+    //
+    // 理论基础（回归分析 + CMA-ES 维度效率）:
+    //   compound 的 3 个交叉特征中：
+    //     freq/rec   — 与 size 无关，永远非冗余
+    //     freq/size  — 当 size 方差低时与 freq 高度共线
+    //     rec×size   — 当 size 方差低时与 rec 高度共线
+    //
+    //   定义 R²_sum = R²(freq, freq/size) + R²(rec, rec×size)
+    //   R²_sum 量化 2 个 size 相关交叉项被主效应解释的总方差比例。
+    //   R²_sum > 1.5 ↔ 平均每个交叉项 >75% 方差可由主效应解释，
+    //     即独立信息 <25%；将 CMA-ES 维度从 3 翻倍到 6 不划算。
+    //   否则交叉项提供显著独立信息 → compound=1。
+    //
+    // 实现: 单遍扫描缓存对象，计算 Pearson r(freq, freq/size)、
+    //       r(rec, rec×size)、r(freq, freq/rec)，以及 CV 统计。
+    //       auto_compound=1 时用 R²_sum 做决策；否则仅输出诊断。
+    if (!loh_warmup_diag_done &&
+        (loh_auto_compound ? !loh_auto_compound_resolved : 1)) {
+      loh_warmup_diag_done = 1;
+      int64_t n_obj = cache->get_n_obj ? cache->get_n_obj(cache) : cache->n_obj;
+      int64_t occupied = cache_get_occupied_byte_default(cache);
+
+      // 累积量：用于计算 Pearson r（单遍公式）
+      double s_freq = 0, s_freq2 = 0;  // Σ freq, Σ freq²
+      double s_fs = 0, s_fs2 = 0;      // Σ(freq/size), Σ(freq/size)²
+      double s_freq_fs = 0;            // Σ(freq · freq/size)
+      double s_rec = 0, s_rec2 = 0;    // Σ rec, Σ rec²
+      double s_rs = 0, s_rs2 = 0;      // Σ(rec×size), Σ(rec×size)²
+      double s_rec_rs = 0;             // Σ(rec · rec×size)
+      // 新增：freq/rec 相关累积量
+      double s_fr = 0, s_fr2 = 0;  // Σ(freq/rec), Σ(freq/rec)²
+      double s_freq_fr = 0;        // Σ(freq · freq/rec)
+      // 新增：log_size 的 CV 统计
+      double s_sz = 0, s_sz2 = 0;  // Σ(log_sz), Σ(log_sz²) — 用于 CV(log_size)
+      // 新增：基本特征间交叉积（用于 compound 与另一分量的相关、Multiple R²）
+      double s_freq_sz = 0;   // Σ(freq · sz) — Pearson(freq, size)
+      double s_rec_sz = 0;    // Σ(rec · sz)  — Pearson(rec, size)
+      double s_freq_rec = 0;  // Σ(freq · rec) — Pearson(freq, rec)
+      double s_rec_sz2 = 0;   // Σ(rec · sz²) — Pearson(size, rec×size)
+      int64_t count = 0;
+      double sum_size = 0.0;
+      const double eps = 1e-12;
+
+      // raw 域累积量（用于 raw CV、skewness/kurtosis、one_hit_ratio）
+      double s_freq_raw = 0, s_freq_raw2 = 0;  // Σ freq_raw, Σ freq_raw²
+      double s_sz_raw = 0, s_sz_raw2 = 0;      // Σ size_raw, Σ size_raw²
+      double s_rec_raw = 0, s_rec_raw2 = 0;    // Σ rec_raw, Σ rec_raw²
+      // log1p(freq) 的 3 阶 / 4 阶矩（用于 skewness 和 excess kurtosis）
+      double s_logf3 = 0, s_logf4 = 0;
+      int64_t one_hit_count = 0;
+      int64_t max_access_count = 0;
+
+      // BMR 方向性检测: compound 特征与 raw 字节大小的交叉积
+      // 用于判断 FS/RS 是否系统性驱逐大字节对象（伤 BMR）
+      double s_fs_szr = 0;  // Σ(freq/size_log · size_raw)
+      double s_rs_szr = 0;  // Σ(rec*size_log · size_raw)
+
+      int64_t current_ts = params->current_timestamp;
+      for (uint64_t bi = 0; bi < hashsize(cache->hashtable->hashpower); bi++) {
+        cache_obj_t *obj = cache->hashtable->ptr_table[bi];
+        while (obj != NULL) {
+          double rec =
+              log1p((double)(current_ts - obj->LOH.last_access_counter));
+          double freq = log1p((double)obj->LOH.access_count);
+          double sz = log1p((double)obj->obj_size);
+          sum_size += (double)obj->obj_size;
+
+          double safe_sz = (fabs(sz) > eps) ? sz : eps;
+          double safe_rec = (fabs(rec) > eps) ? rec : eps;
+          double freq_over_size = freq / safe_sz;
+          double rec_times_size = rec * sz;
+          double freq_over_rec = freq / safe_rec;
+
+          s_freq += freq;
+          s_freq2 += freq * freq;
+          s_fs += freq_over_size;
+          s_fs2 += freq_over_size * freq_over_size;
+          s_freq_fs += freq * freq_over_size;
+
+          s_rec += rec;
+          s_rec2 += rec * rec;
+          s_rs += rec_times_size;
+          s_rs2 += rec_times_size * rec_times_size;
+          s_rec_rs += rec * rec_times_size;
+
+          s_fr += freq_over_rec;
+          s_fr2 += freq_over_rec * freq_over_rec;
+          s_freq_fr += freq * freq_over_rec;
+
+          s_sz += sz;
+          s_sz2 += sz * sz;
+
+          s_freq_sz += freq * sz;
+          s_rec_sz += rec * sz;
+          s_freq_rec += freq * rec;
+          s_rec_sz2 += rec * sz * sz;
+
+          // raw 域累积
+          double freq_r = (double)obj->LOH.access_count;
+          double sz_r = (double)obj->obj_size;
+          double rec_r = (double)(current_ts - obj->LOH.last_access_counter);
+          s_freq_raw += freq_r;
+          s_freq_raw2 += freq_r * freq_r;
+          s_sz_raw += sz_r;
+          s_sz_raw2 += sz_r * sz_r;
+          s_rec_raw += rec_r;
+          s_rec_raw2 += rec_r * rec_r;
+          // BMR 方向性: compound feature × raw bytes
+          s_fs_szr += freq_over_size * sz_r;
+          s_rs_szr += rec_times_size * sz_r;
+          // log1p(freq) 高阶矩
+          s_logf3 += freq * freq * freq;  // freq 已是 log1p 值
+          s_logf4 += freq * freq * freq * freq;
+          if (obj->LOH.access_count == 1) one_hit_count++;
+          if (obj->LOH.access_count > max_access_count)
+            max_access_count = obj->LOH.access_count;
+
+          count++;
+          obj = obj->hash_next;
+        }
+      }
+
+      // 计算 Pearson r: r = (nΣxy − ΣxΣy) / √((nΣx²−(Σx)²)(nΣy²−(Σy)²))
+      // 原有: compound 与其中一个分量的相关
+      double r_freq_fs = 0.0, r_rec_rs = 0.0, r_freq_fr = 0.0;
+      // 新增: compound 与另一个分量的相关
+      double r_sz_fs = 0.0;   // Pearson(size, freq/size)
+      double r_sz_rs = 0.0;   // Pearson(size, rec×size)
+      double r_rec_fr = 0.0;  // Pearson(rec, freq/rec)
+      // 新增: 基本特征间的相关（用于 Multiple R²）
+      double r_freq_size = 0.0;     // Pearson(freq, size)
+      double r_rec_size = 0.0;      // Pearson(rec, size)
+      double r_freq_recency = 0.0;  // Pearson(freq, rec)
+      // Multiple R²: compound ~ 两个分量的联合解释力
+      double R2m_fs = 0.0, R2m_rs = 0.0, R2m_fr = 0.0;
+      // CV = σ/μ 用于 log_size, log_freq, log_rec
+      double cv_sz = 0.0, cv_freq = 0.0, cv_rec = 0.0;
+      // raw 域 CV
+      double cv_freq_raw = 0.0, cv_sz_raw = 0.0, cv_rec_raw = 0.0;
+      // log1p(freq) 的 skewness 和 excess kurtosis
+      double skewness_logf = 0.0, kurtosis_logf = 0.0;
+      // one_hit_ratio
+      double one_hit_ratio = 0.0;
+      // BMR 方向性指标 (在 if(count>1) 内计算)
+      double r_bmr_fs = 0.0, r_bmr_rs = 0.0;
+      if (count > 1) {
+        double n = (double)count;
+        // r(freq, freq/size)
+        double num1 = n * s_freq_fs - s_freq * s_fs;
+        double den1a = n * s_freq2 - s_freq * s_freq;
+        double den1b = n * s_fs2 - s_fs * s_fs;
+        if (den1a > eps && den1b > eps) r_freq_fs = num1 / sqrt(den1a * den1b);
+
+        // r(rec, rec*size)
+        double num2 = n * s_rec_rs - s_rec * s_rs;
+        double den2a = n * s_rec2 - s_rec * s_rec;
+        double den2b = n * s_rs2 - s_rs * s_rs;
+        if (den2a > eps && den2b > eps) r_rec_rs = num2 / sqrt(den2a * den2b);
+
+        // r(freq, freq/rec)
+        double num3 = n * s_freq_fr - s_freq * s_fr;
+        double den3a = den1a;  // same as freq variance
+        double den3b = n * s_fr2 - s_fr * s_fr;
+        if (den3a > eps && den3b > eps) r_freq_fr = num3 / sqrt(den3a * den3b);
+
+        // CV(log_size) = std(log_sz) / mean(log_sz)
+        double mean_sz = s_sz / n;
+        double var_sz = (s_sz2 / n) - mean_sz * mean_sz;
+        if (var_sz > 0.0 && fabs(mean_sz) > eps)
+          cv_sz = sqrt(var_sz) / fabs(mean_sz);
+
+        // CV(log_freq) = std(log_freq) / mean(log_freq)
+        double mean_freq = s_freq / n;
+        double var_freq = (s_freq2 / n) - mean_freq * mean_freq;
+        if (var_freq > 0.0 && fabs(mean_freq) > eps)
+          cv_freq = sqrt(var_freq) / fabs(mean_freq);
+
+        // CV(log_rec) = std(log_rec) / mean(log_rec)
+        double mean_rec = s_rec / n;
+        double var_rec = (s_rec2 / n) - mean_rec * mean_rec;
+        if (var_rec > 0.0 && fabs(mean_rec) > eps)
+          cv_rec = sqrt(var_rec) / fabs(mean_rec);
+
+        // === raw 域 CV ===
+        double mean_freq_raw = s_freq_raw / n;
+        double var_freq_raw = (s_freq_raw2 / n) - mean_freq_raw * mean_freq_raw;
+        if (var_freq_raw > 0.0 && fabs(mean_freq_raw) > eps)
+          cv_freq_raw = sqrt(var_freq_raw) / fabs(mean_freq_raw);
+
+        double mean_sz_raw = s_sz_raw / n;
+        double var_sz_raw = (s_sz_raw2 / n) - mean_sz_raw * mean_sz_raw;
+        if (var_sz_raw > 0.0 && fabs(mean_sz_raw) > eps)
+          cv_sz_raw = sqrt(var_sz_raw) / fabs(mean_sz_raw);
+
+        double mean_rec_raw = s_rec_raw / n;
+        double var_rec_raw = (s_rec_raw2 / n) - mean_rec_raw * mean_rec_raw;
+        if (var_rec_raw > 0.0 && fabs(mean_rec_raw) > eps)
+          cv_rec_raw = sqrt(var_rec_raw) / fabs(mean_rec_raw);
+
+        // === log1p(freq) skewness 和 excess kurtosis ===
+        {
+          double M1 = mean_freq;  // mean_freq = s_freq/n = mean(log1p(freq))
+          double M2 = s_freq2 / n;
+          double M3 = s_logf3 / n;
+          double M4 = s_logf4 / n;
+          double mu2 = M2 - M1 * M1;
+          double mu3 = M3 - 3 * M1 * M2 + 2 * M1 * M1 * M1;
+          double mu4 =
+              M4 - 4 * M1 * M3 + 6 * M1 * M1 * M2 - 3 * M1 * M1 * M1 * M1;
+          double std_logf = (mu2 > 0) ? sqrt(mu2) : 0.0;
+          if (mu2 > eps) skewness_logf = mu3 / (mu2 * std_logf);
+          if (mu2 > eps) kurtosis_logf = mu4 / (mu2 * mu2) - 3.0;
+        }
+
+        // one_hit_ratio
+        one_hit_ratio = (double)one_hit_count / n;
+
+        // --- 新增: compound 与另一个分量的 Pearson ---
+        // r4 = Pearson(size, freq/size): Σ(sz · freq/sz) = Σ(freq) = s_freq
+        double num4 = n * s_freq - s_sz * s_fs;
+        double den4a = n * s_sz2 - s_sz * s_sz;  // Var(sz)
+        double den4b = n * s_fs2 - s_fs * s_fs;  // Var(freq/sz)
+        if (den4a > eps && den4b > eps) r_sz_fs = num4 / sqrt(den4a * den4b);
+
+        // r5 = Pearson(size, rec×size): Σ(sz · rec·sz) = Σ(rec·sz²) = s_rec_sz2
+        double num5 = n * s_rec_sz2 - s_sz * s_rs;
+        double den5b = n * s_rs2 - s_rs * s_rs;  // Var(rec*sz)
+        if (den4a > eps && den5b > eps) r_sz_rs = num5 / sqrt(den4a * den5b);
+
+        // r6 = Pearson(rec, freq/rec): Σ(rec · freq/rec) = Σ(freq) = s_freq
+        double num6 = n * s_freq - s_rec * s_fr;
+        if (den2a > eps && den3b > eps) r_rec_fr = num6 / sqrt(den2a * den3b);
+
+        // --- 新增: 基本特征间的 Pearson（用于 Multiple R²）---
+        // Pearson(freq, size)
+        double num_bfs = n * s_freq_sz - s_freq * s_sz;
+        if (den1a > eps && den4a > eps)
+          r_freq_size = num_bfs / sqrt(den1a * den4a);
+
+        // Pearson(rec, size)
+        double num_brs = n * s_rec_sz - s_rec * s_sz;
+        if (den2a > eps && den4a > eps)
+          r_rec_size = num_brs / sqrt(den2a * den4a);
+
+        // Pearson(freq, rec)
+        double num_bfr = n * s_freq_rec - s_freq * s_rec;
+        if (den1a > eps && den2a > eps)
+          r_freq_recency = num_bfr / sqrt(den1a * den2a);
+
+        // --- Multiple R²: R²(Y ~ X1+X2) = (ry1²+ry2²-2·ry1·ry2·r12) / (1-r12²)
+        // --- freq/size ~ freq + size
+        {
+          double ry1 = r_freq_fs, ry2 = r_sz_fs, r12 = r_freq_size;
+          double d = 1.0 - r12 * r12;
+          if (fabs(d) > eps)
+            R2m_fs = (ry1 * ry1 + ry2 * ry2 - 2 * ry1 * ry2 * r12) / d;
+          if (R2m_fs > 1.0) R2m_fs = 1.0;
+          if (R2m_fs < 0.0) R2m_fs = 0.0;
+        }
+        // rec×size ~ rec + size
+        {
+          double ry1 = r_rec_rs, ry2 = r_sz_rs, r12 = r_rec_size;
+          double d = 1.0 - r12 * r12;
+          if (fabs(d) > eps)
+            R2m_rs = (ry1 * ry1 + ry2 * ry2 - 2 * ry1 * ry2 * r12) / d;
+          if (R2m_rs > 1.0) R2m_rs = 1.0;
+          if (R2m_rs < 0.0) R2m_rs = 0.0;
+        }
+        // freq/rec ~ freq + rec
+        {
+          double ry1 = r_freq_fr, ry2 = r_rec_fr, r12 = r_freq_recency;
+          double d = 1.0 - r12 * r12;
+          if (fabs(d) > eps)
+            R2m_fr = (ry1 * ry1 + ry2 * ry2 - 2 * ry1 * ry2 * r12) / d;
+          if (R2m_fr > 1.0) R2m_fr = 1.0;
+          if (R2m_fr < 0.0) R2m_fr = 0.0;
+        }
+
+        // --- BMR 方向性: Pearson(compound_feature_log, raw_size_bytes) ---
+        // 检测 FS/RS compound 是否系统性地将大字节对象推向驱逐
+        //   r_bmr_fs = Pearson(freq/size_log, size_raw): 负值 → FS 驱逐大对象 →
+        //   伤 BMR r_bmr_rs = Pearson(rec*size_log, size_raw): 正值 →
+        //   RS(sign=-1) 驱逐大对象 → 伤 BMR
+        {
+          double den_szr = n * s_sz_raw2 - s_sz_raw * s_sz_raw;
+          // Pearson(freq/size, raw_size)
+          double num_fs = n * s_fs_szr - s_fs * s_sz_raw;
+          double den_fs = n * s_fs2 - s_fs * s_fs;
+          if (den_fs > eps && den_szr > eps)
+            r_bmr_fs = num_fs / sqrt(den_fs * den_szr);
+          // Pearson(rec*size, raw_size)
+          double num_rs = n * s_rs_szr - s_rs * s_sz_raw;
+          double den_rs = n * s_rs2 - s_rs * s_rs;
+          if (den_rs > eps && den_szr > eps)
+            r_bmr_rs = num_rs / sqrt(den_rs * den_szr);
+        }
+      }
+
+      double avg_cache_size = (n_obj > 0) ? sum_size / (double)n_obj : 0.0;
+
+      // 诊断输出：列出所有单独/联合指标，便于事后分析（无论 auto_compound
+      // 是否启用） r1~r3: compound 与分量A的相关; r4~r6: compound 与分量B的相关
+      // r_AB/r_AC/r_BC: 基本特征间相关; R2m_*: compound ~ 两分量的 Multiple R²
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH WARMUP_DIAG] "
+          "r1=%.4f r2=%.4f r3=%.4f "
+          "r4=%.4f r5=%.4f r6=%.4f "
+          "r_AB=%.4f r_AC=%.4f r_BC=%.4f "
+          "R2m_fs=%.4f R2m_rs=%.4f R2m_fr=%.4f "
+          "cv_sz=%.4f cv_freq=%.4f cv_rec=%.4f "
+          "cv_sz_raw=%.4f cv_freq_raw=%.4f cv_rec_raw=%.4f "
+          "skew_logf=%.4f kurt_logf=%.4f one_hit=%.4f "
+          "max_ac=%ld avg_sz=%.0f n_obj=%ld\n",
+          r_freq_fs, r_rec_rs, r_freq_fr, r_sz_fs, r_sz_rs, r_rec_fr,
+          r_freq_size, r_rec_size, r_freq_recency, R2m_fs, R2m_rs, R2m_fr,
+          cv_sz, cv_freq, cv_rec, cv_sz_raw, cv_freq_raw, cv_rec_raw,
+          skewness_logf, kurtosis_logf, one_hit_ratio, (long)max_access_count,
+          avg_cache_size, (long)n_obj);
+      // BMR 方向性诊断: r_bmr_fs<0 表示 FS 驱逐大字节对象; r_bmr_rs>0 表示 RS
+      // 驱逐大字节对象
+      LOH_DEBUG_PRINT_CONFIG(
+          "[LOH WARMUP_DIAG_BMR] "
+          "r_bmr_fs=%.4f r_bmr_rs=%.4f\n",
+          r_bmr_fs, r_bmr_rs);
+
+      // 合并: 自动特征模式检测（原 80% 触发，现统一在 warmup 时执行）
+      if (loh_auto_feature_mode && !loh_auto_detected) {
+        loh_auto_detect_and_switch(cache);
+        loh_auto_detected = 1;
+      }
+
+      // ── AUTO_PERFEAT: 根据 cv_freq 自动设定 per-feature 模式 ──
+      // cv_freq (log 域频率变异系数) 完美分离 CDN (≈0.47) 和 KV (≈0.67-0.70)。
+      // 校准数据: 7 trace × 512 配置 per-feature sweep (2026-04-16)。
+      //
+      // 规则:
+      //   FREQ: 固定 log1p（对 CDN 无损，对 KV +4.5%~+9.8%）
+      //   cv_freq > threshold: REC=log1p, SIZE=log1p (KV-like)
+      //   cv_freq ≤ threshold: REC=identity, SIZE=identity (CDN-like)
+      if (loh_auto_perfeat) {
+        loh_per_feature_mode = 1;
+        loh_feature_mode_freq = 1;  // FREQ: 固定 log1p
+        if (cv_freq > loh_auto_perfeat_threshold) {
+          // KV-like 负载: 高频率变异 → 所有维度用 log1p 压缩
+          loh_feature_mode_rec = 1;
+          loh_feature_mode_size = 1;
+        } else {
+          // CDN-like 负载: 低频率变异 → REC/SIZE 用 identity 保留原始信息
+          loh_feature_mode_rec = 0;
+          loh_feature_mode_size = 0;
+        }
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH AUTO_PERFEAT] cv_freq=%.4f thr=%.2f → %s "
+            "(freq=log1p rec=%s size=%s)\n",
+            cv_freq, loh_auto_perfeat_threshold,
+            (cv_freq > loh_auto_perfeat_threshold) ? "KV-like" : "CDN-like",
+            (loh_feature_mode_rec == 1) ? "log1p" : "identity",
+            (loh_feature_mode_size == 1) ? "log1p" : "identity");
+      }
+
+      // 如果设置了 LOH_EXIT_AFTER_WARMUP_DIAG=1，输出诊断后立即退出
+      if (loh_exit_after_warmup_diag) {
+        fprintf(
+            stderr,
+            "[LOH] EXIT_AFTER_WARMUP_DIAG: exiting after diagnostic output\n");
+        exit(0);
+      }
+
+      // auto_compound v5 决策：基于 r1/r2 = Pearson 冗余指标判断 compound 特征
+      //
+      // bit0 (freq/rec):  固定开启
+      //   v4 曾固定关闭（理论: log1p 下线性近似 + 109 trace MR-only 消融）。
+      //   v5 改为固定开启：1111 trace + Joint(MR,BMR) 分析显示 FR 对 BMR
+      //   改善显著（-2%~-25%），远超对 MR 的微损（+0.1%~1%）。
+      //   全部 5 组（cloudphysics/alibaba/metaCDN/metaKV/wiki）均改善。
+      //
+      // bit1 (freq/size): r1 > thr → 关（size 无变异 → freq/size ≈ const·freq
+      // 冗余）
+      //                   r1 ≤ thr → 开（size 有变异 → freq/size 携带新信息）
+      //   r1 = Pearson(freq, freq/size), 阈值 0.98
+      //
+      // bit2 (rec×size):  r2 > thr → 关（size 无变异 → rec×size ≈ const·rec
+      // 冗余）
+      //                   r2 ≤ thr → 开（size 有变异 → rec×size 携带新信息）
+      //   r2 = Pearson(rec, rec×size), 与 r1 逻辑对称
+      //
+      // 默认: f111 (bit0=开, bit1=开, bit2=开)
+      // r1>thr: bit1 关;  r2>thr: bit2 关
+
+      // ── FSB (Feature Selection Bandit) 启动 ──
+      // FSB 启用时跳过 auto_compound，改为在线 UCB1 选择 feature config。
+      // CMA-ES 延迟到 FSB 收敛后创建。
+      if (g_fsb.enabled) {
+        loh_auto_compound = 0;  // 禁用 auto_compound
+        loh_score_use_compound = 1;
+        loh_score_use_irt = 0;
+
+        // 如果 block_size 未显式设置，默认 = cache 对象数 / 4
+        // n_obj/4 vs n_obj/2: n_obj/4 允许更多轮次，平均多轮可抵消单轮噪声
+        if (g_fsb.block_size <= 0) {
+          int64_t n_obj =
+              cache->get_n_obj ? cache->get_n_obj(cache) : cache->n_obj;
+          g_fsb.block_size = (int)(n_obj / 4);
+          if (g_fsb.block_size < 10000) g_fsb.block_size = 10000;
+        }
+        // 初始化 arm 配置并应用第一个 arm
+        fsb_init_arms();
+        g_fsb.phase = 0;
+        g_fsb.current_round = 0;
+        g_fsb.current_arm_idx = 0;
+        g_fsb.block_req_count = 0;
+        g_fsb.block_miss_count = 0;
+        g_fsb.locked_arm = -1;
+        for (int i = 0; i < FSB_N_ARMS; i++) {
+          g_fsb.pulls[i] = 0;
+          g_fsb.sum_relative_mr[i] = 0.0;
+        }
+        fsb_apply_arm(params, 0);
+        fprintf(stderr,
+                "[FSB] started: block_size=%d, min_rounds=%d, max_rounds=%d, "
+                "warmup_rounds=%d, ucb_c=%.2f\n",
+                g_fsb.block_size, g_fsb.min_rounds, g_fsb.max_rounds,
+                g_fsb.warmup_rounds, g_fsb.ucb_c);
+        // 跳过 auto_compound
+      } else if (loh_auto_compound) {
+        double auto_r_threshold = 0.98;
+        const double one_hit_threshold = 0.67;
+        const char *env_rt = getenv("LOH_AUTO_COMPOUND_R_THRESHOLD");
+        if (env_rt && env_rt[0]) {
+          double v = atof(env_rt);
+          if (v > 0.5 && v < 1.0) auto_r_threshold = v;
+        }
+
+        loh_score_use_compound = 1;
+        loh_score_use_irt = 0;
+
+        // v6 统一规则：
+        // - MR:  v4 (FR=0, FS=(r1<=thr), RS=(r2<=thr))
+        // - BMR: one_hit 分流
+        //        one_hit<=0.67 -> ns_f100 (size=0, FR=1, FS=0, RS=0)
+        //        one_hit>0.67  -> v5 (size=1, FR=1, FS=(r1<=thr), RS=(r2<=thr))
+        // 模式选择：由环境变量 LOH_AUTO_COMPOUND_TARGET 控制。
+        //   - mr  (默认): 使用 MR 分支
+        //   - bmr: 使用 BMR 分支
+        int use_bmr_branch = 0;
+        const char *auto_target = getenv("LOH_AUTO_COMPOUND_TARGET");
+        if (auto_target && auto_target[0]) {
+          if (strcasecmp(auto_target, "bmr") == 0) {
+            use_bmr_branch = 1;
+          } else if (strcasecmp(auto_target, "mr") == 0) {
+            use_bmr_branch = 0;
+          } else {
+            LOH_DEBUG_PRINT_CONFIG(
+                "[LOH AUTO_COMPOUND v6] invalid LOH_AUTO_COMPOUND_TARGET=%s, "
+                "fallback to mr\n",
+                auto_target);
+          }
+        }
+
+        if (!use_bmr_branch) {
+          // MR 分支：保持 v4
+          loh_use_size = 1;
+          loh_use_freq_rec = 0;
+          loh_use_freq_size = (r_freq_fs <= auto_r_threshold) ? 1 : 0;
+          loh_use_rec_size = (r_rec_rs <= auto_r_threshold) ? 1 : 0;
+        } else {
+          // BMR 分支：one_hit 分流
+          if (one_hit_ratio <= one_hit_threshold) {
+            // ns_f100
+            loh_use_size = 0;
+            loh_use_freq_rec = 1;
+            loh_use_freq_size = 0;
+            loh_use_rec_size = 0;
+          } else {
+            // v5
+            loh_use_size = 1;
+            loh_use_freq_rec = 1;
+            loh_use_freq_size = (r_freq_fs <= auto_r_threshold) ? 1 : 0;
+            loh_use_rec_size = (r_rec_rs <= auto_r_threshold) ? 1 : 0;
+          }
+        }
+
+        loh_auto_compound_resolved = 1;
+        LOH_DEBUG_PRINT_CONFIG(
+            "[LOH AUTO_COMPOUND v6] branch=%s r1=%.4f r2=%.4f thr=%.2f "
+          "one_hit=%.4f(<=%.2f) target=%s "
+            "→ use_size=%d freq_rec=%d freq_size=%d rec_size=%d\n",
+            use_bmr_branch ? "BMR" : "MR", r_freq_fs, r_rec_rs,
+            auto_r_threshold, one_hit_ratio, one_hit_threshold,
+          (auto_target && auto_target[0]) ? auto_target : "mr(default)",
+          loh_use_size,
+            loh_use_freq_rec, loh_use_freq_size, loh_use_rec_size);
+
+        // 延迟创建 CMA-ES: 根据最终 compound 模式计算维度并初始化
+        // 重建活跃权重映射（auto_compound 刚改了 compound 模式）
+        loh_rebuild_active_weight_map();
+        loh_log_active_weight_map("LOH AUTO_COMPOUND RESULT");
+
+        if (params->cmaes_enabled && params->cmaes_handle == NULL) {
+          int cmaes_dim;
+          double cmaes_lb = loh_cmaes_weight_lb, cmaes_ub = loh_cmaes_weight_ub;
+          if (params->score_model == LOH_SCORE_MODEL_MLP) {
+            cmaes_dim = params->mlp_param_len;
+            cmaes_lb = -2.0;
+            cmaes_ub = 2.0;
+          } else {
+            cmaes_dim = loh_active_weight_count;
+            if (cmaes_dim < 0) cmaes_dim = 0;
+            if (cmaes_dim > WEIGHT_DIM) cmaes_dim = WEIGHT_DIM;
+          }
+          params->cmaes_output_dim = cmaes_dim;
+
+          if (loh_cmaes_init_from_weights) {
+            // v2: 从当前权重构建 CMA-ES 初始均值向量
+            double x0[WEIGHT_DIM] = {0.0};
+            for (int i = 0; i < cmaes_dim && i < loh_active_weight_count; i++) {
+              x0[i] = params->weights[loh_active_weight_map[i]];
+            }
+            params->cmaes_handle = loh_cmaes_create_bounded_v(
+                cmaes_dim, loh_cmaes_lambda, x0, loh_cmaes_init_sigma, cmaes_lb,
+                cmaes_ub);
+          } else {
+            // v1: scalar mean 均匀初始化
+            params->cmaes_handle = loh_cmaes_create_bounded(
+                cmaes_dim, loh_cmaes_lambda, loh_cmaes_init_mean,
+                loh_cmaes_init_sigma, cmaes_lb, cmaes_ub);
+          }
+          if (params->cmaes_handle == NULL) {
+            params->cmaes_enabled = 0;
+            fprintf(stderr,
+                    "[LOH AUTO_COMPOUND] CMA-ES creation failed, fallback to "
+                    "static weights\n");
+          } else {
+            // 获取初始候选权重
+            if (params->score_model == LOH_SCORE_MODEL_MLP) {
+              double init_p[LOH_MLP_MAX_PARAMS] = {0.0};
+              if (loh_cmaes_ask(params->cmaes_handle, init_p, cmaes_dim)) {
+                for (int i = 0; i < cmaes_dim && i < LOH_MLP_MAX_PARAMS; ++i)
+                  params->mlp_params[i] = init_p[i];
+              }
+            } else if (!loh_cmaes_skip_init_ask) {
+              double init_w[WEIGHT_DIM] = {0.0};
+              if (loh_cmaes_ask(params->cmaes_handle, init_w, cmaes_dim)) {
+                loh_map_cmaes_to_weights(init_w, cmaes_dim, params->weights);
+              }
+            }
+            params->cmaes_last_generation =
+                loh_cmaes_get_generation(params->cmaes_handle);
+            fprintf(stderr,
+                    "[LOH AUTO_COMPOUND] CMA-ES created: dim=%d lambda=%d "
+                    "compound=%d\n",
+                    cmaes_dim, loh_cmaes_lambda, loh_score_use_compound);
+          }
+        }
+      }  // end if (loh_auto_compound)
+    }
   }
 
   // **关键修改：在 cache_get_base 之前先检查是否命中，并记录访问前特征**
@@ -5297,6 +8064,12 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
   // 记录访问前的特征（考虑 ghost cache 历史）
   double features[FEATURE_DIM];
   if (obj_before_access != NULL) {
+#if LOH_ENABLE_PENALTY
+    if (params->pair_track_by_kept != NULL) {
+      loh_pair_track_on_kept_hit(params, obj_before_access->obj_id, 0);
+    }
+#endif
+
     // 缓存命中：计算命中对象的访问前特征
     // 原始值（raw）
     int64_t recency_raw =
@@ -5350,7 +8123,9 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
     if (ghost_entry) {
 #if LOH_ENABLE_PENALTY
       // 【新增】检测到 ghost cache miss - 记录原始数据，延迟计算惩罚
-      if (params->is_warmed_up && ghost_entry->eviction_version > 0) {
+      uint64_t penalty_version = ghost_entry->eviction_version;
+
+      if (params->is_warmed_up) {
         // 【精确】使用驱逐时刻到当前访问的距离
         int64_t eviction_to_access =
             params->current_timestamp - ghost_entry->eviction_timestamp;
@@ -5361,8 +8136,16 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
         // 只记录原始数据：eviction_to_access 和 obj_size
         // 惩罚将在Python端使用当时的 epoch_evicted_bytes 和 epoch_evicted_count
         // 计算
-        enqueue_penalty(params, ghost_entry->eviction_version,
-                        eviction_to_access, ghost_entry->obj_size, req->obj_id);
+        if (!loh_penalty_send_only_pairwise) {
+          enqueue_penalty(params, penalty_version, eviction_to_access,
+                          ghost_entry->obj_size, req->obj_id, 0,
+                          eviction_to_access);
+        }
+        loh_pair_track_on_evicted_event(params, req->obj_id,
+                                        eviction_to_access);
+        // kept 对象若已被后续决策驱逐，则在“再次访问导致 miss”时回填
+        // kept_life。
+        loh_pair_track_on_kept_evict(params, req->obj_id, eviction_to_access);
 
         LOH_DEBUG_PRINT_BASIC(
             "[LOH] Ghost miss detected: obj_id=%llu, evict_version=%llu, "
@@ -5535,6 +8318,37 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
     }
   }
 
+  // ── FSB 在线评估：每次请求后计步 ──
+  if (g_fsb.enabled && g_fsb.phase == 0 && params->is_warmed_up) {
+    int changed = fsb_step(params, !hit);
+    // FSB 收敛 → 延迟创建 CMA-ES
+    if (changed && g_fsb.phase == 1 && params->cmaes_enabled &&
+        params->cmaes_handle == NULL) {
+      loh_rebuild_active_weight_map();
+      int cmaes_dim = loh_active_weight_count;
+      if (cmaes_dim < 0) cmaes_dim = 0;
+      if (cmaes_dim > WEIGHT_DIM) cmaes_dim = WEIGHT_DIM;
+      params->cmaes_output_dim = cmaes_dim;
+      params->cmaes_handle = loh_cmaes_create_bounded(
+          cmaes_dim, loh_cmaes_lambda, loh_cmaes_init_mean,
+          loh_cmaes_init_sigma, loh_cmaes_weight_lb, loh_cmaes_weight_ub);
+      if (params->cmaes_handle == NULL) {
+        params->cmaes_enabled = 0;
+        fprintf(stderr, "[FSB] CMA-ES creation failed after FSB lock\n");
+      } else {
+        if (!loh_cmaes_skip_init_ask) {
+          double init_w[WEIGHT_DIM] = {0.0};
+          if (loh_cmaes_ask(params->cmaes_handle, init_w, cmaes_dim))
+            loh_map_cmaes_to_weights(init_w, cmaes_dim, params->weights);
+        }
+        params->cmaes_last_generation =
+            loh_cmaes_get_generation(params->cmaes_handle);
+        fprintf(stderr, "[FSB] CMA-ES created after lock: dim=%d lambda=%d\n",
+                cmaes_dim, loh_cmaes_lambda);
+      }
+    }
+  }
+
   // **缓存内容特征统计已通过 insert/evict/find 更新**
   // 增量更新在以下位置已实现：
   // - LOH_insert: update_cache_content_stats_add(params, obj)
@@ -5660,6 +8474,11 @@ static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
   PERF_TS ts_find;
   PERF_NOW(ts_find);
 
+  // 每次请求失效批量淘汰队列：防止跨请求持久化导致 mr 退化
+  // 队列仅在单次请求内（同一 insert 触发的连续 evictions）有效
+  params->evict_queue_len = 0;
+  params->evict_queue_pos = 0;
+
   cache_obj_t *cache_obj = cache_find_base(cache, req, update_cache);
 
   if (cache_obj && likely(update_cache)) {
@@ -5693,7 +8512,7 @@ static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
     }
 
     // Update access timestamps
-    cache_obj->LOH.last_access_time = time(NULL);
+    cache_obj->LOH.last_access_time = loh_get_wall_time();
     cache_obj->LOH.last_access_counter = params->current_timestamp;
 
     // 【统一原子操作】：使用标准的原子更新，包括IRT堆维护
@@ -5752,7 +8571,7 @@ static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
   // 如果从 Ghost cache 恢复成功，access_count 和 irt_values 都已设置好
 
   // 更新访问时间戳（无论是否从 ghost 恢复都需要更新为当前时间）
-  obj->LOH.last_access_time = time(NULL);
+  obj->LOH.last_access_time = loh_get_wall_time();
   obj->LOH.last_access_counter = params->current_timestamp;
 
   // Initialize IRT values if not restored from ghost
@@ -5856,8 +8675,28 @@ static inline double fast_log1p_approx(double x) {
 
 static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+
+  // ---- 批量淘汰快速路径：从预评分队列取对象 ----
+  // 队列已在 LOH_find 中按请求失效，此处无需 age/lac 检查
+  while (params->evict_queue_pos < params->evict_queue_len) {
+    int pos = params->evict_queue_pos++;
+    cache_obj_t *queued = params->evict_queue[pos];
+    if (queued != NULL) {
+      return queued;
+    }
+  }
+
   PERF_TS ts_to_evict;
   PERF_NOW(ts_to_evict);
+#if LOH_PERF_PROFILING && LOH_PERF_EVICT_OUTER_ONLY
+#pragma push_macro("PERF_NOW")
+#pragma push_macro("PERF_ACCUM")
+#undef PERF_NOW
+#undef PERF_ACCUM
+#define PERF_NOW(ts) ((void)0)
+#define PERF_ACCUM(params, field, ts0) ((void)0)
+#endif
+  static uint64_t evict_decision_counter = 0;
 
   // 清空候选对象数组
   params->n_candidates = 0;
@@ -5865,18 +8704,28 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
 
   // 从各个特征数据结构中选择候选对象，每个特征分别获取候选
   // compound 模式下只使用 3 个源（recency/freq/size），每个源分到更多候选
-  int n_sources = loh_irt_heap_enabled ? 6 : 3;
+  int n_sources = loh_score_use_irt ? 6 : 3;
   int candidates_per_feature = loh_structured_candidates / n_sources;
+  // 应用每特征最低配额（LOH_MIN_CAND_PER_FEATURE，默认 1）
+  if (candidates_per_feature < loh_min_cand_per_feature)
+    candidates_per_feature = loh_min_cand_per_feature;
   // 自适应预算：每个源可有不同配额（默认均分）
   int budget[LOH_MAX_SOURCES];
   if (loh_adaptive_budget) {
-    for (int s = 0; s < n_sources; s++)
+    for (int s = 0; s < n_sources; s++) {
       budget[s] = loh_source_budget[s] > 0 ? loh_source_budget[s]
                                            : candidates_per_feature;
+    }
   } else {
     for (int s = 0; s < LOH_MAX_SOURCES; s++)
       budget[s] = candidates_per_feature;
   }
+  int random_budget = loh_random_candidates;
+  if (loh_adaptive_budget && loh_adaptive_include_random &&
+      loh_source_budget[6] > 0) {
+    random_budget = loh_source_budget[6];
+  }
+  if (random_budget < 0) random_budget = 0;
   LOH_DEBUG_PRINT_DETAILED(
       "[CANDIDATE COLLECTION] Normal mode: candidates_per_feature=%d "
       "(loh_structured_candidates=%d)\n",
@@ -6120,30 +8969,54 @@ static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   //    注意：这是在特征源之外 ADDITIVE 的额外候选，不减少原有源的配额
 
 random_sampling_section:
-  if (loh_random_candidates > 0 && params->obj_array_size > 0) {
-    // ── 均匀随机采样（带深度 prefetch 流水线优化）──
-    // 说明：obj_array (~96MB) 远超 L3 (~30MB)，每次随机访问是一次 DRAM miss
-    // (~100ns)。 每次迭代的计算量 (loh_seen_add + 随机数生成) 约 10-15ns，
-    // 因此需要提前 16 步 prefetch 才能覆盖 100ns 延迟。
-    int random_wanted = loh_random_candidates;
+  if (random_budget > 0 && params->obj_array_size > 0) {
+    // ── 均匀随机采样（双级 prefetch 流水线优化）──
+    // obj_array 指针数组和 cache_obj_t 数据均可能不在 cache 中，
+    // 使用 PREFETCH_DEPTH 步提前发射 prefetch 指令来隐藏 DRAM 延迟。
+    int random_wanted = random_budget;
     int room = MAX_CANDIDATES - params->n_candidates;
     if (random_wanted > room) random_wanted = room;
     int random_collected = 0;
     int max_attempts = random_wanted * 3;
     const uint64_t arr_sz = (uint64_t)params->obj_array_size;
+    cache_obj_t **obj_arr = params->obj_array;
+
+// Prefetch 流水线：提前 PF_DEPTH 步预取 obj_array 指针槽位
+#define PF_DEPTH 16
+    int pf_idx[PF_DEPTH];
+    // 预热 prefetch 管线
+    for (int p = 0; p < PF_DEPTH && p < max_attempts; ++p) {
+      pf_idx[p] = (int)(loh_fast_rand() % arr_sz);
+      __builtin_prefetch(&obj_arr[pf_idx[p]], 0, 0);
+    }
+    int pf_head = 0;
     for (int attempt = 0;
          attempt < max_attempts && random_collected < random_wanted;
          attempt++) {
-      int rand_idx = (int)(loh_fast_rand() % arr_sz);
-      cache_obj_t *rand_obj = params->obj_array[rand_idx];
+      // 获取当前已 prefetch 好的索引
+      int rand_idx = pf_idx[pf_head];
+      // 发射下一轮 prefetch（替换用过的槽位）
+      int next_attempt = attempt + PF_DEPTH;
+      if (next_attempt < max_attempts) {
+        pf_idx[pf_head] = (int)(loh_fast_rand() % arr_sz);
+        __builtin_prefetch(&obj_arr[pf_idx[pf_head]], 0, 0);
+      }
+      pf_head = (pf_head + 1) & (PF_DEPTH - 1);  // PF_DEPTH 必须为 2 的幂
+
+      cache_obj_t *rand_obj = obj_arr[rand_idx];
+      if (rand_obj) {
+        // 二级 prefetch：预取 object 结构体（LOH 字段在缓存行内）
+        __builtin_prefetch(rand_obj, 0, 0);
+      }
       if (rand_obj && loh_seen_add(params, rand_obj)) {
         params->candidates[params->n_candidates++] = rand_obj;
         random_collected++;
       }
     }
+#undef PF_DEPTH
     LOH_DEBUG_PRINT_DETAILED(
         "[random_sample] collected %d/%d random candidates\n", random_collected,
-        loh_random_candidates);
+        random_budget);
   }
 
   // 如果没有候选对象，使用 LRU 作为回退
@@ -6163,7 +9036,9 @@ random_sampling_section:
 
   // 对候选对象评分，选择得分最低的
   double min_score = DBL_MAX;
+  double second_score = DBL_MAX;
   cache_obj_t *obj_to_evict = NULL;
+  cache_obj_t *runner_up_obj = NULL;
   int best_i = -1;  // 记录获胜候选的索引（用于自适应预算）
 
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
@@ -6181,6 +9056,8 @@ random_sampling_section:
   // 因为 additive random sampling 可能超出 loh_structured_candidates
   int cand_n = params->n_candidates;
   if (cand_n > MAX_CANDIDATES) cand_n = MAX_CANDIDATES;
+  double cand_scores[MAX_CANDIDATES];
+  for (int i = 0; i < cand_n; ++i) cand_scores[i] = DBL_MAX;
   // Compound + 线性模式下只需 3 个基础特征（recency/freq/size），
   // 跳过 IRT 特征计算可节省约 50% 特征计算时间
   const int fast_compound =
@@ -6196,7 +9073,7 @@ random_sampling_section:
 
   // 将权重提升到寄存器，避免在循环中反复读取
   const double *w = params->weights;
-  const double *base_w = params->weights; // 保留基础引用
+  const double *base_w = params->weights;  // 保留基础引用
   double sign[WEIGHT_DIM];
   for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
 
@@ -6209,7 +9086,8 @@ random_sampling_section:
       sign[3] = 1.0;   // freq_recency
       sign[4] = 1.0;   // freq_size
       sign[5] = -1.0;  // recency_size
-      sign[6] = 1.0;   // freq_recency_size（仅 v2 使用）
+      sign[6] =
+          loh_compound_use_irt1 ? -1.0 : 1.0;  // irt1(-1) or freq_rec_size(+1)
     } else {
       for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
     }
@@ -6245,48 +9123,135 @@ random_sampling_section:
     PERF_NOW(ts_fused);
     const int64_t cur_ts = params->current_timestamp;
     const int do_v2 = loh_score_compound_v2;
+    const double eps = 1e-12;
+#if LOH_PERF_PROFILING
+    const int perf_stride =
+        (loh_perf_hotpath_sample_stride > 0 ? loh_perf_hotpath_sample_stride
+                                            : 1);
+    const int perf_sampling_enabled = (perf_stride > 1);
+    uint64_t perf_sampled_ultra = 0;
+
+    const double ultra_route_total_before =
+        params->perf.calc_features_prepare_route.total;
+    const uint64_t ultra_route_count_before =
+        params->perf.calc_features_prepare_route.count;
+    const double ultra_raw_total_before =
+        params->perf.calc_features_prepare_raw.total;
+    const uint64_t ultra_raw_count_before =
+        params->perf.calc_features_prepare_raw.count;
+    const double ultra_extract_total_before =
+        params->perf.calc_features_prepare_extract.total;
+    const uint64_t ultra_extract_count_before =
+        params->perf.calc_features_prepare_extract.count;
+    const double ultra_base_total_before =
+        params->perf.calc_features_base.total;
+    const uint64_t ultra_base_count_before =
+        params->perf.calc_features_base.count;
+    const double ultra_base_rec_before =
+        params->perf.calc_features_base_recency.total;
+    const uint64_t ultra_base_rec_count_before =
+        params->perf.calc_features_base_recency.count;
+    const double ultra_base_freq_before =
+        params->perf.calc_features_base_freq.total;
+    const uint64_t ultra_base_freq_count_before =
+        params->perf.calc_features_base_freq.count;
+    const double ultra_base_size_before =
+        params->perf.calc_features_base_size.total;
+    const uint64_t ultra_base_size_count_before =
+        params->perf.calc_features_base_size.count;
+#endif
 
     for (int i = 0; i < cand_n; ++i) {
+      // 前方 prefetch：预取后续候选对象数据以隐藏 DRAM 延迟
+      if (i + 4 < cand_n) {
+        __builtin_prefetch(params->candidates[i + 4], 0, 0);
+      }
+#if LOH_PERF_PROFILING
+      const int do_detail_perf =
+          (!perf_sampling_enabled || ((i % perf_stride) == 0));
+      if (do_detail_perf) perf_sampled_ultra++;
+#else
+      const int do_detail_perf = 1;
+#endif
+      PERF_TS ts_cf_exact;
+      if (do_detail_perf) PERF_NOW(ts_cf_exact);
       cache_obj_t *candidate = params->candidates[i];
       double rec, freq, sz, score;
-      const double eps = 1e-12;
 
-      if (params->segment_mode > 0 && params->num_segments > 1) {
-        // 简易路由规则：以文件大小进行二分发 (0: small, 1: large)
-        int seg_idx = 0;
-        if (candidate->obj_size >= 1048576) { // >= 1MB
-           seg_idx = 1;
-        }
-        if (seg_idx >= params->num_segments) seg_idx = params->num_segments - 1;
-        w = params->segmented_weights[seg_idx];
-        for (int k = 0; k < WEIGHT_DIM; ++k) ws[k] = w[k] * sign[k];
-      }
+      PERF_TS ts_cf_raw;
+      if (do_detail_perf) PERF_NOW(ts_cf_raw);
+      const int64_t delta_raw =
+          (int64_t)(cur_ts - candidate->LOH.last_access_counter);
+      const int64_t freq_raw = (int64_t)candidate->LOH.access_count;
+      const int64_t size_bytes_raw = (int64_t)candidate->obj_size;
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_prepare_raw, ts_cf_raw);
 
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_prepare_extract, ts_cf_exact);
+
+      PERF_TS ts_cf_base;
+      if (do_detail_perf) PERF_NOW(ts_cf_base);
       if (loh_feature_unified_formula) {
         // 统一公式：frequency 用 log-ratio，其他维度用其互补（均在 [0,1]）
-        const double delta_raw =
-            (double)(cur_ts - candidate->LOH.last_access_counter);
-        rec = 1.0 / (1.0 + fast_log1p_approx(delta_raw));
+        PERF_TS ts_base_rec;
+        if (do_detail_perf) PERF_NOW(ts_base_rec);
+        {
+          const double rec_raw = (double)delta_raw;
+          rec = 1.0 / (1.0 + fast_log1p_approx(rec_raw));
+        }
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_recency, ts_base_rec);
 
-        const double log_count =
-            fast_log1p_approx((double)candidate->LOH.access_count);
+        PERF_TS ts_base_freq;
+        if (do_detail_perf) PERF_NOW(ts_base_freq);
+        const double log_count = fast_log1p_approx((double)freq_raw);
         freq = (log_count > 0.0) ? (log_count / (log_count + 1.0)) : 0.0;
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_freq, ts_base_freq);
 
-        const double size_mb = (double)candidate->obj_size / 1048576.0;
+        PERF_TS ts_base_size;
+        if (do_detail_perf) PERF_NOW(ts_base_size);
+        const double size_mb = (double)size_bytes_raw / 1048576.0;
         const double log_size = fast_log1p_approx(size_mb);
         sz = 1.0 / (1.0 + log_size);
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_size, ts_base_size);
 
         score = rec * ws[0] + freq * ws[1] + sz * ws[2] + (freq * rec) * ws[3] +
                 (freq * sz) * ws[4] + (rec * sz) * ws[5];
         if (do_v2) {
-          score += (freq * rec * sz) * ws[6];
+          if (loh_compound_use_irt1) {
+            const double irt1_feat =
+                1.0 /
+                (1.0 + fast_log1p_approx((double)candidate->LOH.irt_values[0]));
+            score += irt1_feat * ws[6];
+          } else {
+            score += (freq * rec * sz) * ws[6];
+          }
         }
       } else if (loh_feature_log1p) {
         // ── LOG1P 模式：fast_log1p_approx 直接做特征 ──
-        rec = fast_log1p_approx(
-            (double)(cur_ts - candidate->LOH.last_access_counter));
-        freq = fast_log1p_approx((double)candidate->LOH.access_count);
-        sz = fast_log1p_approx((double)candidate->obj_size);
+        PERF_TS ts_base_rec;
+        if (do_detail_perf) PERF_NOW(ts_base_rec);
+        {
+          const double rec_raw = (double)delta_raw;
+          rec = fast_log1p_approx(rec_raw);
+        }
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_recency, ts_base_rec);
+
+        PERF_TS ts_base_freq;
+        if (do_detail_perf) PERF_NOW(ts_base_freq);
+        freq = fast_log1p_approx((double)freq_raw);
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_freq, ts_base_freq);
+
+        PERF_TS ts_base_size;
+        if (do_detail_perf) PERF_NOW(ts_base_size);
+        sz = fast_log1p_approx((double)size_bytes_raw);
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_size, ts_base_size);
 
         const double inv_rec = 1.0 / ((rec > eps) ? rec : eps);
         const double inv_sz = 1.0 / ((sz > eps) ? sz : eps);
@@ -6295,35 +9260,76 @@ random_sampling_section:
                 (freq * inv_rec) * ws[3] + (freq * inv_sz) * ws[4] +
                 (rec * sz) * ws[5];
         if (do_v2) {
-          score += (freq * inv_rec * inv_sz) * ws[6];
+          if (loh_compound_use_irt1) {
+            const double irt1_feat =
+                fast_log1p_approx((double)candidate->LOH.irt_values[0]);
+            score += irt1_feat * ws[6];
+          } else {
+            score += (freq * inv_rec * inv_sz) * ws[6];
+          }
         }
       } else {
         // ── RECIPROCAL 模式：1/(1+fast_log1p_approx(x)) ──
-        const double log_delta = fast_log1p_approx(
-            (double)(cur_ts - candidate->LOH.last_access_counter));
-        rec = 1.0 / (1.0 + log_delta);
+        PERF_TS ts_base_rec;
+        if (do_detail_perf) PERF_NOW(ts_base_rec);
+        {
+          const double rec_raw = (double)delta_raw;
+          const double log_delta = fast_log1p_approx(rec_raw);
+          rec = 1.0 / (1.0 + log_delta);
+        }
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_recency, ts_base_rec);
 
-        const double log_count =
-            fast_log1p_approx((double)candidate->LOH.access_count);
+        PERF_TS ts_base_freq;
+        if (do_detail_perf) PERF_NOW(ts_base_freq);
+        const double log_count = fast_log1p_approx((double)freq_raw);
         freq = (log_count > 0.0) ? (log_count / (log_count + 1.0)) : 0.0;
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_freq, ts_base_freq);
 
-        const double size_mb = (double)candidate->obj_size / 1048576.0;
+        PERF_TS ts_base_size;
+        if (do_detail_perf) PERF_NOW(ts_base_size);
+        const double size_mb = (double)size_bytes_raw / 1048576.0;
         const double log_size = fast_log1p_approx(size_mb);
         sz = 1.0 / (1.0 + log_size);
+        if (do_detail_perf)
+          PERF_ACCUM(params, calc_features_base_size, ts_base_size);
 
         // compound 乘积形式（非比率）
         score = rec * ws[0] + freq * ws[1] + sz * ws[2] + (freq * rec) * ws[3] +
                 (freq * sz) * ws[4] + (rec * sz) * ws[5];
         if (do_v2) {
-          score += (freq * rec * sz) * ws[6];
+          if (loh_compound_use_irt1) {
+            const double irt1_feat =
+                1.0 /
+                (1.0 + fast_log1p_approx((double)candidate->LOH.irt_values[0]));
+            score += irt1_feat * ws[6];
+          } else {
+            score += (freq * rec * sz) * ws[6];
+          }
         }
       }
 
-      if (score < min_score) {
-        min_score = score;
+#if LOH_PERF_PROFILING
+      if (do_detail_perf) PERF_ACCUM(params, calc_features_base, ts_cf_base);
+#endif
+
+      // score/size 归一化：大对象效用密度更低 → 优先淘汰 → 改善 BMR
+      const double cmp_score =
+          loh_evict_score_by_size
+              ? score / (double)(size_bytes_raw > 0 ? size_bytes_raw : 1)
+              : score;
+      if (cmp_score < min_score) {
+        second_score = min_score;
+        runner_up_obj = obj_to_evict;
+        min_score = cmp_score;
         obj_to_evict = candidate;
         best_i = i;
+      } else if (cmp_score < second_score) {
+        second_score = cmp_score;
+        runner_up_obj = candidate;
       }
+      cand_scores[i] = cmp_score;
 
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
       // TOPK 维护内联
@@ -6390,6 +9396,34 @@ random_sampling_section:
 #endif
     }
 #if LOH_PERF_PROFILING
+    if (perf_sampling_enabled && perf_sampled_ultra > 0 &&
+        perf_sampled_ultra < (uint64_t)cand_n) {
+      const double scale = (double)cand_n / (double)perf_sampled_ultra;
+#define RESCALE_ULTRA_FIELD(field, before_total, before_count)      \
+  do {                                                              \
+    const double _dt = params->perf.field.total - (before_total);   \
+    const uint64_t _dc = params->perf.field.count - (before_count); \
+    params->perf.field.total = (before_total) + _dt * scale;        \
+    params->perf.field.count =                                      \
+        (before_count) + (uint64_t)llround((double)_dc * scale);    \
+  } while (0)
+      RESCALE_ULTRA_FIELD(calc_features_prepare_route, ultra_route_total_before,
+                          ultra_route_count_before);
+      RESCALE_ULTRA_FIELD(calc_features_prepare_raw, ultra_raw_total_before,
+                          ultra_raw_count_before);
+      RESCALE_ULTRA_FIELD(calc_features_prepare_extract,
+                          ultra_extract_total_before,
+                          ultra_extract_count_before);
+      RESCALE_ULTRA_FIELD(calc_features_base, ultra_base_total_before,
+                          ultra_base_count_before);
+      RESCALE_ULTRA_FIELD(calc_features_base_recency, ultra_base_rec_before,
+                          ultra_base_rec_count_before);
+      RESCALE_ULTRA_FIELD(calc_features_base_freq, ultra_base_freq_before,
+                          ultra_base_freq_count_before);
+      RESCALE_ULTRA_FIELD(calc_features_base_size, ultra_base_size_before,
+                          ultra_base_size_count_before);
+#undef RESCALE_ULTRA_FIELD
+    }
     {
       struct timespec _t1;
       clock_gettime(CLOCK_MONOTONIC, &_t1);
@@ -6411,20 +9445,167 @@ random_sampling_section:
   double feat_buf[MAX_CANDIDATES][FEATURE_DIM];
   PERF_TS ts_feat_loop;
   PERF_NOW(ts_feat_loop);
+#if LOH_PERF_PROFILING
+  const int perf_stride_feat =
+      (loh_perf_hotpath_sample_stride > 0 ? loh_perf_hotpath_sample_stride : 1);
+  const int perf_sampling_feat_enabled = (perf_stride_feat > 1);
+  uint64_t perf_sampled_feat = 0;
+
+  const double feat_route_total_before =
+      params->perf.calc_features_prepare_route.total;
+  const uint64_t feat_route_count_before =
+      params->perf.calc_features_prepare_route.count;
+  const double feat_raw_total_before =
+      params->perf.calc_features_prepare_raw.total;
+  const uint64_t feat_raw_count_before =
+      params->perf.calc_features_prepare_raw.count;
+  const double feat_extract_total_before =
+      params->perf.calc_features_prepare_extract.total;
+  const uint64_t feat_extract_count_before =
+      params->perf.calc_features_prepare_extract.count;
+  const double feat_base_total_before = params->perf.calc_features_base.total;
+  const uint64_t feat_base_count_before = params->perf.calc_features_base.count;
+  const double feat_rec_total_before =
+      params->perf.calc_features_base_recency.total;
+  const uint64_t feat_rec_count_before =
+      params->perf.calc_features_base_recency.count;
+  const double feat_freq_total_before =
+      params->perf.calc_features_base_freq.total;
+  const uint64_t feat_freq_count_before =
+      params->perf.calc_features_base_freq.count;
+  const double feat_size_total_before =
+      params->perf.calc_features_base_size.total;
+  const uint64_t feat_size_count_before =
+      params->perf.calc_features_base_size.count;
+  const double feat_irt_total_before = params->perf.calc_features_irt.total;
+  const uint64_t feat_irt_count_before = params->perf.calc_features_irt.count;
+#endif
   for (int i = 0; i < cand_n; ++i) {
+#if LOH_PERF_PROFILING
+    const int do_detail_perf =
+        (!perf_sampling_feat_enabled || ((i % perf_stride_feat) == 0));
+    if (do_detail_perf) perf_sampled_feat++;
+#else
+    const int do_detail_perf = 1;
+#endif
+    PERF_TS ts_cf_exact;
+    if (do_detail_perf) PERF_NOW(ts_cf_exact);
     cache_obj_t *candidate = params->candidates[i];
+
     if (fast_compound) {
       int64_t delta =
           params->current_timestamp - candidate->LOH.last_access_counter;
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_prepare_raw, ts_cf_exact);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_prepare_extract, ts_cf_exact);
+
+      PERF_TS ts_cf_base;
+      if (do_detail_perf) PERF_NOW(ts_cf_base);
+      PERF_TS ts_base_rec;
+      if (do_detail_perf) PERF_NOW(ts_base_rec);
       feat_buf[i][0] = calculate_recency(params, delta);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_base_recency, ts_base_rec);
+
+      PERF_TS ts_base_freq;
+      if (do_detail_perf) PERF_NOW(ts_base_freq);
       feat_buf[i][1] =
           calculate_frequency(params, (int64_t)candidate->LOH.access_count);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_base_freq, ts_base_freq);
+
+      PERF_TS ts_base_size;
+      if (do_detail_perf) PERF_NOW(ts_base_size);
       feat_buf[i][2] = calculate_size(params, (int64_t)candidate->obj_size);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_base_size, ts_base_size);
+      // compound_v2 + irt1 模式下评分循环读 f[3] 作为 slot 6 的 irt1 特征
+      if (loh_compound_use_irt1 && loh_score_compound_v2) {
+        feat_buf[i][3] =
+            calculate_irt_feature(params, candidate->LOH.irt_values[0]);
+      }
+#if LOH_PERF_PROFILING
+      if (do_detail_perf) PERF_ACCUM(params, calc_features_base, ts_cf_base);
+#endif
     } else {
-      calculate_object_features(params, candidate, feat_buf[i]);
+      int64_t delta =
+          params->current_timestamp - candidate->LOH.last_access_counter;
+      int64_t recency_raw = delta;
+      int64_t freq_raw = (int64_t)candidate->LOH.access_count;
+      int64_t size_bytes = (int64_t)candidate->obj_size;
+
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_prepare_raw, ts_cf_exact);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_prepare_extract, ts_cf_exact);
+
+      PERF_TS ts_cf_base;
+      if (do_detail_perf) PERF_NOW(ts_cf_base);
+      PERF_TS ts_base_rec;
+      if (do_detail_perf) PERF_NOW(ts_base_rec);
+      feat_buf[i][0] = calculate_recency(params, recency_raw);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_base_recency, ts_base_rec);
+
+      PERF_TS ts_base_freq;
+      if (do_detail_perf) PERF_NOW(ts_base_freq);
+      feat_buf[i][1] = calculate_frequency(params, freq_raw);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_base_freq, ts_base_freq);
+
+      PERF_TS ts_base_size;
+      if (do_detail_perf) PERF_NOW(ts_base_size);
+      feat_buf[i][2] = calculate_size(params, size_bytes);
+      if (do_detail_perf)
+        PERF_ACCUM(params, calc_features_base_size, ts_base_size);
+#if LOH_PERF_PROFILING
+      if (do_detail_perf) PERF_ACCUM(params, calc_features_base, ts_cf_base);
+#endif
+
+      PERF_TS ts_cf_irt;
+      if (do_detail_perf) PERF_NOW(ts_cf_irt);
+      feat_buf[i][3] =
+          calculate_irt_feature(params, candidate->LOH.irt_values[0]);
+      feat_buf[i][4] =
+          calculate_irt_feature(params, candidate->LOH.irt_values[1]);
+      feat_buf[i][5] =
+          calculate_irt_feature(params, candidate->LOH.irt_values[2]);
+#if LOH_PERF_PROFILING
+      if (do_detail_perf) PERF_ACCUM(params, calc_features_irt, ts_cf_irt);
+#endif
     }
   }
 #if LOH_PERF_PROFILING
+  if (perf_sampling_feat_enabled && perf_sampled_feat > 0 &&
+      perf_sampled_feat < (uint64_t)cand_n) {
+    const double scale = (double)cand_n / (double)perf_sampled_feat;
+#define RESCALE_FEAT_FIELD(field, before_total, before_count)       \
+  do {                                                              \
+    const double _dt = params->perf.field.total - (before_total);   \
+    const uint64_t _dc = params->perf.field.count - (before_count); \
+    params->perf.field.total = (before_total) + _dt * scale;        \
+    params->perf.field.count =                                      \
+        (before_count) + (uint64_t)llround((double)_dc * scale);    \
+  } while (0)
+    RESCALE_FEAT_FIELD(calc_features_prepare_route, feat_route_total_before,
+                       feat_route_count_before);
+    RESCALE_FEAT_FIELD(calc_features_prepare_raw, feat_raw_total_before,
+                       feat_raw_count_before);
+    RESCALE_FEAT_FIELD(calc_features_prepare_extract, feat_extract_total_before,
+                       feat_extract_count_before);
+    RESCALE_FEAT_FIELD(calc_features_base, feat_base_total_before,
+                       feat_base_count_before);
+    RESCALE_FEAT_FIELD(calc_features_base_recency, feat_rec_total_before,
+                       feat_rec_count_before);
+    RESCALE_FEAT_FIELD(calc_features_base_freq, feat_freq_total_before,
+                       feat_freq_count_before);
+    RESCALE_FEAT_FIELD(calc_features_base_size, feat_size_total_before,
+                       feat_size_count_before);
+    RESCALE_FEAT_FIELD(calc_features_irt, feat_irt_total_before,
+                       feat_irt_count_before);
+#undef RESCALE_FEAT_FIELD
+  }
   {
     struct timespec _t1;
     clock_gettime(CLOCK_MONOTONIC, &_t1);
@@ -6462,9 +9643,9 @@ random_sampling_section:
     cache_obj_t *candidate = params->candidates[i];
     const double *f = feat_buf[i];
     double score = 0.0;
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
     int64_t recency_raw =
         params->current_timestamp - candidate->LOH.last_access_counter;
-    ;
     int64_t freq_raw = (int64_t)candidate->LOH.access_count;
     int64_t size_bytes = (int64_t)candidate->obj_size;
     int64_t irt1_raw = candidate->LOH.irt_values[0];
@@ -6475,6 +9656,7 @@ random_sampling_section:
         "size_bytes=%ld, irt1_raw=%ld, irt2_raw=%ld, irt3_raw=%ld\n",
         (unsigned long long)candidate->obj_id, recency_raw, freq_raw,
         size_bytes, irt1_raw, irt2_raw, irt3_raw);
+#endif
 
     if (params->score_model == LOH_SCORE_MODEL_MLP) {
       // MLP 模式：per-candidate 非线性打分（默认输入维度为6）
@@ -6555,32 +9737,28 @@ random_sampling_section:
         terms[4] = freq_size;
         terms[5] = recency_size;
         if (loh_score_compound_v2) {
-          // 第7项：freq_recency_size
-          if (loh_feature_log1p) {
-            const double eps = 1e-12;
-            const double safe_rec =
-                (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
-            const double safe_size =
-                (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
-            const double denom = safe_rec * safe_size;
-            const double safe_denom =
-                (fabs(denom) > eps) ? denom : ((denom >= 0.0) ? eps : -eps);
-            terms[6] = freq / safe_denom;
+          if (loh_compound_use_irt1) {
+            // slot 6 = irt1 独立特征（已在 feat_buf[i][3] 预计算）
+            terms[6] = f[3];
           } else {
-            terms[6] = freq * rec * size;
+            // 第7项：freq_recency_size
+            if (loh_feature_log1p) {
+              const double eps = 1e-12;
+              const double safe_rec =
+                  (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+              const double safe_size =
+                  (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+              const double denom = safe_rec * safe_size;
+              const double safe_denom =
+                  (fabs(denom) > eps) ? denom : ((denom >= 0.0) ? eps : -eps);
+              terms[6] = freq / safe_denom;
+            } else {
+              terms[6] = freq * rec * size;
+            }
           }
         }
 
-        if (params->segment_mode > 0 && params->num_segments > 1) {
-            int seg_idx = 0;
-            if (candidate->obj_size >= 1048576) {
-               seg_idx = 1;
-            }
-            if (seg_idx >= params->num_segments) seg_idx = params->num_segments - 1;
-            w = params->segmented_weights[seg_idx];
-        } else {
-            w = base_w;
-        }
+        w = base_w;
 
         int used_dim = loh_score_compound_v2 ? WEIGHT_DIM : 6;
         for (int k = 0; k < used_dim; ++k) {
@@ -6603,10 +9781,24 @@ random_sampling_section:
       }
     }
 
-    if (score < min_score) {
-      min_score = score;
-      obj_to_evict = candidate;
-      best_i = i;
+    // score/size 归一化（非 ultra_fast 路径）
+    {
+      const double cmp_score =
+          loh_evict_score_by_size
+              ? score /
+                    (double)(candidate->obj_size > 0 ? candidate->obj_size : 1)
+              : score;
+      if (cmp_score < min_score) {
+        second_score = min_score;
+        runner_up_obj = obj_to_evict;
+        min_score = cmp_score;
+        obj_to_evict = candidate;
+        best_i = i;
+      } else if (cmp_score < second_score) {
+        second_score = cmp_score;
+        runner_up_obj = candidate;
+      }
+      cand_scores[i] = cmp_score;
     }
 
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
@@ -6683,10 +9875,36 @@ random_sampling_section:
   }
   PERF_ACCUM(params, calc_score, ts_score_loop);
 
+#if LOH_PERF_PROFILING && LOH_PERF_EVICT_OUTER_ONLY
+#undef PERF_ACCUM
+#undef PERF_NOW
+#pragma pop_macro("PERF_ACCUM")
+#pragma pop_macro("PERF_NOW")
+#endif
+
 scoring_done:  // ultra_fast 路径跳转到这里
 
+  evict_decision_counter++;
+  if (obj_to_evict != NULL &&
+      (evict_decision_counter <= 20 || evict_decision_counter % 5000 == 0)) {
+    const double *w_used = base_w;
+    double ws_used[WEIGHT_DIM];
+    for (int k = 0; k < WEIGHT_DIM; ++k) ws_used[k] = w_used[k] * sign[k];
+
+    LOH_DEBUG_PRINT_BASIC(
+        "[LOH EVICT WEIGHTS] evict#=%llu ts=%lld ultra_fast=%d "
+        "cand_n=%d min=%.6f second=%.6f "
+        "raw=[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f] "
+        "eff=[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f]\n",
+        (unsigned long long)evict_decision_counter,
+        (long long)params->current_timestamp, ultra_fast, params->n_candidates,
+        min_score, second_score, w_used[0], w_used[1], w_used[2], w_used[3],
+        w_used[4], w_used[5], w_used[6], ws_used[0], ws_used[1], ws_used[2],
+        ws_used[3], ws_used[4], ws_used[5], ws_used[6]);
+  }
+
 #if LOH_INCLUDE_TOPK_CANDIDATE_FEATURES
-               // 输出最低4个对象的特征和分数
+  // 输出最低4个对象的特征和分数
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
   if (params->current_lowest_count > 0) {
     printf("Lowest %d objects:\n", params->current_lowest_count);
@@ -6748,6 +9966,40 @@ scoring_done:  // ultra_fast 路径跳转到这里
   }
 #endif
 
+  // irt1 compound 路径验证打印（仅前 5 次驱逐，BASIC 级别）
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC
+  if (loh_compound_use_irt1 && obj_to_evict) {
+    static int irt1_verify_cnt = 0;
+    if (irt1_verify_cnt < 5) {
+      irt1_verify_cnt++;
+      const int64_t ev_irt1 = obj_to_evict->LOH.irt_values[0];
+      const int64_t ev_delta =
+          params->current_timestamp - obj_to_evict->LOH.last_access_counter;
+      const int64_t ev_ac = (int64_t)obj_to_evict->LOH.access_count;
+      const int64_t ev_sz = (int64_t)obj_to_evict->obj_size;
+      const double r = fast_log1p_approx((double)ev_irt1);
+      const double fq = fast_log1p_approx((double)ev_ac);
+      const double s = fast_log1p_approx((double)ev_sz);
+      const double eps2 = 1e-12;
+      const double sr = (fabs(r) > eps2) ? r : eps2;
+      fprintf(stderr,
+              "[IRT1-VERIFY %d/5] path=%s obj=%llu score=%.6f "
+              "delta=%lld irt1_raw=%lld freq=%lld size=%lld | "
+              "log_irt1=%.4f log_freq=%.4f log_size=%.4f "
+              "freq/irt1=%.4f freq/size=%.4f irt1*size=%.4f "
+              "ws=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
+              irt1_verify_cnt,
+              ultra_fast ? "ultra_fast"
+                         : (fast_compound ? "fast_compound" : "normal"),
+              (unsigned long long)obj_to_evict->obj_id, min_score,
+              (long long)ev_delta, (long long)ev_irt1, (long long)ev_ac,
+              (long long)ev_sz, r, fq, s, fq / sr,
+              fq / ((fabs(s) > eps2) ? s : eps2), r * s, ws[0], ws[1], ws[2],
+              ws[3], ws[4], ws[5]);
+    }
+  }
+#endif
+
   LOH_DEBUG_PRINT_DETAILED(
       "[LOH DEBUG EVICT] Selected obj_id=%llu with score=%.6f\n",
       obj_to_evict ? (unsigned long long)obj_to_evict->obj_id : -1ULL,
@@ -6783,7 +10035,42 @@ scoring_done:  // ultra_fast 路径跳转到这里
 
     // 每 REBALANCE_PERIOD 次驱逐重新分配预算
     if (loh_adaptive_total_evict % LOH_ADAPTIVE_REBALANCE_PERIOD == 0) {
-      int n_active = loh_irt_heap_enabled ? 6 : 3;
+      int n_struct_sources = loh_score_use_irt ? 6 : 3;
+      int n_active = n_struct_sources + (loh_adaptive_include_random ? 1 : 0);
+      int active_sources[LOH_MAX_SOURCES];
+      for (int s = 0; s < n_struct_sources; s++) {
+        active_sources[s] = s;
+      }
+      if (loh_adaptive_include_random) {
+        active_sources[n_struct_sources] = 6;
+      }
+      int total_budget_target = loh_structured_candidates;
+      if (loh_adaptive_include_random) {
+        total_budget_target += loh_random_candidates;
+      }
+      if (total_budget_target < n_active) total_budget_target = n_active;
+
+      int adaptive_log_enabled =
+          loh_adaptive_budget_log || (LOH_DEBUG_LEVEL >= LOH_DEBUG_BASIC);
+
+      if (adaptive_log_enabled) {
+        LOH_DEBUG_PRINT_CONFIG(
+            "[ADAPTIVE][PRE] rebalance@%llu include_random=%d target=%d "
+            "n_active=%d\n",
+            (unsigned long long)loh_adaptive_total_evict,
+            loh_adaptive_include_random, total_budget_target, n_active);
+        for (int i = 0; i < n_active; i++) {
+          int s = active_sources[i];
+          LOH_DEBUG_PRINT_CONFIG(
+              "[ADAPTIVE][PRE] src%d wins=%llu budget=%d avg_win=%.4f\n", s,
+              (unsigned long long)loh_source_evict_count[s],
+              loh_source_budget[s],
+              (loh_source_evict_count[s] > 0
+                   ? loh_source_win_score_sum[s] / loh_source_evict_count[s]
+                   : 0.0));
+        }
+      }
+
       int score_rebalance_done = 0;
 
       // ---- 基于 per-source 平均获胜得分分配预算 ----
@@ -6795,7 +10082,8 @@ scoring_done:  // ultra_fast 路径跳转到这里
         double global_min_avg = DBL_MAX;
         double global_max_avg = -DBL_MAX;
         int have_stats = 0;
-        for (int s = 0; s < n_active; s++) {
+        for (int i = 0; i < n_active; i++) {
+          int s = active_sources[i];
           if (loh_source_evict_count[s] > 0) {
             avg_score[s] =
                 loh_source_win_score_sum[s] / loh_source_evict_count[s];
@@ -6811,7 +10099,8 @@ scoring_done:  // ultra_fast 路径跳转到这里
           double range = global_max_avg - global_min_avg;
           double effectiveness[LOH_MAX_SOURCES];
           double total_eff = 0;
-          for (int s = 0; s < n_active; s++) {
+          for (int i = 0; i < n_active; i++) {
+            int s = active_sources[i];
             if (avg_score[s] < DBL_MAX) {
               effectiveness[s] = (global_max_avg - avg_score[s]) / range;
             } else {
@@ -6822,23 +10111,25 @@ scoring_done:  // ultra_fast 路径跳转到这里
 
           if (total_eff > 0) {
             int assigned = 0;
-            int max_eff_src = 0;
+            int max_eff_src = active_sources[0];
             double max_eff_val = -1.0;
-            for (int s = 0; s < n_active; s++) {
-              loh_source_budget[s] = (int)(effectiveness[s] / total_eff *
-                                               loh_structured_candidates +
-                                           0.5);
-              if (loh_source_budget[s] < 1) loh_source_budget[s] = 1;
+            for (int i = 0; i < n_active; i++) {
+              int s = active_sources[i];
+              loh_source_budget[s] =
+                  (int)(effectiveness[s] / total_eff * total_budget_target +
+                        0.5);
+              if (loh_source_budget[s] < loh_min_cand_per_feature)
+                loh_source_budget[s] = loh_min_cand_per_feature;
               assigned += loh_source_budget[s];
               if (effectiveness[s] > max_eff_val) {
                 max_eff_val = effectiveness[s];
                 max_eff_src = s;
               }
             }
-            int diff = loh_structured_candidates - assigned;
+            int diff = total_budget_target - assigned;
             loh_source_budget[max_eff_src] += diff;
-            if (loh_source_budget[max_eff_src] < 1)
-              loh_source_budget[max_eff_src] = 1;
+            if (loh_source_budget[max_eff_src] < loh_min_cand_per_feature)
+              loh_source_budget[max_eff_src] = loh_min_cand_per_feature;
             score_rebalance_done = 1;
           }
         }
@@ -6847,34 +10138,41 @@ scoring_done:  // ultra_fast 路径跳转到这里
       // win-count 分配（§19 行为）：默认路径或 score 路径未产出时的回退
       if (!score_rebalance_done) {
         uint64_t total_wins = 0;
-        for (int s = 0; s < n_active; s++)
+        for (int i = 0; i < n_active; i++) {
+          int s = active_sources[i];
           total_wins += loh_source_evict_count[s];
+        }
         if (total_wins > 0) {
           int assigned = 0;
-          int max_src = 0;
+          int max_src = active_sources[0];
           uint64_t max_wins = 0;
-          for (int s = 0; s < n_active; s++) {
-            loh_source_budget[s] =
-                (int)((double)loh_source_evict_count[s] / total_wins *
-                          loh_structured_candidates +
-                      0.5);
-            if (loh_source_budget[s] < 1) loh_source_budget[s] = 1;
+          for (int i = 0; i < n_active; i++) {
+            int s = active_sources[i];
+            loh_source_budget[s] = (int)((double)loh_source_evict_count[s] /
+                                             total_wins * total_budget_target +
+                                         0.5);
+            if (loh_source_budget[s] < loh_min_cand_per_feature)
+              loh_source_budget[s] = loh_min_cand_per_feature;
             assigned += loh_source_budget[s];
             if (loh_source_evict_count[s] > max_wins) {
               max_wins = loh_source_evict_count[s];
               max_src = s;
             }
           }
-          int diff = loh_structured_candidates - assigned;
+          int diff = total_budget_target - assigned;
           loh_source_budget[max_src] += diff;
-          if (loh_source_budget[max_src] < 1) loh_source_budget[max_src] = 1;
+          if (loh_source_budget[max_src] < loh_min_cand_per_feature)
+            loh_source_budget[max_src] = loh_min_cand_per_feature;
         }
       }
 
       LOH_DEBUG_PRINT_DETAILED(
-          "[ADAPTIVE] Rebalance @%llu (score-efficiency): ",
-          (unsigned long long)loh_adaptive_total_evict);
-      for (int s = 0; s < n_active; s++) {
+          "[ADAPTIVE] Rebalance @%llu (score-efficiency, include_random=%d, "
+          "target=%d): ",
+          (unsigned long long)loh_adaptive_total_evict,
+          loh_adaptive_include_random, total_budget_target);
+      for (int i = 0; i < n_active; i++) {
+        int s = active_sources[i];
         LOH_DEBUG_PRINT_DETAILED(
             "src%d: wins=%llu, avg_win=%.4f, budget=%d  ", s,
             (unsigned long long)loh_source_evict_count[s],
@@ -6885,6 +10183,24 @@ scoring_done:  // ultra_fast 路径跳转到这里
       }
       LOH_DEBUG_PRINT_DETAILED("\n");
 
+      if (adaptive_log_enabled) {
+        LOH_DEBUG_PRINT_CONFIG(
+            "[ADAPTIVE][POST] rebalance@%llu include_random=%d target=%d "
+            "n_active=%d\n",
+            (unsigned long long)loh_adaptive_total_evict,
+            loh_adaptive_include_random, total_budget_target, n_active);
+        for (int i = 0; i < n_active; i++) {
+          int s = active_sources[i];
+          LOH_DEBUG_PRINT_CONFIG(
+              "[ADAPTIVE][POST] src%d wins=%llu budget=%d avg_win=%.4f\n", s,
+              (unsigned long long)loh_source_evict_count[s],
+              loh_source_budget[s],
+              (loh_source_evict_count[s] > 0
+                   ? loh_source_win_score_sum[s] / loh_source_evict_count[s]
+                   : 0.0));
+        }
+      }
+
       // 重置计数器
       memset(loh_source_evict_count, 0, sizeof(loh_source_evict_count));
       memset(loh_source_win_score_sum, 0, sizeof(loh_source_win_score_sum));
@@ -6892,6 +10208,126 @@ scoring_done:  // ultra_fast 路径跳转到这里
   }
 
   PERF_ACCUM(params, to_evict, ts_to_evict);
+
+#if LOH_ENABLE_PENALTY
+  if (params->is_warmed_up && loh_penalty_candidate_pairwise &&
+      obj_to_evict != NULL) {
+    int max_selectable = cand_n > 1 ? (cand_n - 1) : 0;
+    int legacy_target_k = loh_penalty_pair_kept_k;
+    int runnerup_target = loh_penalty_pair_runnerup_k;
+    int random_target = loh_penalty_pair_random_k;
+
+    if (legacy_target_k < 1) legacy_target_k = 1;
+    if (legacy_target_k > MAX_CANDIDATES) legacy_target_k = MAX_CANDIDATES;
+
+    // 兼容旧配置：未显式设置 runnerup/random 配额时，沿用 strategy+kept_k
+    // 语义。
+    if (runnerup_target < 0 && random_target < 0) {
+      if (loh_penalty_pair_strategy == 1) {
+        runnerup_target = 0;
+        random_target = legacy_target_k;
+      } else {
+        runnerup_target = 1;
+        random_target = legacy_target_k - 1;
+      }
+    } else {
+      if (runnerup_target < 0) runnerup_target = 0;
+      if (random_target < 0) random_target = 0;
+    }
+
+    if (runnerup_target < 0) runnerup_target = 0;
+    if (random_target < 0) random_target = 0;
+
+    int target_k = runnerup_target + random_target;
+    if (target_k > max_selectable) {
+      int overflow = target_k - max_selectable;
+      if (random_target >= overflow) {
+        random_target -= overflow;
+      } else {
+        overflow -= random_target;
+        random_target = 0;
+        runnerup_target -= overflow;
+        if (runnerup_target < 0) runnerup_target = 0;
+      }
+      target_k = runnerup_target + random_target;
+    }
+
+    if (target_k <= 0) {
+      goto penalty_pair_done;
+    }
+
+    bool selected_idx[MAX_CANDIDATES];
+    for (int i = 0; i < cand_n; ++i) selected_idx[i] = false;
+    int selected_n = 0;
+
+    // 先选“除 evict 外分数最低”的若干 runnerup kept。
+    for (int pick = 0; pick < runnerup_target; ++pick) {
+      int best_idx = -1;
+      double best_score = DBL_MAX;
+      for (int i = 0; i < cand_n; ++i) {
+        cache_obj_t *cand = params->candidates[i];
+        if (cand == NULL || cand == obj_to_evict || selected_idx[i]) continue;
+        if (cand_scores[i] < best_score) {
+          best_score = cand_scores[i];
+          best_idx = i;
+        }
+      }
+      if (best_idx < 0) break;
+
+      cache_obj_t *kept = params->candidates[best_idx];
+      loh_pair_track_create(params, obj_to_evict, kept);
+      selected_n++;
+      selected_idx[best_idx] = true;
+    }
+
+    int attempts = 0;
+    int max_attempts = random_target * 32 + 32;
+    while (selected_n < target_k && attempts < max_attempts) {
+      attempts++;
+      if (cand_n <= 1) break;
+
+      int ridx = (int)(loh_fast_rand() % (uint64_t)cand_n);
+      cache_obj_t *cand = params->candidates[ridx];
+      if (cand == NULL || cand == obj_to_evict) continue;
+      if (selected_idx[ridx]) continue;
+
+      loh_pair_track_create(params, obj_to_evict, cand);
+      selected_n++;
+      selected_idx[ridx] = true;
+    }
+  }
+penalty_pair_done:
+#endif
+
+  // ---- 填充批量淘汰队列：保存 next-K 最差对象 ----
+  // 跨请求持久化，消费时验证 last_access_counter 确保对象未被访问
+  // batch_evict_size 由环境变量 LOH_BATCH_EVICT_SIZE 控制
+  {
+    params->evict_queue_len = 0;
+    params->evict_queue_pos = 0;
+    params->evict_queue_fill_vtime = params->current_timestamp;
+    // 标记已选的最差对象
+    if (best_i >= 0 && best_i < cand_n) cand_scores[best_i] = DBL_MAX;
+    const int fill_limit = params->batch_evict_size - 1;
+    for (int q = 0; q < fill_limit; q++) {
+      double qmin = DBL_MAX;
+      int qi = -1;
+      for (int i = 0; i < cand_n; i++) {
+        if (cand_scores[i] < qmin) {
+          qmin = cand_scores[i];
+          qi = i;
+        }
+      }
+      if (qi >= 0 && qmin < DBL_MAX) {
+        int idx = params->evict_queue_len;
+        params->evict_queue[idx] = params->candidates[qi];
+        params->evict_queue_lac[idx] =
+            params->candidates[qi]->LOH.last_access_counter;
+        params->evict_queue_len++;
+        cand_scores[qi] = DBL_MAX;  // 标记已取
+      }
+    }
+  }
 
   return obj_to_evict;
 }
@@ -6920,6 +10356,11 @@ static void LOH_evict(cache_t *cache, const request_t *req) {
       (unsigned long long)obj_to_evict->obj_id, (long)obj_to_evict->obj_size,
       (double)obj_to_evict->obj_size / (1024.0 * 1024.0));
 
+#if LOH_ENABLE_PENALTY
+  // 不在驱逐时回填 kept_life。kept_life 仅由 kept_hit 或 kept对象再次访问 miss
+  // 回填。
+#endif
+
   // Update feature statistics for learning
   // (但不要标记为 miss，因为 evict 不是 miss)
 
@@ -6940,10 +10381,14 @@ static void LOH_evict(cache_t *cache, const request_t *req) {
 
   // 使用原子操作从所有数据结构（包括LRU队列）中移除
   {
+#if !LOH_PERF_EVICT_OUTER_ONLY
     PERF_TS ts_ar;
     PERF_NOW(ts_ar);
+#endif
     bool ok = loh_atomic_remove_obj(params, obj_to_evict);
+#if !LOH_PERF_EVICT_OUTER_ONLY
     PERF_ACCUM(params, atomic_remove, ts_ar);
+#endif
     if (!ok) {
       LOH_DEBUG_PRINT_ERROR(
           "[LOH EVICT ERROR] Failed to remove obj_id=%llu from auxiliary "
@@ -6996,6 +10441,13 @@ static bool LOH_remove(cache_t *cache, const obj_id_t obj_id) {
   cache_obj_t *obj = hashtable_find_obj_id(cache->hashtable, obj_id);
   if (obj == NULL) {
     return false;
+  }
+
+  // 清理批量淘汰队列中对该对象的引用（防止悬垂指针）
+  for (int i = params->evict_queue_pos; i < params->evict_queue_len; i++) {
+    if (params->evict_queue[i] == obj) {
+      params->evict_queue[i] = NULL;
+    }
   }
 
 #if LOH_INCLUDE_CACHE_FEATURES
@@ -9289,6 +12741,18 @@ static bool loh_atomic_remove_obj(LOH_params_t *params, cache_obj_t *obj) {
  */
 static bool loh_atomic_update_obj(LOH_params_t *params, cache_obj_t *obj) {
   LOH_DEBUG_PRINT_DETAILED("[loh_atomic_update_obj]");
+
+  // 子计时器在高频路径（33M+ calls）中产生大量 clock_gettime 开销
+  // 使用 push/pop 宏技巧仅保留外层计时器，减少 ~3s profiling 开销
+#if LOH_PERF_PROFILING
+#pragma push_macro("PERF_NOW")
+#pragma push_macro("PERF_ACCUM")
+#undef PERF_NOW
+#undef PERF_ACCUM
+#define PERF_NOW(ts) ((void)0)
+#define PERF_ACCUM(params, field, ts0) ((void)0)
+#endif
+
   // 1. update LRU 队列位置（若已在队首则跳过）
   if (obj != params->q_head) {
     PERF_TS ts_lru;
@@ -9322,6 +12786,11 @@ static bool loh_atomic_update_obj(LOH_params_t *params, cache_obj_t *obj) {
     }
   }
 
+#if LOH_PERF_PROFILING
+#pragma pop_macro("PERF_NOW")
+#pragma pop_macro("PERF_ACCUM")
+#endif
+
   return true;
 }
 
@@ -9342,7 +12811,7 @@ static bool loh_verify_object_consistency(LOH_params_t *params,
         g_hash_table_lookup(params->freq_node_map, obj);
     if (freq_node) {
       if (freq_node->obj != obj) {
-        printf(
+        LOH_DEBUG_PRINT_CONFIG(
             "[LOH CONSISTENCY ERROR] Frequency table mapping mismatch for "
             "obj_id=%llu\n",
             (unsigned long long)obj->obj_id);
@@ -9356,7 +12825,7 @@ static bool loh_verify_object_consistency(LOH_params_t *params,
     int idx = obj->LOH.loh_size_pos;
     if (idx >= 0 && idx < params->size_heap_size) {
       if (params->size_heap[idx].obj != obj) {
-        printf(
+        LOH_DEBUG_PRINT_CONFIG(
             "[LOH CONSISTENCY ERROR] Size heap mapping mismatch for "
             "obj_id=%llu\n",
             (unsigned long long)obj->obj_id);
@@ -10083,7 +13552,8 @@ static void loh_print_module_summary(LOH_params_t *params) {
  * @brief 验证频率表的一致性
  */
 static void freq_table_validate(LOH_params_t *params, const char *context) {
-  printf("[FREQ_VALIDATE] 🔍 Validating frequency table (%s):\n", context);
+  LOH_DEBUG_PRINT_CONFIG("[FREQ_VALIDATE] Validating frequency table (%s):\n",
+                         context);
 
   int total_nodes_in_table = 0;
   int total_nodes_in_map = 0;
@@ -10104,8 +13574,8 @@ static void freq_table_validate(LOH_params_t *params, const char *context) {
       if (expected_freq > FREQ_MAX) expected_freq = FREQ_MAX;
 
       if (expected_freq != level) {
-        printf(
-            "[FREQ_VALIDATE] ❌ ERROR: Object %p (obj_id=%llu) at freq level "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[FREQ_VALIDATE] ERROR: Object %p (obj_id=%llu) at freq level "
             "%d but "
             "access_count=%d (expected_freq=%d)\n",
             (void *)curr->obj, (unsigned long long)curr->obj->obj_id, level,
@@ -10117,22 +13587,22 @@ static void freq_table_validate(LOH_params_t *params, const char *context) {
       if (params->freq_node_map)
         mapped_node = g_hash_table_lookup(params->freq_node_map, curr->obj);
       if (params->freq_node_map && mapped_node != curr) {
-        printf(
-            "[FREQ_VALIDATE] ❌ ERROR: Hash map inconsistency for obj %p: "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[FREQ_VALIDATE] ERROR: Hash map inconsistency for obj %p: "
             "table_node=%p, map_node=%p\n",
             (void *)curr->obj, (void *)curr, (void *)mapped_node);
       }
 
       // 验证双向链表结构
       if (curr->next && curr->next->prev != curr) {
-        printf(
-            "[FREQ_VALIDATE] ❌ ERROR: Broken forward link at level %d, node "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[FREQ_VALIDATE] ERROR: Broken forward link at level %d, node "
             "%p\n",
             level, (void *)curr);
       }
       if (curr->prev && curr->prev->next != curr) {
-        printf(
-            "[FREQ_VALIDATE] ❌ ERROR: Broken backward link at level %d, node "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[FREQ_VALIDATE] ERROR: Broken backward link at level %d, node "
             "%p\n",
             level, (void *)curr);
       }
@@ -10141,17 +13611,20 @@ static void freq_table_validate(LOH_params_t *params, const char *context) {
     }
 
     if (nodes_in_level > 0) {
-      printf("[FREQ_VALIDATE] Level %d: %d nodes\n", level, nodes_in_level);
+      LOH_DEBUG_PRINT_CONFIG("[FREQ_VALIDATE] Level %d: %d nodes\n", level,
+                             nodes_in_level);
     }
   }
 
   // 验证总数一致性
   if (params->freq_node_map && total_nodes_in_table != total_nodes_in_map) {
-    printf("[FREQ_VALIDATE] ❌ ERROR: Node count mismatch - table:%d, map:%d\n",
-           total_nodes_in_table, total_nodes_in_map);
+    LOH_DEBUG_PRINT_CONFIG(
+        "[FREQ_VALIDATE] ERROR: Node count mismatch - table:%d, map:%d\n",
+        total_nodes_in_table, total_nodes_in_map);
   } else {
-    printf("[FREQ_VALIDATE] ✅ Frequency table is VALID (%s): %d nodes total\n",
-           context, total_nodes_in_table);
+    LOH_DEBUG_PRINT_CONFIG(
+        "[FREQ_VALIDATE] Frequency table is VALID (%s): %d nodes total\n",
+        context, total_nodes_in_table);
   }
 }
 
@@ -10159,7 +13632,8 @@ static void freq_table_validate(LOH_params_t *params, const char *context) {
  * @brief 验证尺寸堆的一致性（与 IRT 堆验证类似）
  */
 static void size_heap_validate(LOH_params_t *params, const char *context) {
-  printf("[SIZE_VALIDATE] 🔍 Validating size heap (%s):\n", context);
+  LOH_DEBUG_PRINT_CONFIG("[SIZE_VALIDATE] Validating size heap (%s):\n",
+                         context);
 
   int heap_size = params->size_heap_size;
   int map_size = 0;
@@ -10167,8 +13641,9 @@ static void size_heap_validate(LOH_params_t *params, const char *context) {
     map_size = g_hash_table_size(params->size_heap_map);
 
   if (heap_size != map_size) {
-    printf("[SIZE_VALIDATE] ❌ ERROR: Size mismatch - heap:%d, map:%d\n",
-           heap_size, map_size);
+    LOH_DEBUG_PRINT_CONFIG(
+        "[SIZE_VALIDATE] ERROR: Size mismatch - heap:%d, map:%d\n", heap_size,
+        map_size);
   }
 
   // 验证最小堆属性
@@ -10180,8 +13655,8 @@ static void size_heap_validate(LOH_params_t *params, const char *context) {
     if (left_child < heap_size) {
       int64_t left_size = params->size_heap[left_child].size_value;
       if (parent_size > left_size) {
-        printf(
-            "[SIZE_VALIDATE] ❌ HEAP VIOLATION: Parent[%d]=%ld > "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[SIZE_VALIDATE] HEAP VIOLATION: Parent[%d]=%ld > "
             "LeftChild[%d]=%ld\n",
             i, parent_size, left_child, left_size);
       }
@@ -10190,8 +13665,8 @@ static void size_heap_validate(LOH_params_t *params, const char *context) {
     if (right_child < heap_size) {
       int64_t right_size = params->size_heap[right_child].size_value;
       if (parent_size > right_size) {
-        printf(
-            "[SIZE_VALIDATE] ❌ HEAP VIOLATION: Parent[%d]=%ld > "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[SIZE_VALIDATE] HEAP VIOLATION: Parent[%d]=%ld > "
             "RightChild[%d]=%ld\n",
             i, parent_size, right_child, right_size);
       }
@@ -10204,15 +13679,15 @@ static void size_heap_validate(LOH_params_t *params, const char *context) {
     if (params->size_heap_map) {
       gpointer hash_pos = g_hash_table_lookup(params->size_heap_map, obj);
       if (!hash_pos) {
-        printf(
-            "[SIZE_VALIDATE] ❌ HASH INCONSISTENCY: obj %llu at pos %d not in "
+        LOH_DEBUG_PRINT_CONFIG(
+            "[SIZE_VALIDATE] HASH INCONSISTENCY: obj %llu at pos %d not in "
             "hash\n",
             (unsigned long long)obj->obj_id, i);
       } else {
         int expected_idx = GPOINTER_TO_INT(hash_pos) - 1;
         if (expected_idx != i) {
-          printf(
-              "[SIZE_VALIDATE] ❌ HASH INCONSISTENCY: obj %llu at pos %d but "
+          LOH_DEBUG_PRINT_CONFIG(
+              "[SIZE_VALIDATE] HASH INCONSISTENCY: obj %llu at pos %d but "
               "hash says %d\n",
               (unsigned long long)obj->obj_id, i, expected_idx);
         }
@@ -10221,15 +13696,16 @@ static void size_heap_validate(LOH_params_t *params, const char *context) {
 
     // 验证对象内索引
     if (obj->LOH.loh_size_pos != i) {
-      printf(
-          "[SIZE_VALIDATE] ❌ OBJ INDEX MISMATCH: obj %llu at pos %d but "
+      LOH_DEBUG_PRINT_CONFIG(
+          "[SIZE_VALIDATE] OBJ INDEX MISMATCH: obj %llu at pos %d but "
           "loh_size_pos=%d\n",
           (unsigned long long)obj->obj_id, i, obj->LOH.loh_size_pos);
     }
   }
 
-  printf("[SIZE_VALIDATE] ✅ Size heap validation done (%s): %d nodes\n",
-         context, heap_size);
+  LOH_DEBUG_PRINT_CONFIG(
+      "[SIZE_VALIDATE] Size heap validation done (%s): %d nodes\n", context,
+      heap_size);
 }
 
 #undef likely

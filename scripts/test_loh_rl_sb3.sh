@@ -33,7 +33,10 @@ usage() {
     echo
     echo "  === Misc ==="
     echo "  RL_UPDATE_INTERVAL:              RL update interval (optional)"
-    echo "  LOH_RANDOM_CANDIDATES:         Additional random hash-table candidates (default: 96)"
+    echo "  LOH_RANDOM_CANDIDATES:         Additional random hash-table candidates (default: 256)"
+    echo "  LOH_TOTAL_CANDIDATES:          Total candidate budget (structured + random, optional)"
+    echo "  LOH_ADAPTIVE_INCLUDE_RANDOM:   Include random source in adaptive rebalance (default: 0)"
+    echo "  LOH_ADAPTIVE_BUDGET_LOG:       Print adaptive budget PRE/POST logs even when debug=0 (default: 0)"
     echo "  CACHESIM_NUM_REQ:                Limit number of requests to simulate (default: all)"
     echo "  CACHESIM_NUM_THREAD:             cachesim worker threads (passed as --num-thread, default: cachesim built-in)"
     echo "  LOH_DEBUG_LEVEL:                 Debug level 0-4 (default: 0)"
@@ -82,14 +85,18 @@ export LOH_FEATURE_IDENTITY="${LOH_FEATURE_IDENTITY:-0}"
 export LOH_FEATURE_LOG1P="${LOH_FEATURE_LOG1P:-1}"
 export LOH_FEATURE_LOG1P_RECIPROCAL="${LOH_FEATURE_LOG1P_RECIPROCAL:-0}"
 export LOH_DEBUG_LEVEL="${LOH_DEBUG_LEVEL:-0}"
-export LOH_RANDOM_CANDIDATES="${LOH_RANDOM_CANDIDATES:-96}"
-export LOH_STRUCTURED_CANDIDATES="${LOH_STRUCTURED_CANDIDATES:-96}"
+export LOH_RANDOM_CANDIDATES="${LOH_RANDOM_CANDIDATES:-256}"
+export LOH_STRUCTURED_CANDIDATES="${LOH_STRUCTURED_CANDIDATES:-16}"
+export LOH_TOTAL_CANDIDATES="${LOH_TOTAL_CANDIDATES:-}"
 export LOH_WAIT_MODE="${LOH_WAIT_MODE:-nonblocked}"
 export LOH_ASYNC_TRAIN="${LOH_ASYNC_TRAIN:-1}"
 export LOH_MISS_RATIO_WEIGHT="${LOH_MISS_RATIO_WEIGHT:-1.0}"
+export LOH_AUTO_COMPOUND="${LOH_AUTO_COMPOUND:-0}"
 export LOH_INCLUDE_WEIGHTS_IN_OBS="${LOH_INCLUDE_WEIGHTS_IN_OBS:-1}"
 export LOH_ADAPTIVE_BUDGET="${LOH_ADAPTIVE_BUDGET:-1}"
 export LOH_USE_SCORE_REBALANCE="${LOH_USE_SCORE_REBALANCE:-0}"
+export LOH_ADAPTIVE_INCLUDE_RANDOM="${LOH_ADAPTIVE_INCLUDE_RANDOM:-0}"
+export LOH_ADAPTIVE_BUDGET_LOG="${LOH_ADAPTIVE_BUDGET_LOG:-0}"
 export LOH_ENABLE_FEATURE_NORMALIZATION="${LOH_ENABLE_FEATURE_NORMALIZATION:-0}"
 export LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION="${LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION:-1}"
 export LOH_ADAPTIVE_NORM_LO_Q="${LOH_ADAPTIVE_NORM_LO_Q:-0.0}"
@@ -110,11 +117,14 @@ echo "[config] LOH_FEATURE_UNIFIED_FORMULA=${LOH_FEATURE_UNIFIED_FORMULA}"
 echo "[config] LOH_DUAL_CHANNEL=${LOH_DUAL_CHANNEL:-0}"
 echo "[config] LOH_RANDOM_CANDIDATES=${LOH_RANDOM_CANDIDATES}"
 echo "[config] LOH_STRUCTURED_CANDIDATES=${LOH_STRUCTURED_CANDIDATES}"
+echo "[config] LOH_TOTAL_CANDIDATES=${LOH_TOTAL_CANDIDATES:-<unset>}"
 echo "[config] LOH_WAIT_MODE=${LOH_WAIT_MODE}"
 echo "[config] LOH_ASYNC_TRAIN=${LOH_ASYNC_TRAIN}"
 echo "[config] LOH_INCLUDE_WEIGHTS_IN_OBS=${LOH_INCLUDE_WEIGHTS_IN_OBS}"
 echo "[config] LOH_ADAPTIVE_BUDGET=${LOH_ADAPTIVE_BUDGET}"
 echo "[config] LOH_USE_SCORE_REBALANCE=${LOH_USE_SCORE_REBALANCE}"
+echo "[config] LOH_ADAPTIVE_INCLUDE_RANDOM=${LOH_ADAPTIVE_INCLUDE_RANDOM}"
+echo "[config] LOH_ADAPTIVE_BUDGET_LOG=${LOH_ADAPTIVE_BUDGET_LOG}"
 echo "[config] LOH_ENABLE_FEATURE_NORMALIZATION=${LOH_ENABLE_FEATURE_NORMALIZATION}"
 echo "[config] LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION=${LOH_ENABLE_ADAPTIVE_FEATURE_NORMALIZATION}"
 echo "[config] LOH_ADAPTIVE_NORM_LO_Q=${LOH_ADAPTIVE_NORM_LO_Q}"
@@ -129,6 +139,7 @@ echo "[config] CACHESIM_NUM_REQ=${CACHESIM_NUM_REQ:-ALL}"
 echo "[config] LOH_RESUME_DIR=${LOH_RESUME_DIR:-./runs}"
 echo "[config] LOH_RESUME_PATH=${LOH_RESUME_PATH:-<unset>}"
 echo "[config] LOH_CHECKPOINT_FREQ=${LOH_CHECKPOINT_FREQ:-50000}"
+echo "[config] LOH_AUTO_COMPOUND=${LOH_AUTO_COMPOUND}"
 
 # 预清理：避免上一轮残留影响本次运行
 if [ "${LOH_PARALLEL_SAFE:-0}" = "1" ]; then
@@ -206,6 +217,24 @@ MISS_RATIO_WEIGHT="${LOH_MISS_RATIO_WEIGHT:-1.0}"
 BYTE_MISS_RATIO_WEIGHT=$(echo "1.0 - $MISS_RATIO_WEIGHT" | bc -l)
 echo "Using weights: miss_ratio_weight=$MISS_RATIO_WEIGHT, byte_miss_ratio_weight=$BYTE_MISS_RATIO_WEIGHT"
 
+# 如果外部显式指定 trace type，则优先使用；否则根据文件后缀推断。
+if [ -n "${LOH_TRACE_TYPE:-}" ]; then
+    TRACE_TYPE="${LOH_TRACE_TYPE}"
+elif [[ "$TRACE_FILE" == *.csv ]]; then
+    TRACE_TYPE="csv"
+elif [[ "$TRACE_FILE" == *.bin.zst ]]; then
+    TRACE_TYPE="oracleGeneralBin"
+else
+    TRACE_TYPE="oracleGeneral"
+fi
+
+# 如果是 CSV Trace，则提供默认的 trace-type-params（作为单个字符串值）。
+TRACE_TYPE_PARAMS_ARG=()
+if [ "${TRACE_TYPE}" = "csv" ]; then
+    TRACE_TYPE_PARAMS_VAL="time-col=1,obj-id-col=2,obj-size-col=3,obj-id-is-num=1,has-header=false,delimiter=,"
+    TRACE_TYPE_PARAMS_ARG=(--trace-type-params "$TRACE_TYPE_PARAMS_VAL")
+fi
+
 # 设置错误处理和调试
 set -e  # 遇到错误时停止执行
 
@@ -216,9 +245,14 @@ fi
 export RUN_TIMESTAMP  # 导出供Python脚本使用
 
 # 默认将运行日志写入 logs/，可通过 LOH_LOG_DIR 覆盖。
+# 若设置 LOH_AC_LOG_DIR / LOH_CACHESIM_LOG_DIR，则分别用于 Python 和 cachesim 日志。
 LOG_DIR="${LOH_LOG_DIR:-logs}"
-mkdir -p "${LOG_DIR}"
+AC_LOG_DIR="${LOH_AC_LOG_DIR:-${LOG_DIR}}"
+CACHESIM_LOG_DIR="${LOH_CACHESIM_LOG_DIR:-${LOG_DIR}}"
+mkdir -p "${LOG_DIR}" "${AC_LOG_DIR}" "${CACHESIM_LOG_DIR}"
 export LOH_LOG_DIR="${LOG_DIR}"
+export LOH_AC_LOG_DIR="${AC_LOG_DIR}"
+export LOH_CACHESIM_LOG_DIR="${CACHESIM_LOG_DIR}"
 
 # 默认冷启动：只有显式设置 LOH_RESUME_PATH 才会加载模型继续训练
 export LOH_RESUME_DIR="${LOH_RESUME_DIR:-./runs}"
@@ -358,6 +392,173 @@ run_state_dim_precheck() {
     return 0
 }
 
+auto_sync_compound_toggles_from_warmup() {
+    local auto_sync_num_req auto_sync_timeout
+    local auto_cmd auto_out auto_line warmup_line parsed fr fs rs r1 r2
+    local auto_r_threshold cmp_fs cmp_rs
+
+    # 仅在 LOH_AUTO_COMPOUND=1 时执行自动联动。
+    if [ "${LOH_AUTO_COMPOUND:-0}" != "1" ]; then
+        return 0
+    fi
+
+    # 支持显式关闭自动联动。
+    if [ "${LOH_AUTO_SYNC_TO_PY:-1}" = "0" ]; then
+        echo "[auto-sync] LOH_AUTO_SYNC_TO_PY=0, skip auto sync"
+        return 0
+    fi
+
+    # 若用户显式设置了任一 LOH_USE_*，尊重用户配置，不做覆盖。
+    if [ -n "${LOH_USE_FREQ_REC:-}" ] || [ -n "${LOH_USE_FREQ_SIZE:-}" ] || [ -n "${LOH_USE_REC_SIZE:-}" ]; then
+        echo "[auto-sync] user-specified LOH_USE_* detected; keep existing values (freq_rec=${LOH_USE_FREQ_REC:-<unset>}, freq_size=${LOH_USE_FREQ_SIZE:-<unset>}, rec_size=${LOH_USE_REC_SIZE:-<unset>})"
+        return 0
+    fi
+
+    auto_sync_num_req="${LOH_AUTO_SYNC_NUM_REQ:-${CACHESIM_NUM_REQ:-500000}}"
+    if [ "${auto_sync_num_req}" = "ALL" ] || [ "${auto_sync_num_req}" = "all" ] || [ "${auto_sync_num_req}" = "0" ]; then
+        auto_sync_num_req="500000"
+    fi
+    auto_sync_timeout="${LOH_AUTO_SYNC_TIMEOUT_S:-120}"
+
+    auto_cmd=("${CACHESIM_BIN}" "${TRACE_FILE}" "${TRACE_TYPE}" "${EVICTION_ALGO}" "${CACHE_SIZE}")
+    if [ ${#TRACE_TYPE_PARAMS_ARG[@]} -ne 0 ]; then
+        auto_cmd+=("${TRACE_TYPE_PARAMS_ARG[@]}")
+    fi
+    if [ -n "${CACHESIM_NUM_THREAD:-}" ]; then
+        auto_cmd+=("--num-thread=${CACHESIM_NUM_THREAD}")
+    fi
+    auto_cmd+=("--eviction-params=miss-ratio-weight=${MISS_RATIO_WEIGHT}" "--num-req=${auto_sync_num_req}" "-v" "0")
+
+    echo "[auto-sync] probing AUTO_COMPOUND result before Python starts (num_req=${auto_sync_num_req}, timeout=${auto_sync_timeout}s)"
+    if command -v timeout >/dev/null 2>&1; then
+        if command -v stdbuf >/dev/null 2>&1; then
+            auto_out=$(env LOH_ENABLE_RL=0 LOH_EXIT_AFTER_WARMUP_DIAG=1 timeout "${auto_sync_timeout}s" stdbuf -oL -eL "${auto_cmd[@]}" 2>&1 || true)
+        else
+            auto_out=$(env LOH_ENABLE_RL=0 LOH_EXIT_AFTER_WARMUP_DIAG=1 timeout "${auto_sync_timeout}s" "${auto_cmd[@]}" 2>&1 || true)
+        fi
+    else
+        if command -v stdbuf >/dev/null 2>&1; then
+            auto_out=$(env LOH_ENABLE_RL=0 LOH_EXIT_AFTER_WARMUP_DIAG=1 stdbuf -oL -eL "${auto_cmd[@]}" 2>&1 || true)
+        else
+            auto_out=$(env LOH_ENABLE_RL=0 LOH_EXIT_AFTER_WARMUP_DIAG=1 "${auto_cmd[@]}" 2>&1 || true)
+        fi
+    fi
+
+    auto_line=$(echo "${auto_out}" | grep -E "\[LOH AUTO_COMPOUND\].*freq_rec=[0-9]+.*freq_size=[0-9]+.*rec_size=[0-9]+" | tail -n 1 || true)
+    if [ -z "${auto_line}" ]; then
+        # debug=0 时可能没有 AUTO_COMPOUND 结果行，兜底用 WARMUP_DIAG 的 r1/r2 推导。
+        warmup_line=$(echo "${auto_out}" | grep -E "\[LOH WARMUP_DIAG\].*r1=[0-9.]+.*r2=[0-9.]+" | tail -n 1 || true)
+        r1=$(echo "${warmup_line}" | sed -nE 's/.*r1=([0-9.]+).*/\1/p')
+        r2=$(echo "${warmup_line}" | sed -nE 's/.*r2=([0-9.]+).*/\1/p')
+        auto_r_threshold="${LOH_AUTO_COMPOUND_R_THRESHOLD:-0.98}"
+
+        if [ -n "${r1}" ] && [ -n "${r2}" ]; then
+            fr=1
+            cmp_fs=$(awk -v a="${r1}" -v b="${auto_r_threshold}" 'BEGIN { if (a > b) print 1; else print 0 }')
+            cmp_rs=$(awk -v a="${r2}" -v b="${auto_r_threshold}" 'BEGIN { if (a > b) print 1; else print 0 }')
+            if [ "${cmp_fs}" = "1" ]; then
+                fs=0
+            else
+                fs=1
+            fi
+            if [ "${cmp_rs}" = "1" ]; then
+                rs=0
+            else
+                rs=1
+            fi
+
+            export LOH_USE_FREQ_REC="${fr}"
+            export LOH_USE_FREQ_SIZE="${fs}"
+            export LOH_USE_REC_SIZE="${rs}"
+            echo "[auto-sync] derived from WARMUP_DIAG: r1=${r1}, r2=${r2}, thr=${auto_r_threshold} -> LOH_USE_FREQ_REC=${LOH_USE_FREQ_REC}, LOH_USE_FREQ_SIZE=${LOH_USE_FREQ_SIZE}, LOH_USE_REC_SIZE=${LOH_USE_REC_SIZE}"
+            return 0
+        fi
+
+        echo "[auto-sync] WARN: AUTO_COMPOUND/WARMUP_DIAG result not found; keep defaults freq_rec=1 freq_size=1 rec_size=1"
+        echo "[auto-sync] key lines from probe output:"
+        echo "${auto_out}" | grep -niE "AUTO_COMPOUND|WARMUP_DIAG|freq_rec|freq_size|rec_size" | tail -n 40 || true
+        return 0
+    fi
+
+    parsed=$(echo "${auto_line}" | sed -nE 's/.*freq_rec=([0-9]+).*freq_size=([0-9]+).*rec_size=([0-9]+).*/\1 \2 \3/p')
+    fr=$(echo "${parsed}" | awk '{print $1}')
+    fs=$(echo "${parsed}" | awk '{print $2}')
+    rs=$(echo "${parsed}" | awk '{print $3}')
+
+    if [ -z "${fr}" ] || [ -z "${fs}" ] || [ -z "${rs}" ]; then
+        echo "[auto-sync] WARN: parse AUTO_COMPOUND line failed; keep defaults"
+        echo "[auto-sync] line=${auto_line}"
+        return 0
+    fi
+
+    export LOH_USE_FREQ_REC="${fr}"
+    export LOH_USE_FREQ_SIZE="${fs}"
+    export LOH_USE_REC_SIZE="${rs}"
+    echo "[auto-sync] resolved from C warmup: LOH_USE_FREQ_REC=${LOH_USE_FREQ_REC}, LOH_USE_FREQ_SIZE=${LOH_USE_FREQ_SIZE}, LOH_USE_REC_SIZE=${LOH_USE_REC_SIZE}"
+    return 0
+}
+
+extract_c_state_dims_from_log() {
+    local c_context_line c_active_line
+
+    if [ ! -f "${CACHESIM_LOG_FILE}" ]; then
+        return 1
+    fi
+
+    c_context_line=$(grep -Ei "CONTEXT(_STATE)?_DIM[[:space:]]*[:=][[:space:]]*[0-9]+|context(_state)?_dim[[:space:]]*[:=][[:space:]]*[0-9]+" "${CACHESIM_LOG_FILE}" | tail -n 1 || true)
+    c_active_line=$(grep -Ei -- "ACTIVE(_STATE)?_DIM[[:space:]]*[:=][[:space:]]*[0-9]+|active(_state)?_dim[[:space:]]*[:=][[:space:]]*[0-9]+|Runtime state dims:.*ACTIVE=[0-9]+/[0-9]+" "${CACHESIM_LOG_FILE}" | tail -n 1 || true)
+
+    C_CONTEXT_DIM=$(echo "${c_context_line}" | sed -nE 's/.*[Cc][Oo][Nn][Tt][Ee][Xx][Tt](_[Ss][Tt][Aa][Tt][Ee])?_[Dd][Ii][Mm][[:space:]]*[:=][[:space:]]*([0-9]+).*/\2/p')
+    C_ACTIVE_DIM=$(echo "${c_active_line}" | sed -nE 's/.*[Aa][Cc][Tt][Ii][Vv][Ee](_[Ss][Tt][Aa][Tt][Ee])?_[Dd][Ii][Mm][[:space:]]*[:=][[:space:]]*([0-9]+).*/\2/p')
+    if [ -z "${C_ACTIVE_DIM}" ]; then
+        C_ACTIVE_DIM=$(echo "${c_active_line}" | sed -nE 's/.*ACTIVE=([0-9]+)\/[0-9]+.*/\1/p')
+    fi
+
+    if [ -z "${C_CONTEXT_DIM}" ] || [ -z "${C_ACTIVE_DIM}" ]; then
+        return 1
+    fi
+    return 0
+}
+
+validate_runtime_state_dims_or_kill() {
+    local wait_s timeout_s
+
+    timeout_s="${LOH_RUNTIME_DIM_CHECK_TIMEOUT_S:-60}"
+    wait_s=0
+
+    echo "[runtime-check] Waiting C runtime dims from formal run (timeout=${timeout_s}s)..."
+    while [ "${wait_s}" -lt "${timeout_s}" ]; do
+        if ! ps -p "${CACHESIM_PID}" > /dev/null 2>&1; then
+            break
+        fi
+
+        if extract_c_state_dims_from_log; then
+            echo "[runtime-check] C dims: CONTEXT=${C_CONTEXT_DIM}, ACTIVE=${C_ACTIVE_DIM}"
+            echo "[runtime-check] Python dims: CONTEXT=${PY_CONTEXT_DIM}, ACTIVE=${PY_ACTIVE_DIM}"
+
+            if [ "${PY_CONTEXT_DIM}" != "${C_CONTEXT_DIM}" ] || [ "${PY_ACTIVE_DIM}" != "${C_ACTIVE_DIM}" ]; then
+                echo -e "${RED}[runtime-check] state dim mismatch during formal run, terminate now.${NC}"
+                write_terminate_flag || true
+                kill -INT "${CACHESIM_PID}" 2>/dev/null || true
+                sleep 1
+                kill -TERM "${CACHESIM_PID}" 2>/dev/null || true
+                sleep 1
+                kill -KILL "${CACHESIM_PID}" 2>/dev/null || true
+                return 1
+            fi
+
+            echo -e "${GREEN}[runtime-check] state dim matched on formal run.${NC}"
+            return 0
+        fi
+
+        sleep 1
+        wait_s=$((wait_s + 1))
+    done
+
+    echo -e "${YELLOW}[runtime-check] C dims not found within timeout, skip hard check and continue.${NC}"
+    return 0
+}
+
 cleanup_on_exit() {
     if [ "${_CLEANUP_DONE}" = "1" ]; then
         return
@@ -477,6 +678,19 @@ trap cleanup_on_exit INT TERM EXIT
     fi
 ) 9>/tmp/libcachesim_build.lock
 
+# 支持通过环境变量指定 cachesim 二进制路径
+# 优先级：LOH_CACHESIM_BIN > LOH_BUILD_RELEASE 自动选择 > _build_dbg
+if [ -n "${LOH_CACHESIM_BIN:-}" ]; then
+    CACHESIM_BIN="${LOH_CACHESIM_BIN}"
+elif [ "${LOH_BUILD_RELEASE:-1}" = "1" ]; then
+    CACHESIM_BIN="_build_rel/bin/cachesim"
+else
+    CACHESIM_BIN="_build_dbg/bin/cachesim"
+fi
+
+auto_sync_compound_toggles_from_warmup
+echo "[auto-sync] effective toggles: LOH_USE_FREQ_REC=${LOH_USE_FREQ_REC:-<unset>}, LOH_USE_FREQ_SIZE=${LOH_USE_FREQ_SIZE:-<unset>}, LOH_USE_REC_SIZE=${LOH_USE_REC_SIZE:-<unset>}"
+
 # ========================================================================
 # 【特征模式来源】
 # ========================================================================
@@ -502,7 +716,7 @@ umask 0  # Set umask to allow full permissions
 
 
 # 先启动Python脚本，由其主动创建共享内存文件（开启无缓冲输出便于实时观测日志）
-PYTHON_LOG_FILE="${LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log"
+PYTHON_LOG_FILE="${AC_LOG_DIR}/ac_sb3_${RUN_TIMESTAMP}.log"
 export PYTHONUNBUFFERED=1
 
 # Python 脚本不再需要命令行参数，全部通过环境变量配置
@@ -557,13 +771,6 @@ echo -e "${BLUE}Running cache simulation with eviction algorithm ${EVICTION_ALGO
 echo "You should see training updates if the system is working correctly."
 
 # 定义测试参数 (TRACE_FILE和CACHE_SIZE已在脚本开头定义)
-# 如果 trace 文件是 CSV，则把 TRACE_TYPE 设置为 csv（cachesim 支持的 trace type），否则使用默认 oracleGeneral
-if [[ "$TRACE_FILE" == *.csv ]]; then
-    TRACE_TYPE="csv"
-else
-    TRACE_TYPE="oracleGeneral"
-fi
-
 echo "Using trace file: $TRACE_FILE (type: $TRACE_TYPE, cache size ratio: $CACHE_SIZE)"
 
 # 默认限制 MetaCDN/TencentCBS 运行请求数，避免误跑全量 trace
@@ -602,7 +809,7 @@ echo "  LOH_FIXED_WEIGHTS: ${LOH_FIXED_WEIGHTS:-<unset>}"
 export LOH_ENABLE_RL=1
 
 # 执行缓存模拟
-CACHESIM_LOG_FILE="${LOG_DIR}/cachesim_sb3_${RUN_TIMESTAMP}.log"
+CACHESIM_LOG_FILE="${CACHESIM_LOG_DIR}/cachesim_sb3_${RUN_TIMESTAMP}.log"
 echo -e "${BLUE}Running cachesim... (Log: ${CACHESIM_LOG_FILE})${NC}"
 echo "  Miss ratio weight: $MISS_RATIO_WEIGHT"
 echo "  Byte miss ratio weight: $BYTE_MISS_RATIO_WEIGHT"
@@ -631,28 +838,12 @@ if [ -n "$RL_UPDATE_INTERVAL_ARG" ]; then
     echo "Using rl_update_interval=$RL_UPDATE_INTERVAL_ARG for cachesim"
 fi
 
-# 如果是 CSV Trace，则提供默认的 trace-type-params（作为单个字符串值），
-# 并确保以两个 argv 项（flag + value）传递给 cachesim，避免 shell 引号问题。
-TRACE_TYPE_PARAMS_ARG=()
+# 如果是 CSV trace，打印当前使用的列映射。
 if [ "${TRACE_TYPE}" = "csv" ]; then
-    # 默认的 CSV 列映射（可根据具体 CSV 结构调整）
-    TRACE_TYPE_PARAMS_VAL="time-col=1,obj-id-col=2,obj-size-col=3,obj-id-is-num=1,has-header=false,delimiter,"
-    # 注意 delimiter 逗号在参数值中，需要传为普通字符（不加转义在数组中没问题）
-    TRACE_TYPE_PARAMS_VAL="time-col=1,obj-id-col=2,obj-size-col=3,obj-id-is-num=1,has-header=false,delimiter=,"
-    TRACE_TYPE_PARAMS_ARG=(--trace-type-params "$TRACE_TYPE_PARAMS_VAL")
     echo "Using CSV trace-type-params: $TRACE_TYPE_PARAMS_VAL"
 fi
 
 # 使用数组构建命令以正确传递参数而不被 shell 重写或错误引用
-# 支持通过环境变量指定 cachesim 二进制路径
-# 优先级：LOH_CACHESIM_BIN > LOH_BUILD_RELEASE 自动选择 > _build_dbg
-if [ -n "${LOH_CACHESIM_BIN:-}" ]; then
-    CACHESIM_BIN="${LOH_CACHESIM_BIN}"
-elif [ "${LOH_BUILD_RELEASE:-1}" = "1" ]; then
-    CACHESIM_BIN="_build_rel/bin/cachesim"
-else
-    CACHESIM_BIN="_build_dbg/bin/cachesim"
-fi
 CACHESIM_CMD=("$CACHESIM_BIN" "$TRACE_FILE" "$TRACE_TYPE" "$EVICTION_ALGO" "$CACHE_SIZE")
 if [ ${#TRACE_TYPE_PARAMS_ARG[@]} -ne 0 ]; then
     CACHESIM_CMD+=("${TRACE_TYPE_PARAMS_ARG[@]}")
@@ -674,10 +865,6 @@ if ! extract_python_state_dims; then
     exit 1
 fi
 
-if ! run_state_dim_precheck; then
-    exit 1
-fi
-
 # 打印并执行命令
 echo "Executing cachesim command:"
 printf ' %q' "${CACHESIM_CMD[@]}"; echo
@@ -688,6 +875,10 @@ else
     "${CACHESIM_CMD[@]}" > "${CACHESIM_LOG_FILE}" 2>&1 &
 fi
 CACHESIM_PID=$!
+
+if ! validate_runtime_state_dims_or_kill; then
+    exit 1
+fi
 
 # 如果 Python 先退出，cachesim 可能卡在等待 ACK；这里做兜底收敛
 (

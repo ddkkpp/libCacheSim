@@ -1,0 +1,8 @@
+/mnt/serverpool/dingkp_trace/cloudphysics/，106个
+/mnt/serverpool/dingkp_trace/alibabaBlock/new目录及子目录，1000个
+/mnt/serverpool/dingkp_trace/tencentBlock/v2/original目录及子目录，4755个
+/mnt/serverpool/dingkp_trace/metaCDN/，3个
+/mnt/serverpool/dingkp_trace/wiki/，3个
+/mnt/serverpool/dingkp_trace/metaKV/，5个
+/mnt/serverpool/dingkp_trace/tencentPhoto，2个
+/mnt/serverpool/dingkp_trace/twitter$，54个，当前只测试11个
