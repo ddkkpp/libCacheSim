@@ -423,3 +423,188 @@ CMA-ES 优化器有两个正交配置项，共四种组合：
 - CMA-ES 四配置真实 trace 日志: `tmp/20260410-real-cmaes-4cfg/logs/` 目录
 - CMA-ES 运行时演化日志: `tmp/20260410-cmaes-log/`（含真实 trace 和合成 trace 日志及 per-gen CSV）
 - 合成 trace pop_rank 生成脚本: `tmp/20260409-repeat-exp/gen_pop_rank.py`
+- 合成trace位置：recencytest_10m.csv lfutest2_10m.csv sizetest_10m.csv
+- 合成脚本：scripts/gen_recency_trace.py  scripts/gen_lfu_trace.py
+
+## 11. 2026-04-30 合成 Trace（0.1）更新结果
+
+本节记录当前根目录三条合成 trace 在 `cache_size=0.1` 下的四算法结果（单次运行口径），其中：
+
+- `recencytest_10m.csv` 使用参数 sweep 生成的固定版本：`WINDOW=1000, P_RECENT=0.70, N_OBJECTS=100000`。
+- `lfutest2_10m.csv` 使用纯全局单一 Zipf 分布：`alpha=1.0, N_OBJECTS=100000`（无热/冷分层）。
+- `sizetest_10m.csv` 使用两层大小分布：`90% x 64B + 10% x 4MB, N_OBJECTS=100000`。
+
+实验结果（recencytest/sizetest 日志目录：`tmp/20260430-synth-final-0p1/logs/`；lfutest2 更新于 2026-04-30 使用纯 Zipf alpha=1.0 重新生成并运行）：
+
+**对象 Miss Ratio（MR）**：
+
+| Trace | LRU MR | LFU MR | SIZE MR | LOH(CMA-ES) MR |
+|---|---|---|---|---|
+| recencytest_10m | 0.269953 | 0.897591 | 0.897121 | 0.274118 |
+| lfutest2_10m | 0.262958 | 0.214893 | 0.263925 | 0.212055 |
+| sizetest_10m | 0.900022 | 0.891169 | 0.098974 | 0.099074 |
+
+**字节 Miss Ratio（BMR）**（recencytest/lfutest2 所有对象等大，BMR = MR；sizetest 大小差异极端，BMR 与 MR 显著不同）：
+
+| Trace | LRU BMR | LFU BMR | SIZE BMR | LOH(CMA-ES) BMR |
+|---|---|---|---|---|
+| recencytest_10m | 0.269953 | 0.897591 | 0.897121 | 0.274118 |
+| lfutest2_10m | 0.262958 | 0.214893 | 0.263925 | 0.212055 |
+| sizetest_10m | 0.900132 | 0.899986 | 0.899778 | 0.900455 |
+
+> **注**：sizetest 的 SIZE BMR ≈ 0.900，原因是 SIZE 驱逐了所有大对象（4MB），大对象的字节量占总访问字节量约 99.9%（10K 大对象 × 4MB ≫ 90K 小对象 × 64B），因此即使大对象的对象 MR 接近 1.0，BMR 也接近 1.0。SIZE 优势体现在**对象命中率（MR≈0.099）**而非字节命中率。
+
+### 11.1 合成代码位置与 Trace 位置
+
+- Trace 文件（根目录）：
+	- `recencytest_10m.csv`
+	- `lfutest2_10m.csv`
+	- `sizetest_10m.csv`
+- 生成脚本：
+	- `scripts/gen_recency_trace.py`
+	- `scripts/gen_lfu_trace.py`
+	- `scripts/gen_size_trace.py`
+- recency 参数扫描脚本（用于生成并选定 `W=1000, P=0.70` 版本）：
+	- `tmp/20260430-recency-sweep/run.sh`
+- 选定 recency 源文件（已复制到根目录）：
+	- `tmp/20260430-recency-sweep/traces/recency_w1000_p070.csv`
+
+### 11.2 三条 Trace 的详细合成逻辑
+
+### 11.2 三条 Trace 的详细合成逻辑
+
+#### 1. `recencytest_10m.csv` — 时序局部性主导
+
+- **生成脚本**：`scripts/gen_recency_trace.py`
+- **固定参数**：`N_REQUESTS=10,000,000`, `N_OBJECTS=100,000`, `OBJ_SIZE=10,000B`, `SEED=42`
+- **选定参数**：`WINDOW=1000`, `P_RECENT=0.70`（通过参数 sweep 在 recencytest 场景下 LRU 显著优于其他算法的参数组合）
+- **采样逻辑**：
+	1. 维护一个大小为 `WINDOW=1000` 的热点滑动窗口（circular buffer），初始填满 ID=0..999。
+	2. 每次请求以概率 `P_RECENT=0.70` 从热点窗口中均匀采样一个对象。
+	3. 以概率 `1 - P_RECENT=0.30` 从全对象池（0..99999）均匀采样（冷访问）。
+	4. 当冷访问命中时，被采样的对象替换窗口中最旧的对象（FIFO 更新窗口），模拟时序局部性滑动。
+- **为何 LRU 最优**：热点窗口对应近期被频繁访问的对象子集，LRU 的驱逐策略与窗口保留集天然吻合；LFU/SIZE 无法感知时序滑动，频率计数趋同后失效。
+- **实测效果**：LRU=0.2700，SIZE=0.8971，LFU=0.8976，LOH=0.2741（LOH 接近 LRU 但略差约 0.004）。
+
+#### 2. `lfutest2_10m.csv` — 频率主导（纯 Zipf 全局分布）
+
+- **生成脚本**：`scripts/gen_lfu_trace.py`
+- **固定参数**：`N_REQUESTS=10,000,000`, `N_OBJECTS=100,000`, `OBJ_SIZE=10,000B`, `SEED=42`
+- **分布参数**：`ZIPF_ALPHA=1.0`（标准 Zipf-1 幂律分布）
+- **采样逻辑**：
+	1. 计算 N_OBJECTS 个对象的 Zipf(alpha=1.0) 概率质量函数（PMF）：$P(k) = \frac{1/k^{1.0}}{H_N}$，其中 $H_N = \sum_{k=1}^{N} 1/k$。
+	2. 对象 ID 按排名 1..N 分配对应概率权重（排名第 1 的对象 top-1 占总流量约 8.27%）。
+	3. 每次请求独立按 PMF 抽样对象 ID，即 i.i.d.（无时序相关性，无热/冷分层）。
+	4. 所有对象大小相同（= 10,000B），消除 size 信号干扰。
+- **为何 LFU 明显优于 LRU/SIZE**：
+	- 稳定 Zipf 分布使高频对象的长期访问频率远高于低频对象，LFU 通过维护精确频率计数保留高价值对象。
+	- LRU 只感知最近一次访问时间，i.i.d. 访问下近期命中与未来命中无相关性，性能接近随机替换。
+	- SIZE 在所有对象等大时退化为 LRU（命中时 `pqueue_change_priority(same_size, same_size)` 触发 `percolate_down`，使命中节点沉底，行为等价于 LRU）。
+- **为何 LOH 进一步优于 LFU**：
+	- LOH 是 LFU 的严格超集：当 CMA-ES 将频率维度权重调大、其余维度权重归零时，LOH 等价于 LFU。
+	- CMA-ES 可在 LFU 基础上继续优化权重组合（如复合特征 freq×size），进一步降低 miss ratio。
+	- 数学上，在任意 i.i.d. 稳态 trace 上，LOH ≥ LFU 是必然成立的。
+- **实测效果**：LRU=0.2630，SIZE=0.2639，LFU=0.2149，LOH=0.2121（LFU 比 LRU 低约 0.048，LOH 比 LFU 再低约 0.003）。
+
+#### 3. `sizetest_10m.csv` — 大小主导（两层极端大小分布）
+
+- **生成脚本**：`scripts/gen_size_trace.py`
+- **固定参数**：`N_REQUESTS=10,000,000`, `N_OBJECTS=100,000`, `SEED=42`
+- **分层参数**：
+	- 小对象层：`N_SMALL=90,000`，每对象大小 = `64B`
+	- 大对象层：`N_LARGE=10,000`，每对象大小 = `4,194,304B`（= 4MB）
+- **采样逻辑**：
+	1. 对象 ID 在全池（0..99999）均匀采样（无频率偏向、无时序局部性），请求频率在两层内均匀分布。
+	2. 访问小对象（ID 0..89999，size=64B）和大对象（ID 90000..99999，size=4MB）的概率各约 90% 和 10%（均匀采样下按对象数比例）。
+	3. 由于大对象占用空间远大于小对象，缓存中大对象的"字节价值"极低（一个大对象占用 64K 个小对象的空间）。
+- **为何 SIZE 最优（MR ≈ 0.099）**：
+	- SIZE 算法驱逐缓存中**体积最大的对象**（max-heap by obj_size）。
+	- 缓存空间优先保留小对象（64B），驱逐大对象（4MB），使 90% 的小对象请求几乎全部命中缓存，miss 主要来自大对象（无论如何都不会长期驻留缓存）。
+	- 字节 miss ratio（BMR）接近 1.0，因为大对象的字节体量主导了 BMR 分母，但**对象命中率**（MR）接近最优。
+- **为何 LRU/LFU 表现差（MR ≈ 0.90）**：
+	- LRU/LFU 不感知对象大小，大对象和小对象受到同等对待。
+	- 单个 4MB 大对象进入缓存会驱逐大量小对象，造成频繁 miss。
+- **LOH 的表现**：LOH MR ≈ 0.099，与 SIZE 相当，体现出 CMA-ES 自适应发现了 size 维度的重要性。
+- **实测效果**：LRU≈0.900，LFU≈0.891，SIZE=0.099，LOH=0.099（SIZE 和 LOH 并列最优，LRU/LFU 退化）。
+
+## 12. 2026-04-30 LOH 权重收敛实验（CMA-ES vs DRL）
+
+本节新增实验：对三条合成 trace（recencytest、lfutest2、sizetest）分别执行
+
+- CMA-ES 模式：`LOH_ENABLE_CMAES=1, LOH_ENABLE_RL=0`
+- DRL 模式：`LOH_ENABLE_RL=1, LOH_ENABLE_CMAES=0`
+
+每个模式每条 trace 重复 3 次（总计 18 次），并记录权重轨迹后分析收敛行为。
+
+### 12.1 实验脚本与日志位置
+
+- 批量运行脚本：`tmp/20260430-weight-analysis/run_all.sh`
+- 分析脚本：`tmp/20260430-weight-analysis/analyze_weights.py`
+- 总控日志：`tmp/20260430-weight-analysis/run_all_stdout.log`
+- wrapper 日志目录：`tmp/20260430-weight-analysis/logs/`
+- DRL 子日志（自动解析）：`logs/ac_sb3_*.log` 与 `logs/cachesim_sb3_*.log`
+
+### 12.2 Miss Ratio 汇总（3 次重复）
+
+| 模式 | Trace | rep1 | rep2 | rep3 | mean | std |
+|---|---|---:|---:|---:|---:|---:|
+| CMA-ES | recencytest | 0.273861 | 0.271408 | 0.299806 | 0.281692 | 0.015735 |
+| CMA-ES | lfutest2 | 0.205595 | 0.198331 | 0.197674 | 0.200533 | 0.004396 |
+| CMA-ES | sizetest | 0.099043 | 0.099050 | 0.099029 | 0.099041 | 0.000011 |
+| DRL | recencytest | 0.584663 | 0.583425 | 0.593893 | 0.587327 | 0.005720 |
+| DRL | lfutest2 | 0.206108 | 0.206076 | 0.207444 | 0.206543 | 0.000781 |
+| DRL | sizetest | 0.099090 | 0.099153 | 0.099089 | 0.099111 | 0.000037 |
+
+### 12.2.1 每次重复最终权重向量明细（w0..w5）
+
+权重维度语义：`w0=recency, w1=freq, w2=size, w3=freq_rec, w4=freq_size, w5=rec_size`。
+表中每行已将主导权重（最大值）加粗。
+
+| 模式 | Trace | rep | w0 | w1 | w2 | w3 | w4 | w5 |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| CMA-ES | recencytest | rep1 | 0.9821 | 0.0040 | **0.9897** | 0.0077 | 0.0321 | 0.9618 |
+| CMA-ES | recencytest | rep2 | **0.9898** | 0.0242 | 0.2807 | 0.1237 | 0.0028 | 0.6913 |
+| CMA-ES | recencytest | rep3 | **0.5000** | **0.5000** | **0.5000** | **0.5000** | **0.5000** | **0.5000** |
+| CMA-ES | lfutest2 | rep1 | 0.9215 | 0.8421 | 0.5297 | **0.9999** | 0.4877 | 0.5141 |
+| CMA-ES | lfutest2 | rep2 | 0.3397 | 0.0082 | 0.4395 | **0.6399** | 0.2622 | 0.3234 |
+| CMA-ES | lfutest2 | rep3 | **0.5000** | **0.5000** | **0.5000** | **0.5000** | **0.5000** | **0.5000** |
+| CMA-ES | sizetest | rep1 | 0.0087 | 0.6881 | **0.8044** | 0.2818 | 0.5980 | 0.2435 |
+| CMA-ES | sizetest | rep2 | 0.3838 | 0.6311 | 0.4130 | 0.8323 | **0.9989** | 0.6680 |
+| CMA-ES | sizetest | rep3 | 0.6838 | 0.4046 | 0.2731 | 0.3990 | **0.7413** | 0.6393 |
+| DRL | recencytest | rep1 | 0.6351 | 0.8173 | 0.6218 | **0.9409** | 0.6636 | 0.5159 |
+| DRL | recencytest | rep2 | 0.9298 | 0.8363 | **0.9530** | 0.3102 | 0.3372 | 0.8497 |
+| DRL | recencytest | rep3 | 0.0035 | 0.6721 | 0.9604 | **0.9645** | 0.6486 | 0.8695 |
+| DRL | lfutest2 | rep1 | 0.7881 | **0.9042** | 0.7109 | 0.6610 | 0.8976 | 0.6268 |
+| DRL | lfutest2 | rep2 | **0.9785** | 0.7716 | 0.5744 | 0.7331 | 0.9421 | 0.4398 |
+| DRL | lfutest2 | rep3 | 0.8058 | 0.5848 | 0.8834 | **0.9564** | 0.6387 | 0.8596 |
+| DRL | sizetest | rep1 | 0.5944 | **0.9634** | 0.5545 | 0.7439 | 0.7111 | 0.2652 |
+| DRL | sizetest | rep2 | 0.8978 | 0.6031 | 0.8341 | 0.4382 | 0.6791 | **0.9019** |
+| DRL | sizetest | rep3 | 0.0585 | 0.2320 | 0.2986 | 0.8400 | **0.8942** | 0.7237 |
+
+### 12.3 权重与收敛结论
+
+1. **CMA-ES 在 sizetest 上最稳定、几乎完全收敛。**
+	- MR 标准差仅 `1.1e-5`，3 次重复几乎重合。
+	- 最终主导维度多次落在 `size` 或 `freq_size` 复合项，均能达到最优区间（~0.099）。
+
+2. **CMA-ES 在 lfutest2 上总体收敛，但存在个别异常 run。**
+	- rep1/rep2 收敛到较低 MR（0.2056/0.1983）；rep3 出现 `sigma` 爆炸并回退到接近均匀权重（0.5 向量），但 MR 仍较好（0.1977）。
+	- 说明在频率主导 trace 上，LOH 解空间存在较宽“可行盆地”，即使非理想收敛也能取得接近最优结果。
+
+3. **CMA-ES 在 recencytest 上收敛不稳定，存在明显 run-to-run 漂移。**
+	- 两次收敛到较好区间（~0.272），一次发生 `sigma` 爆炸导致 MR 恶化到 0.2998。
+	- 这与 recency 场景目标面更尖锐、且多维复合特征共线有关。
+
+4. **DRL 的“权重收敛”总体弱于 CMA-ES，呈持续波动。**
+	- 在 9 组 DRL 运行中，尾段权重标准差普遍在 `0.1~0.4`，说明策略仍在探索/抖动，未形成静态收敛点。
+	- 但在 lfutest2 与 sizetest 上，DRL 的 MR 仍稳定（std 分别 0.000781 与 0.000037），说明策略可在较宽权重区域维持相近性能。
+
+5. **DRL 在 recencytest 明显失败（MR≈0.587），远差于 CMA-ES/LRU。**
+	- 三次重复均落在 ~0.585-0.594，且主导权重维度不一致，显示未学到稳定的 recency 偏好。
+	- 当前默认 DRL 配置在 recency 合成场景下不具备可用性，需要单独调参（状态维度、奖励塑形、训练步数与探索策略）。
+
+### 12.4 结论（面向后续实验）
+
+- 若目标是稳定获得较优 LOH 权重，当前应优先采用 **CMA-ES**。
+- 若继续推进 DRL，需要先在 recencytest 上做针对性训练配置修复，再考虑迁移到真实 trace。
+- 对于权重可解释性分析，应将“MR 收敛”和“权重向量收敛”分离评估：在 lfutest2/sizetest 上，前者已稳定，但后者仍可多解。
