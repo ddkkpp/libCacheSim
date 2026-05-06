@@ -295,7 +295,7 @@ write_terminate_flag() {
 extract_python_state_dims() {
     local shared_line active_line
 
-    shared_line=$(grep -E "\[LOH CONFIG\] Shared state dims: CONTEXT_DIM=[0-9]+, STATE_DIM=[0-9]+" "${PYTHON_LOG_FILE}" | tail -n 1 || true)
+    shared_line=$(grep -aE "\[LOH CONFIG\] Shared state dims: CONTEXT_DIM=[0-9]+, STATE_DIM=[0-9]+" "${PYTHON_LOG_FILE}" | tail -n 1 || true)
     if [ -z "${shared_line}" ]; then
         echo -e "${RED}[precheck] 无法从 Python 日志提取 Shared state dims。${NC}"
         echo "[precheck] 请检查 ${PYTHON_LOG_FILE}"
@@ -305,7 +305,7 @@ extract_python_state_dims() {
     PY_CONTEXT_DIM=$(echo "${shared_line}" | sed -nE 's/.*CONTEXT_DIM=([0-9]+), STATE_DIM=([0-9]+).*/\1/p')
     PY_STATE_DIM=$(echo "${shared_line}" | sed -nE 's/.*CONTEXT_DIM=([0-9]+), STATE_DIM=([0-9]+).*/\2/p')
 
-    active_line=$(grep -E "\[CONTEXT_DIM_CONFIG\]\[ACTIVE\].*TOTAL=[0-9]+" "${PYTHON_LOG_FILE}" | tail -n 1 || true)
+    active_line=$(grep -aE "\[CONTEXT_DIM_CONFIG\]\[ACTIVE\].*TOTAL=[0-9]+" "${PYTHON_LOG_FILE}" | tail -n 1 || true)
     if [ -n "${active_line}" ]; then
         PY_ACTIVE_DIM=$(echo "${active_line}" | sed -nE 's/.*TOTAL=([0-9]+).*/\1/p')
     else
@@ -382,7 +382,7 @@ run_state_dim_precheck() {
         # 打印 C 侧维度: 用于与 Python 侧进行布局与有效维度对齐校验
         echo "[precheck] C dims: CONTEXT=${c_context_dim}, ACTIVE=${c_active_dim}"
         echo "[precheck] Python key lines:"
-        grep -nE "Shared state dims|\[CONTEXT_DIM_CONFIG\]\[ACTIVE\]" "${PYTHON_LOG_FILE}" | tail -n 5 || true
+        grep -anE "Shared state dims|\[CONTEXT_DIM_CONFIG\]\[ACTIVE\]" "${PYTHON_LOG_FILE}" | tail -n 5 || true
         echo "[precheck] C key lines:"
         echo "${precheck_out}" | grep -niE "CONTEXT|ACTIVE|state dim|state_dim|Runtime state dims" | tail -n 40 || true
         return 1
@@ -885,7 +885,7 @@ fi
     while ps -p "${CACHESIM_PID}" > /dev/null 2>&1; do
         if [ -n "${PYTHON_PID:-}" ] && ! ps -p "${PYTHON_PID}" > /dev/null 2>&1; then
             # 若 Python 因收到 terminate 信号而退出（正常收敛路径），先给 cachesim 自然退出窗口。
-            if [ -f "${PYTHON_LOG_FILE}" ] && grep -q "\[LOH-INTERRUPT\].*Terminate signal received" "${PYTHON_LOG_FILE}"; then
+            if [ -f "${PYTHON_LOG_FILE}" ] && grep -aq "\[LOH-INTERRUPT\].*Terminate signal received" "${PYTHON_LOG_FILE}"; then
                 echo "[watch] Python exited after terminate signal; wait cachesim natural exit (pid=${CACHESIM_PID})"
                 sleep 10
                 if ! ps -p "${CACHESIM_PID}" > /dev/null 2>&1; then
@@ -938,9 +938,9 @@ echo "----------------------------------------"
 
 # 检查执行过程中的错误
 echo -e "\n${YELLOW}检查日志中的错误信息...${NC}"
-if grep -q -E "(^Error|Exception|Failed|Fatal)" "${PYTHON_LOG_FILE}"; then
+if grep -aq -E "(^Error|Exception|Failed|Fatal)" "${PYTHON_LOG_FILE}"; then
     echo -e "${RED}警告：在Python日志中检测到错误信息。${NC}"
-    grep -n -E "(^Error|Exception|Failed|Fatal)" "${PYTHON_LOG_FILE}" | head -5
+    grep -an -E "(^Error|Exception|Failed|Fatal)" "${PYTHON_LOG_FILE}" | head -5
 else
     echo -e "${GREEN}Python日志中未检测到错误信息。${NC}"
 fi
@@ -993,22 +993,22 @@ fi
 # 检查SB3训练是否成功启动
 echo -e "\n${YELLOW}SB3训练与奖励分析 (Python端):${NC}"
 # 优先用SB3自带的表格（包含 "rollout/"），否则退化为我们自定义的训练与通信信号
-if grep -q "rollout/" "${PYTHON_LOG_FILE}"; then
-    TRAINING_UPDATES=$(grep -c "rollout/" "${PYTHON_LOG_FILE}")
+if grep -aq "rollout/" "${PYTHON_LOG_FILE}"; then
+    TRAINING_UPDATES=$(grep -ac "rollout/" "${PYTHON_LOG_FILE}")
     echo -e "${GREEN}检测到SB3训练正常启动并进行了更新！${NC}"
     echo -e "📊 SB3 训练更新次数: $TRAINING_UPDATES"
 
     echo -e "\n${YELLOW}最近的训练指标 (包含奖励):${NC}"
-    grep -E "rollout/|time/|train/" "${PYTHON_LOG_FILE}" | tail -n 15
+    grep -aE "rollout/|time/|train/" "${PYTHON_LOG_FILE}" | tail -n 15
 else
     # 兜底：检查我们在脚本中打印的训练/通信信号，诸如 [Step N]、weights write completed、Python weights written 等
-    if grep -q -E "\[Step[[:space:]]+[0-9]+\]|weights write completed|Python weights written" "${PYTHON_LOG_FILE}"; then
-        STEP_COUNT=$(grep -c -E "\[Step[[:space:]]+[0-9]+\]" "${PYTHON_LOG_FILE}" || true)
-        WEIGHTS_WRITTEN_COUNT=$(grep -c -E "weights write completed|Python weights written" "${PYTHON_LOG_FILE}" || true)
+    if grep -aq -E "\[Step[[:space:]]+[0-9]+\]|weights write completed|Python weights written" "${PYTHON_LOG_FILE}"; then
+        STEP_COUNT=$(grep -ac -E "\[Step[[:space:]]+[0-9]+\]" "${PYTHON_LOG_FILE}" || true)
+        WEIGHTS_WRITTEN_COUNT=$(grep -ac -E "weights write completed|Python weights written" "${PYTHON_LOG_FILE}" || true)
         echo -e "${GREEN}检测到自定义训练/通信日志，SB3循环正常运行。${NC}"
         echo -e "📊 Step事件: ${STEP_COUNT:-0} 次，权重写入: ${WEIGHTS_WRITTEN_COUNT:-0} 次"
         echo -e "\n${YELLOW}最近的事件片段:${NC}"
-        grep -E "\[Step|weights write completed|Python weights written|ReplayBuffer|Reward→Final" "${PYTHON_LOG_FILE}" | tail -n 20 || true
+        grep -aE "\[Step|weights write completed|Python weights written|ReplayBuffer|Reward→Final" "${PYTHON_LOG_FILE}" | tail -n 20 || true
     else
         echo -e "${RED}未检测到SB3训练更新。请检查 ${PYTHON_LOG_FILE} 确认环境是否正确启动。${NC}"
     fi
@@ -1026,10 +1026,10 @@ fi
 
 # 最终结论
 echo -e "\n${BLUE}=== 测试结论 ===${NC}"
-if [ -f "${PYTHON_LOG_FILE}" ] && grep -q -E "(^Error|Exception|Failed|Fatal)" "${PYTHON_LOG_FILE}"; then
+if [ -f "${PYTHON_LOG_FILE}" ] && grep -aq -E "(^Error|Exception|Failed|Fatal)" "${PYTHON_LOG_FILE}"; then
     echo -e "${RED}Python SB3脚本检测到错误。${NC}"
     echo -e "请检查 ${PYTHON_LOG_FILE} 中的详细错误信息。"
-elif { grep -q "rollout/" "${PYTHON_LOG_FILE}" || grep -q -E "\[Step[[:space:]]+[0-9]+\]|weights write completed|Python weights written" "${PYTHON_LOG_FILE}"; } \
+elif { grep -aq "rollout/" "${PYTHON_LOG_FILE}" || grep -aq -E "\[Step[[:space:]]+[0-9]+\]|weights write completed|Python weights written" "${PYTHON_LOG_FILE}"; } \
      && grep -q -E "Updated weights from Actor-Critic|Received weights from Python|\[C-WEIGHTS\]" "${CACHESIM_LOG_FILE}"; then
     echo -e "${GREEN}SB3集成测试成功完成！${NC}"
     echo -e "✅ C++与Python的通信正常。"
@@ -1045,7 +1045,7 @@ echo -e "\n${GREEN}LOH与stable-baselines3集成测试完成！${NC}"
 
 # 附加：两端序号对齐快速核查
 echo -e "\n${YELLOW}两端序列号对齐摘要:${NC}"
-PY_SEQ_LAST=$(grep -E "\[第[0-9]+次\] Python已写入权重|\[第[0-9]+次\] 初始状态对齐|\[BG\]\[第[0-9]+次\]" "$PYTHON_LOG_FILE" | sed -E 's/.*第([0-9]+)次.*/\1/' | tail -n 1)
+PY_SEQ_LAST=$(grep -aE "\[第[0-9]+次\] Python已写入权重|\[第[0-9]+次\] 初始状态对齐|\[BG\]\[第[0-9]+次\]" "$PYTHON_LOG_FILE" | sed -E 's/.*第([0-9]+)次.*/\1/' | tail -n 1)
 C_SEQ_LAST=$(grep -E "\[第[0-9]+次\] LOH DEBUG: Received weights|等待超时|Sending RL request" "$CACHESIM_LOG_FILE" | sed -E 's/.*第([0-9]+)次.*/\1/' | tail -n 1)
 echo "Python最后一次序号: ${PY_SEQ_LAST:-N/A}"
 echo "C端最后一次序号: ${C_SEQ_LAST:-N/A}"

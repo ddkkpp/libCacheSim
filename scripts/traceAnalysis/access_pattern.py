@@ -1,19 +1,19 @@
 """
-plot access pattern of sampled objects 
-this can be used to visualize how objects get accessed 
+plot access pattern of sampled objects
+this can be used to visualize how objects get accessed
 
-usage: 
-1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --common`, 
+usage:
+1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --common`,
 this will generate some output, including accessPattern result files, trace.accessRtime and trace.accessVtime
 each records the clock/logical time of sampled objects
-2. plot access pattern using this script: 
+2. plot access pattern using this script:
 `python3 access_pattern.py trace.accessRtime`
 
 
 """
 
 import os, sys
-from typing import List, Dict, Tuple
+from typing import List
 import logging
 import matplotlib.pyplot as plt
 
@@ -85,7 +85,12 @@ def _load_access_pattern_data(datapath: str, n_obj_to_plot: int) -> List[List[fl
 
 
 def plot_access_pattern(
-    datapath: str, n_obj_to_plot: int = 2000, figname_prefix: str = ""
+    datapath: str,
+    n_obj_to_plot: int = 2000,
+    figname_prefix: str = "",
+    output_dir: str = FIG_DIR,
+    fig_type: str = FIG_TYPE,
+    y_label: str = "Sampled object index",
 ) -> None:
     """plot access patterns
 
@@ -100,6 +105,9 @@ def plot_access_pattern(
     if not figname_prefix:
         figname_prefix = extract_dataname(datapath)
 
+    os.makedirs(output_dir, exist_ok=True)
+    label_fontsize = float(plt.rcParams.get("axes.labelsize", 12)) * 1.5
+
     access_time_list = _load_access_pattern_data(datapath, n_obj_to_plot)
 
     is_real_time = "Rtime" in datapath
@@ -110,7 +118,7 @@ def plot_access_pattern(
         else:
             xlabel = "Time (day)"
             time_unit = 3600 * 24
-        figname = "{}/{}_access_rt.{}".format(FIG_DIR, figname_prefix, FIG_TYPE)
+        figname = "{}/{}_access_rt.{}".format(output_dir, figname_prefix, fig_type)
         for idx, ts_list in enumerate(access_time_list):
             # access_rtime_list stores N objects, each object has one access pattern list
             plt.scatter(
@@ -121,16 +129,16 @@ def plot_access_pattern(
         assert (
             "Vtime" in datapath
         ), "the input file might not be accessPattern data file"
-        xlabel = "Time (# million requests)"
-        figname = "{}/{}_access_vt.{}".format(FIG_DIR, figname_prefix, FIG_TYPE)
+        xlabel = "# of requests (million)"
+        figname = "{}/{}_access_vt.{}".format(output_dir, figname_prefix, fig_type)
         for idx, ts_list in enumerate(access_time_list):
             # access_rtime_list stores N objects, each object has one access pattern list
             plt.scatter(
                 [ts / 1e6 for ts in ts_list], [idx for _ in range(len(ts_list))], s=8
             )
 
-    plt.xlabel(xlabel)
-    plt.ylabel("Sampled object")  # (sorted by first access time)
+    plt.xlabel(xlabel, fontsize=label_fontsize, fontweight="bold")
+    plt.ylabel(y_label, fontsize=label_fontsize, fontweight="bold")
     plt.savefig(figname, bbox_inches="tight")
     plt.clf()
     logger.info("save fig to {}".format(figname))
@@ -147,6 +155,20 @@ if __name__ == "__main__":
     ap.add_argument(
         "--figname-prefix", type=str, default="", help="the prefix of figname"
     )
+    ap.add_argument(
+        "--output-dir", type=str, default=FIG_DIR, help="output directory"
+    )
+    ap.add_argument("--fig-type", type=str, default=FIG_TYPE, help="figure type")
+    ap.add_argument(
+        "--y-label", type=str, default="Sampled object index", help="y-axis label"
+    )
     p = ap.parse_args()
 
-    plot_access_pattern(p.datapath, p.n_obj_to_plot, p.figname_prefix)
+    plot_access_pattern(
+        p.datapath,
+        p.n_obj_to_plot,
+        p.figname_prefix,
+        p.output_dir,
+        p.fig_type,
+        p.y_label,
+    )

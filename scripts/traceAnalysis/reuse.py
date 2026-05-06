@@ -1,10 +1,10 @@
 """
-plot reuse time distribution 
+plot reuse time distribution
 
-usage: 
-1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --common`, 
+usage:
+1. run traceAnalyzer: `./traceAnalyzer /path/trace trace_format --common`,
 this will generate some output, including reuse distribution result, trace.reuse
-2. plot reuse distribution using this script: 
+2. plot reuse distribution using this script:
 `python3 reuse.py trace.reuse`
 
 """
@@ -91,7 +91,12 @@ def _load_reuse_data(
     return reuse_rtime_count, reuse_vtime_count
 
 
-def plot_reuse(datapath: str, figname_prefix: str = "") -> None:
+def plot_reuse(
+    datapath: str,
+    figname_prefix: str = "",
+    output_dir: str = FIG_DIR,
+    fig_type: str = FIG_TYPE,
+) -> None:
     """
     plot reuse time distribution
 
@@ -107,6 +112,9 @@ def plot_reuse(datapath: str, figname_prefix: str = "") -> None:
     if not figname_prefix:
         figname_prefix = extract_dataname(datapath)
 
+    os.makedirs(output_dir, exist_ok=True)
+    label_fontsize = float(plt.rcParams.get("axes.labelsize", 12)) * 1.5
+
     reuse_rtime_count, reuse_vtime_count = _load_reuse_data(datapath, False)
 
     x, y = conv_to_cdf(None, data_dict=reuse_rtime_count)
@@ -115,12 +123,11 @@ def plot_reuse(datapath: str, figname_prefix: str = "") -> None:
         x = x[1:]
         y = [y[i] - y[0] for i in range(1, len(y))]
     plt.plot([i / 3600 for i in x], y)
-    plt.grid(linestyle="--")
     # plt.ylim(0, 1)
-    plt.xlabel("Time (Hour)")
-    plt.ylabel("Fraction of requests (CDF)")
+    plt.xlabel("Time (Hour)", fontsize=label_fontsize, fontweight="bold")
+    plt.ylabel("Cumulative proportion", fontsize=label_fontsize, fontweight="bold")
     plt.savefig(
-        "{}/{}_reuse_rt.{}".format(FIG_DIR, figname_prefix, FIG_TYPE),
+        "{}/{}_reuse_rt.{}".format(output_dir, figname_prefix, fig_type),
         bbox_inches="tight",
     )
     plt.xscale("log")
@@ -130,7 +137,7 @@ def plot_reuse(datapath: str, figname_prefix: str = "") -> None:
         rotation=28,
     )
     plt.savefig(
-        "{}/{}_reuse_rt_log.{}".format(FIG_DIR, figname_prefix, FIG_TYPE),
+        "{}/{}_reuse_rt_log.{}".format(output_dir, figname_prefix, fig_type),
         bbox_inches="tight",
     )
     plt.clf()
@@ -139,23 +146,26 @@ def plot_reuse(datapath: str, figname_prefix: str = "") -> None:
     if x[0] < 0:
         x = x[1:]
         y = [y[i] - y[0] for i in range(1, len(y))]
-    plt.plot([i for i in x], y)
-    plt.grid(linestyle="--")
-    plt.xlabel("Virtual time (# requests)")
-    plt.ylabel("Fraction of requests (CDF)")
+    plt.plot([i / 1e6 for i in x], y)
+    plt.xlabel(
+        "Re-access distance (million of requests)",
+        fontsize=label_fontsize,
+        fontweight="bold",
+    )
+    plt.ylabel("Cumulative proportion", fontsize=label_fontsize, fontweight="bold")
     plt.savefig(
-        "{}/{}_reuse_vt.{}".format(FIG_DIR, figname_prefix, FIG_TYPE),
+        "{}/{}_reuse_vt.{}".format(output_dir, figname_prefix, fig_type),
         bbox_inches="tight",
     )
     plt.xscale("log")
     plt.savefig(
-        "{}/{}_reuse_vt_log.{}".format(FIG_DIR, figname_prefix, FIG_TYPE),
+        "{}/{}_reuse_vt_log.{}".format(output_dir, figname_prefix, fig_type),
         bbox_inches="tight",
     )
     plt.clf()
     logger.info(
         "reuse time plot saved to {}/{}_reuse_rt.{} and {}/{}_reuse_vt.{}".format(
-            FIG_DIR, figname_prefix, FIG_TYPE, FIG_DIR, figname_prefix, FIG_TYPE
+            output_dir, figname_prefix, fig_type, output_dir, figname_prefix, fig_type
         )
     )
 
@@ -168,6 +178,10 @@ if __name__ == "__main__":
     ap.add_argument(
         "--figname-prefix", type=str, default="", help="the prefix of figname"
     )
+    ap.add_argument(
+        "--output-dir", type=str, default=FIG_DIR, help="output directory"
+    )
+    ap.add_argument("--fig-type", type=str, default=FIG_TYPE, help="figure type")
     p = ap.parse_args()
 
-    plot_reuse(p.datapath, p.figname_prefix)
+    plot_reuse(p.datapath, p.figname_prefix, p.output_dir, p.fig_type)

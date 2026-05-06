@@ -224,9 +224,13 @@ static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
   double obj_to_evict_score = -1, sampled_obj_score = -1;
   for (int i = 0; i < params->n_sample; i++) {
     sampled_obj = hashtable_rand_obj(cache->hashtable);
-    sampled_obj_score =
-        log((double)sampled_obj->obj_size) +
-        log((double)(sampled_obj->Belady.next_access_vtime - cache->n_req));
+    int64_t dt = sampled_obj->Belady.next_access_vtime - cache->n_req;
+    if (dt <= 0) {
+      /* object is stale (past its expected next access): evict immediately */
+      obj_to_evict = sampled_obj;
+      break;
+    }
+    sampled_obj_score = log((double)sampled_obj->obj_size) + log((double)dt);
     if (obj_to_evict_score < sampled_obj_score) {
       obj_to_evict = sampled_obj;
       obj_to_evict_score = sampled_obj_score;
@@ -244,7 +248,8 @@ static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
         (unsigned long long)cache->hashtable->n_obj,
         (long long)cache->cache_size, (long long)req->obj_size,
         params->n_sample, obj_to_evict_score, sampled_obj_score);
-    return BeladySize_to_evict(cache, req);
+    /* fallback: return a random object to avoid infinite recursion */
+    return hashtable_rand_obj(cache->hashtable);
   }
 
   return obj_to_evict;
@@ -262,6 +267,19 @@ static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
  */
 static void BeladySize_evict(cache_t *cache, const request_t *req) {
   cache_obj_t *obj_to_evict = BeladySize_to_evict(cache, req);
+  /* Re-verify the candidate is still in the hashtable after potential
+   * shrink/expand operations that happened inside BeladySize_to_evict.
+   * If the pointer is stale (obj_id moved to another slot), find the
+   * correct pointer; if the object was already removed, skip. */
+  cache_obj_t *verified =
+      hashtable_find_obj_id(cache->hashtable, obj_to_evict->obj_id);
+  if (verified == NULL) {
+    /* object was already evicted or removed; try again */
+    obj_to_evict = BeladySize_to_evict(cache, req);
+    verified = hashtable_find_obj_id(cache->hashtable, obj_to_evict->obj_id);
+    if (verified == NULL) return; /* give up to avoid crash */
+  }
+  obj_to_evict = verified;
   cache_evict_base(cache, obj_to_evict, true);
 }
 

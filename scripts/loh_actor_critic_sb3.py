@@ -197,6 +197,7 @@ DEFAULT_LOH_ACTION_BOUND = "1.0"        # 动作空间 bounds: [-bound, bound]
 DEFAULT_LOH_ACTION_SCALE = "1.0"        # 动作 logits 缩放（softmax 锐化/平滑主要通过 scale 控制）
 DEFAULT_LOH_WEIGHT_EMA = "0.0"          # 写回权重 EMA 平滑系数（0=关闭）
 DEFAULT_LOH_WEIGHT_CLIP = "0.0"         # 写回权重幅度裁剪（0=关闭）
+DEFAULT_LOH_WEIGHT_LOG_EVERY = "0"      # 每 N 次写回打印一次权重（0=关闭）
 DEFAULT_LOH_FIXED_OBS = "0"
 DEFAULT_LOH_SCORE_USE_IRT = "0"
 DEFAULT_LOH_SCORE_USE_COMPOUND = "1"
@@ -3071,6 +3072,13 @@ class LohEnv(gym.Env):
         except Exception:
             self._weight_clip = float(DEFAULT_LOH_WEIGHT_CLIP)
 
+        try:
+            self._weight_log_every = int(os.environ.get("LOH_WEIGHT_LOG_EVERY", DEFAULT_LOH_WEIGHT_LOG_EVERY))
+            if self._weight_log_every < 0:
+                self._weight_log_every = 0
+        except Exception:
+            self._weight_log_every = int(DEFAULT_LOH_WEIGHT_LOG_EVERY)
+
         self._reward_mode = os.environ.get("LOH_REWARD_MODE", DEFAULT_LOH_REWARD_MODE).strip().lower()
         try:
             self._reward_scale = float(os.environ.get("LOH_REWARD_SCALE", DEFAULT_LOH_REWARD_SCALE))
@@ -3302,6 +3310,8 @@ class LohEnv(gym.Env):
             f"weight_ema={self._weight_ema}, weight_clip={self._weight_clip}, "
             f"reward_mode={self._reward_mode}, reward_scale={self._reward_scale}"
         )
+        if self._weight_log_every > 0:
+            print(f"   Weight logging: LOH_WEIGHT_LOG_EVERY={self._weight_log_every}")
         if self._reward_norm_enabled:
             print(
                 "   Reward norm: enabled, ema="
@@ -4290,6 +4300,10 @@ class LohEnv(gym.Env):
                                         f"[WEIGHTS_UPDATED] [seq {acked_version}] "
                                         f"dim={active_dim}/{SHM_WEIGHT_DIM} [{ack_active_fmt}]"
                                     )
+                            if self._weight_log_every > 0 and (acked_version % self._weight_log_every == 0):
+                                print(
+                                    f"[DRL_WEIGHT_LOG] seq={acked_version} dim={active_dim}/{SHM_WEIGHT_DIM} [{ack_active_fmt}]"
+                                )
                             self._last_step_ack_time = get_monotonic_time()
                             data = current
                         break  # ACK完成，退出循环

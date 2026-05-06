@@ -242,8 +242,8 @@ bool cache_get_base(cache_t *cache, const request_t *req) {
     cache->admissioner->update(cache->admissioner, req, cache->cache_size);
   }
 
-  //printf("cache occupied: %ld / %ld\n", cache->get_occupied_byte(cache),
-  //       cache->cache_size);
+  // printf("cache occupied: %ld / %ld\n", cache->get_occupied_byte(cache),
+  //        cache->cache_size);
   if (hit) {
     VERBOSE("req %ld, obj %ld --- cache hit\n", cache->n_req, req->obj_id);
   } else if (!cache->can_insert(cache, req)) {
@@ -253,12 +253,13 @@ bool cache_get_base(cache_t *cache, const request_t *req) {
     // 先插入新对象，然后驱逐直到缓存占用（减去当前插入对象的占用，以和先驱逐再插入的容量一致）不爆
     // 这样新对象可以参与驱逐比较，避免盲目插入
     cache->insert(cache, req);
-    while (cache->get_occupied_byte(cache) - req->obj_size > cache->cache_size) {
-      //printf("Cache %s is full (%ld/%ld), evicting...\n", cache->cache_name,
-      //       cache->get_occupied_byte(cache), cache->cache_size);
+    while (cache->get_occupied_byte(cache) - req->obj_size >
+           cache->cache_size) {
+      // printf("Cache %s is full (%ld/%ld), evicting...\n", cache->cache_name,
+      //        cache->get_occupied_byte(cache), cache->cache_size);
       cache->evict(cache, req);
     }
-    //cache->insert(cache, req);
+    // cache->insert(cache, req);
   }
 
   if (cache->prefetcher && cache->prefetcher->prefetch) {

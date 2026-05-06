@@ -20,10 +20,10 @@ import sys
 import numpy as np
 
 N_REQUESTS = 10_000_000
-N_OBJECTS = 50_000
+N_OBJECTS = 100_000
 OBJ_SIZE = 10_000
-WINDOW = 2000
-P_RECENT = 0.85
+WINDOW = 1000             # 默认固定为 sweep 选中版本（W=1000）
+P_RECENT = 0.70           # 默认固定为 sweep 选中版本（P=0.70）
 SEED = 42
 BATCH = 500_000
 
