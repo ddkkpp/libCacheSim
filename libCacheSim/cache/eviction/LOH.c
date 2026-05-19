@@ -200,6 +200,39 @@ static int loh_score_use_compound = 1;  // 默认启用 compound 评分模式（
 // LOH_EVICT_SCORE_BY_SIZE: 淘汰时用 score/obj_size 替代 score 做比较
 // 目的：让大但低效用的对象优先被淘汰，改善 BMR（字节 miss ratio）
 static int loh_evict_score_by_size = 0;
+static int loh_evict_pool_newobj = 1;  // LOH_EVICT_POOL_NEWOBJ (default: step02_event_rebuild)
+static int loh_evict_pool_refill = 1;  // LOH_EVICT_POOL_REFILL (default: step02_event_rebuild)
+// Online pool guard: sampled shadow fresh-selection audit. This is not a
+// quality-window guard; it only compares the queued victim with a fresh victim.
+static int loh_evict_pool_guard = 1;              // LOH_EVICT_POOL_GUARD (default: step02_event_rebuild)
+static int loh_evict_pool_guard_interval = 256;   // LOH_EVICT_POOL_GUARD_INTERVAL
+static int loh_evict_pool_guard_min_samples = 8;  // LOH_EVICT_POOL_GUARD_MIN_SAMPLES
+static double loh_evict_pool_guard_bad_rate = 0.25;  // LOH_EVICT_POOL_GUARD_BAD_RATE
+static double loh_evict_pool_guard_rel_eps = 0.01;   // LOH_EVICT_POOL_GUARD_REL_EPS
+static double loh_evict_pool_guard_abs_eps = 0.0;    // LOH_EVICT_POOL_GUARD_ABS_EPS
+static int loh_evict_pool_adaptive = 0;  // LOH_EVICT_POOL_ADAPTIVE
+static int loh_evict_pool_health_log = 1;  // LOH_EVICT_POOL_HEALTH_LOG (default: step02_event_rebuild)
+static int loh_evict_pool_event_rebuild = 1;  // LOH_EVICT_POOL_EVENT_REBUILD (default: step02_event_rebuild)
+static int loh_evict_pool_guard_rebuild_only =
+    1;  // LOH_EVICT_POOL_GUARD_REBUILD_ONLY (default: step02_event_rebuild)
+static int loh_evict_pool_health_window =
+    256;  // LOH_EVICT_POOL_HEALTH_WINDOW
+static double loh_evict_pool_min_valid_rate =
+    0.60;  // LOH_EVICT_POOL_MIN_VALID_RATE
+static int loh_evict_pool_low_watermark =
+    0;  // LOH_EVICT_POOL_LOW_WATERMARK, 0=disabled
+static int loh_evict_pool_newobj_staging =
+    0;  // LOH_EVICT_POOL_NEWOBJ_STAGING
+static double loh_evict_pool_newobj_pressure_pct =
+    0.005;  // LOH_EVICT_POOL_NEWOBJ_PRESSURE_PCT
+static int loh_evict_pool_warmup_allowlist =
+    0;  // LOH_EVICT_POOL_WARMUP_ALLOWLIST
+static int loh_evict_pool_warmup_max_batch =
+    8;  // LOH_EVICT_POOL_WARMUP_MAX_BATCH
+static double loh_evict_pool_warmup_max_one_hit =
+    1.0;  // LOH_EVICT_POOL_WARMUP_MAX_ONE_HIT
+static int loh_evict_pool_source_adaptive =
+  0;  // LOH_EVICT_POOL_SOURCE_ADAPTIVE
 static int loh_score_compound_v2 =
     0;  // 对应环境 LOH_SCORE_COMPOUND_V2：compound 升级版（7权重）
 
@@ -1353,23 +1386,230 @@ typedef struct {
 
   // ---- 批量淘汰队列 (Batch Eviction Queue) ----
   // 一次 LOH_to_evict 评分后保存 top-K 最差对象，后续 K-1 次淘汰直接取队列
-  // 队列跨请求持久化，消费时验证对象未被访问（防止淘汰刚命中的对象）
-  // batch_evict_size 由 LOH_BATCH_EVICT_SIZE 环境变量控制（默认 16，最大 64）
-  // batch_max_age 由 LOH_BATCH_MAX_AGE 控制（默认 0=不限；单位：请求数）
-#define BATCH_EVICT_MAX 64
+  // 默认仅在单个请求内有效；LOH_EVICT_POOL_ENABLE=1 时允许跨请求复用。
+  // batch_evict_size 由 LOH_BATCH_EVICT_SIZE 环境变量控制（默认 16，最大 512）
+  // batch_max_age 由 LOH_BATCH_MAX_AGE/LOH_EVICT_POOL_MAX_AGE 控制（单位：请求数）
+#define BATCH_EVICT_MAX MAX_CANDIDATES
   cache_obj_t *evict_queue[BATCH_EVICT_MAX];  // 预评分的待淘汰对象
+  obj_id_t evict_queue_obj_id[BATCH_EVICT_MAX];  // 入队时的 obj_id
   int64_t evict_queue_lac[BATCH_EVICT_MAX];   // 入队时的 last_access_counter
+  int32_t evict_queue_access_count[BATCH_EVICT_MAX];  // 入队时的访问次数
+  double evict_queue_score[BATCH_EVICT_MAX];  // 入队时的比较分数
+  int evict_queue_source[BATCH_EVICT_MAX];    // 入队候选来源
+  uint8_t evict_queue_valid[BATCH_EVICT_MAX];  // 槽位是否仍可尝试
   int evict_queue_len;                        // 队列有效长度
   int evict_queue_pos;                        // 下次取的位置
   int batch_evict_size;            // 运行时批量大小 (1..BATCH_EVICT_MAX)
   int64_t batch_max_age;           // 队列最大年龄（请求数），0=不限
   int64_t evict_queue_fill_vtime;  // 队列填充时的 current_timestamp
+  uint64_t evict_queue_weight_epoch;  // 入队时的权重版本
+  uint64_t weight_epoch;              // 每次 RL/CMAES 权重同步后递增
+  int evict_pool_enable;              // 是否允许跨请求复用 evict_queue
+  int evict_pool_guard_disabled;
+  uint64_t evict_pool_pop_count;
+  uint64_t evict_pool_guard_audits;
+  uint64_t evict_pool_guard_bad;
+  int evict_pool_requested_enable;
+  int evict_pool_warmup_deferred;
+  uint64_t evict_pool_fast_hits;
+  uint64_t evict_pool_fast_invalid;
+  uint64_t evict_pool_fast_stale;
+  uint64_t evict_pool_fast_null;
+  uint64_t evict_pool_health_window_total;
+  uint64_t evict_pool_health_window_valid;
+  uint64_t evict_pool_event_rebuilds;
+  uint64_t evict_pool_low_watermark_rebuilds;
+  uint64_t evict_pool_newobj_staged_count;
+  uint64_t evict_pool_newobj_staged_bytes;
+  uint64_t evict_pool_newobj_promotions;
+  uint64_t evict_pool_source_pop[LOH_MAX_SOURCES];
+  uint64_t evict_pool_source_bad[LOH_MAX_SOURCES];
+  double evict_pool_margin_sum;
+  uint64_t evict_pool_margin_samples;
 
   // Flat object array for O(1) random sampling (replaces hashtable_rand_obj)
   cache_obj_t **obj_array;
   int obj_array_size;
   int obj_array_capacity;
 } LOH_params_t;
+
+static inline void loh_evict_queue_clear(LOH_params_t *params) {
+  params->evict_queue_len = 0;
+  params->evict_queue_pos = 0;
+  params->evict_queue_fill_vtime = 0;
+  params->evict_queue_weight_epoch = params->weight_epoch;
+}
+
+static inline int loh_evict_pool_src_index(int source) {
+  if (source >= 0 && source < LOH_MAX_SOURCES) return source;
+  return LOH_MAX_SOURCES - 1;
+}
+
+static inline int loh_evict_pool_health_enabled(void) {
+  return loh_evict_pool_adaptive || loh_evict_pool_health_log ||
+         loh_evict_pool_event_rebuild;
+}
+
+static inline void loh_evict_pool_health_window_reset(LOH_params_t *params) {
+  params->evict_pool_health_window_total = 0;
+  params->evict_pool_health_window_valid = 0;
+}
+
+static inline int loh_evict_pool_record_probe(LOH_params_t *params, int valid,
+                                              const char *reason) {
+  if (!loh_evict_pool_health_enabled()) return 0;
+
+  params->evict_pool_health_window_total++;
+  if (valid) params->evict_pool_health_window_valid++;
+
+  int window = loh_evict_pool_health_window;
+  if (window < 1) window = 1;
+  if (params->evict_pool_health_window_total < (uint64_t)window) return 0;
+
+  double valid_rate = params->evict_pool_health_window_valid /
+                      (double)params->evict_pool_health_window_total;
+  LOH_DEBUG_PRINT_DETAILED(
+      "[LOH POOL_HEALTH] window=%llu valid=%llu valid_rate=%.4f "
+      "min_valid=%.4f reason=%s rebuilds=%llu\n",
+      (unsigned long long)params->evict_pool_health_window_total,
+      (unsigned long long)params->evict_pool_health_window_valid, valid_rate,
+      loh_evict_pool_min_valid_rate, reason ? reason : "none",
+      (unsigned long long)params->evict_pool_event_rebuilds);
+
+  const int should_rebuild = loh_evict_pool_event_rebuild &&
+                             valid_rate < loh_evict_pool_min_valid_rate;
+  loh_evict_pool_health_window_reset(params);
+  if (should_rebuild) {
+    params->evict_pool_event_rebuilds++;
+    loh_evict_queue_clear(params);
+    return 1;
+  }
+  return 0;
+}
+
+static inline void loh_evict_pool_record_fast_hit(LOH_params_t *params,
+                                                  int source) {
+  params->evict_pool_fast_hits++;
+  params->evict_pool_source_pop[loh_evict_pool_src_index(source)]++;
+  (void)loh_evict_pool_record_probe(params, 1, "hit");
+}
+
+static inline int loh_evict_pool_record_fast_invalid(LOH_params_t *params,
+                                                     const char *reason) {
+  params->evict_pool_fast_invalid++;
+  if (reason != NULL && strcmp(reason, "stale") == 0) {
+    params->evict_pool_fast_stale++;
+  } else if (reason != NULL && strcmp(reason, "null") == 0) {
+    params->evict_pool_fast_null++;
+  }
+  return loh_evict_pool_record_probe(params, 0, reason);
+}
+
+static inline void loh_evict_pool_maybe_low_watermark_rebuild(
+    LOH_params_t *params) {
+  if (!loh_evict_pool_low_watermark || !params->evict_pool_enable) return;
+  int remaining = params->evict_queue_len - params->evict_queue_pos;
+  if (remaining < 0) remaining = 0;
+  if (remaining > loh_evict_pool_low_watermark) return;
+  params->evict_pool_low_watermark_rebuilds++;
+  loh_evict_queue_clear(params);
+}
+
+static inline void loh_evict_pool_apply_warmup_allowlist(
+    LOH_params_t *params, double one_hit_ratio) {
+  if (!loh_evict_pool_warmup_allowlist || !params->evict_pool_requested_enable)
+    return;
+
+  int allow = 1;
+  if (loh_evict_pool_warmup_max_batch > 0 &&
+      params->batch_evict_size > loh_evict_pool_warmup_max_batch) {
+    allow = 0;
+  }
+  if (one_hit_ratio > loh_evict_pool_warmup_max_one_hit) allow = 0;
+
+  params->evict_pool_warmup_deferred = 0;
+  params->evict_pool_enable = allow ? 1 : 0;
+  loh_evict_queue_clear(params);
+  LOH_DEBUG_PRINT_DETAILED(
+      "[LOH POOL_WARMUP] allowlist %s one_hit=%.4f batch=%d "
+      "max_batch=%d max_one_hit=%.4f\n",
+      allow ? "enabled" : "disabled", one_hit_ratio,
+      params->batch_evict_size, loh_evict_pool_warmup_max_batch,
+      loh_evict_pool_warmup_max_one_hit);
+}
+
+static inline int loh_evict_pool_guard_should_audit(LOH_params_t *params) {
+  if (!loh_evict_pool_guard || !params->evict_pool_enable ||
+      params->evict_pool_guard_disabled) {
+    return 0;
+  }
+  int audit_interval = loh_evict_pool_guard_interval;
+  if (audit_interval < 1) audit_interval = 1;
+  params->evict_pool_pop_count++;
+  return (params->evict_pool_pop_count % (uint64_t)audit_interval) == 0;
+}
+
+static inline void loh_evict_pool_guard_record(LOH_params_t *params,
+                                               obj_id_t queued_obj_id,
+                                               double queued_score,
+                                               int queued_source,
+                                               cache_obj_t *fresh_obj,
+                                               double fresh_score) {
+  if (!loh_evict_pool_guard || params->evict_pool_guard_disabled) return;
+  params->evict_pool_guard_audits++;
+
+  const int same_obj = fresh_obj != NULL && fresh_obj->obj_id == queued_obj_id;
+  double rel_eps = loh_evict_pool_guard_rel_eps;
+  double abs_eps = loh_evict_pool_guard_abs_eps;
+  if (rel_eps < 0.0) rel_eps = 0.0;
+  if (abs_eps < 0.0) abs_eps = 0.0;
+  double score_scale = fabs(queued_score);
+  if (score_scale < 1.0) score_scale = 1.0;
+  const double tolerance = abs_eps + rel_eps * score_scale;
+  const int is_bad = !same_obj && fresh_score + tolerance < queued_score;
+  if (is_bad) {
+    params->evict_pool_guard_bad++;
+    params->evict_pool_source_bad[loh_evict_pool_src_index(queued_source)]++;
+  }
+
+  int min_samples = loh_evict_pool_guard_min_samples;
+  if (min_samples < 1) min_samples = 1;
+  if ((int)params->evict_pool_guard_audits < min_samples) return;
+
+  double bad_rate = params->evict_pool_guard_bad /
+                    (double)params->evict_pool_guard_audits;
+  if (bad_rate >= loh_evict_pool_guard_bad_rate) {
+    if (loh_evict_pool_guard_rebuild_only || loh_evict_pool_event_rebuild) {
+      params->evict_pool_event_rebuilds++;
+      loh_evict_queue_clear(params);
+      LOH_DEBUG_PRINT_DETAILED(
+          "[LOH POOL_GUARD] rebuild pool audits=%llu bad=%llu "
+          "bad_rate=%.4f threshold=%.4f queued=%llu queued_score=%.6f "
+          "fresh=%llu fresh_score=%.6f source=%d\n",
+          (unsigned long long)params->evict_pool_guard_audits,
+          (unsigned long long)params->evict_pool_guard_bad, bad_rate,
+          loh_evict_pool_guard_bad_rate, (unsigned long long)queued_obj_id,
+          queued_score,
+          fresh_obj ? (unsigned long long)fresh_obj->obj_id : 0ULL,
+          fresh_score, queued_source);
+      params->evict_pool_guard_audits = 0;
+      params->evict_pool_guard_bad = 0;
+      return;
+    }
+    params->evict_pool_guard_disabled = 1;
+    params->evict_pool_enable = 0;
+    loh_evict_queue_clear(params);
+    LOH_DEBUG_PRINT_DETAILED(
+        "[LOH POOL_GUARD] disabled pool audits=%llu bad=%llu "
+        "bad_rate=%.4f threshold=%.4f queued=%llu queued_score=%.6f "
+        "fresh=%llu fresh_score=%.6f\n",
+        (unsigned long long)params->evict_pool_guard_audits,
+        (unsigned long long)params->evict_pool_guard_bad, bad_rate,
+        loh_evict_pool_guard_bad_rate, (unsigned long long)queued_obj_id,
+        queued_score, fresh_obj ? (unsigned long long)fresh_obj->obj_id : 0ULL,
+        fresh_score);
+  }
+}
 
 static inline double loh_mlp_eval(const LOH_params_t *params,
                                   const double x[FEATURE_DIM]) {
@@ -2030,6 +2270,490 @@ static void calculate_object_features(LOH_params_t *params, cache_obj_t *obj,
       features[5]);
 
   /* 归一化逻辑已移至各个 calculate_* 函数内部，以便统计样本/裁剪计数 */
+}
+
+static inline void loh_score_signs(double sign[WEIGHT_DIM]) {
+  for (int k = 0; k < WEIGHT_DIM; ++k) sign[k] = 1.0;
+
+  if (loh_score_use_compound) {
+    if ((loh_feature_log1p || loh_feature_identity) &&
+        !loh_feature_unified_formula) {
+      sign[0] = -1.0;
+      sign[1] = 1.0;
+      sign[2] = -1.0;
+      sign[3] = 1.0;
+      sign[4] = 1.0;
+      sign[5] = -1.0;
+      sign[6] = loh_compound_use_irt1 ? -1.0 : 1.0;
+    }
+    return;
+  }
+
+  if (!loh_use_heuristic_signs) return;
+
+  if ((loh_feature_log1p || loh_feature_identity) &&
+      !loh_feature_unified_formula) {
+    sign[0] = -1.0;
+    sign[1] = 1.0;
+    sign[2] = -1.0;
+    sign[3] = -1.0;
+    sign[4] = -1.0;
+    sign[5] = -1.0;
+    sign[6] = 1.0;
+  }
+}
+
+static double loh_compare_score_for_obj(LOH_params_t *params,
+                                        cache_obj_t *obj) {
+  double f[FEATURE_DIM] = {0};
+  calculate_object_features(params, obj, f);
+
+  double score = 0.0;
+  if (params->score_model == LOH_SCORE_MODEL_MLP) {
+    double x[FEATURE_DIM] = {0};
+    if (loh_score_use_compound) {
+      const double rec = f[0];
+      const double freq = f[1];
+      const double size = f[2];
+      double freq_recency = 0.0;
+      double freq_size = 0.0;
+      double recency_size = 0.0;
+
+      if (loh_feature_log1p) {
+        const double eps = 1e-12;
+        const double safe_rec =
+            (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+        const double safe_size =
+            (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+        freq_recency = freq / safe_rec;
+        freq_size = freq / safe_size;
+        recency_size = rec * size;
+      } else {
+        freq_recency = freq * rec;
+        freq_size = freq * size;
+        recency_size = rec * size;
+      }
+
+      x[0] = rec;
+      x[1] = freq;
+      x[2] = size;
+      x[3] = freq_recency;
+      x[4] = freq_size;
+      x[5] = recency_size;
+    } else {
+      int used_dim = loh_score_use_irt ? FEATURE_DIM : 3;
+      for (int k = 0; k < used_dim; ++k) x[k] = f[k];
+    }
+    score = loh_mlp_eval(params, x);
+  } else {
+    double sign[WEIGHT_DIM];
+    loh_score_signs(sign);
+
+    if (loh_score_use_compound) {
+      const double rec = f[0];
+      const double freq = f[1];
+      const double size = f[2];
+      double terms[WEIGHT_DIM] = {0};
+
+      if (loh_feature_log1p) {
+        const double eps = 1e-12;
+        const double safe_rec =
+            (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+        const double safe_size =
+            (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+        terms[3] = freq / safe_rec;
+        terms[4] = freq / safe_size;
+        terms[5] = rec * size;
+      } else {
+        terms[3] = freq * rec;
+        terms[4] = freq * size;
+        terms[5] = rec * size;
+      }
+
+      terms[0] = rec;
+      terms[1] = freq;
+      terms[2] = size;
+      if (loh_score_compound_v2) {
+        if (loh_compound_use_irt1) {
+          terms[6] = f[3];
+        } else if (loh_feature_log1p) {
+          const double eps = 1e-12;
+          const double safe_rec =
+              (fabs(rec) > eps) ? rec : ((rec >= 0.0) ? eps : -eps);
+          const double safe_size =
+              (fabs(size) > eps) ? size : ((size >= 0.0) ? eps : -eps);
+          const double denom = safe_rec * safe_size;
+          const double safe_denom =
+              (fabs(denom) > eps) ? denom : ((denom >= 0.0) ? eps : -eps);
+          terms[6] = freq / safe_denom;
+        } else {
+          terms[6] = freq * rec * size;
+        }
+      }
+
+      const int used_dim = loh_score_compound_v2 ? WEIGHT_DIM : 6;
+      for (int k = 0; k < used_dim; ++k) {
+        score += terms[k] * params->weights[k] * sign[k];
+      }
+    } else {
+      const int used_dim = loh_score_use_irt ? FEATURE_DIM : 3;
+      for (int k = 0; k < used_dim; ++k) {
+        score += f[k] * params->weights[k] * sign[k];
+      }
+    }
+  }
+
+  return loh_evict_score_by_size
+             ? score / (double)(obj->obj_size > 0 ? obj->obj_size : 1)
+             : score;
+}
+
+static inline void loh_evict_queue_store(LOH_params_t *params, int idx,
+                                         cache_obj_t *obj, double score,
+                                         int source) {
+  params->evict_queue[idx] = obj;
+  params->evict_queue_obj_id[idx] = obj->obj_id;
+  params->evict_queue_lac[idx] = obj->LOH.last_access_counter;
+  params->evict_queue_access_count[idx] = obj->LOH.access_count;
+  params->evict_queue_score[idx] = score;
+  params->evict_queue_source[idx] = source;
+  params->evict_queue_valid[idx] = 1;
+}
+
+static void loh_evict_queue_insert_scored(LOH_params_t *params,
+                                          cache_obj_t *obj, double score,
+                                          int source,
+                                          bool require_boundary_win) {
+  if (!params->evict_pool_enable) return;
+  if (obj == NULL || params->evict_queue_len <= params->evict_queue_pos)
+    return;
+
+  if (params->evict_queue_weight_epoch != params->weight_epoch) {
+    loh_evict_queue_clear(params);
+    return;
+  }
+  if (params->batch_max_age > 0 &&
+      params->current_timestamp - params->evict_queue_fill_vtime >
+          params->batch_max_age) {
+    loh_evict_queue_clear(params);
+    return;
+  }
+
+  int capacity = params->batch_evict_size - 1;
+  if (capacity <= 0) return;
+  if (capacity > BATCH_EVICT_MAX) capacity = BATCH_EVICT_MAX;
+
+  cache_obj_t *objs[BATCH_EVICT_MAX];
+  obj_id_t obj_ids[BATCH_EVICT_MAX];
+  int64_t lacs[BATCH_EVICT_MAX];
+  int32_t access_counts[BATCH_EVICT_MAX];
+  double scores[BATCH_EVICT_MAX];
+  int sources[BATCH_EVICT_MAX];
+  int count = 0;
+  for (int i = params->evict_queue_pos;
+       i < params->evict_queue_len && count < capacity; ++i) {
+    if (!params->evict_queue_valid[i]) continue;
+    if (params->evict_queue_obj_id[i] == obj->obj_id) continue;
+    objs[count] = params->evict_queue[i];
+    obj_ids[count] = params->evict_queue_obj_id[i];
+    lacs[count] = params->evict_queue_lac[i];
+    access_counts[count] = params->evict_queue_access_count[i];
+    scores[count] = params->evict_queue_score[i];
+    sources[count] = params->evict_queue_source[i];
+    count++;
+  }
+
+  if (require_boundary_win && count > 0 && score >= scores[count - 1]) return;
+
+  int insert_pos = 0;
+  while (insert_pos < count && scores[insert_pos] <= score) insert_pos++;
+
+  if (count < capacity) {
+    for (int i = count; i > insert_pos; --i) {
+      objs[i] = objs[i - 1];
+      obj_ids[i] = obj_ids[i - 1];
+      lacs[i] = lacs[i - 1];
+      access_counts[i] = access_counts[i - 1];
+      scores[i] = scores[i - 1];
+      sources[i] = sources[i - 1];
+    }
+    objs[insert_pos] = obj;
+    obj_ids[insert_pos] = obj->obj_id;
+    lacs[insert_pos] = obj->LOH.last_access_counter;
+    access_counts[insert_pos] = obj->LOH.access_count;
+    scores[insert_pos] = score;
+    sources[insert_pos] = source;
+    count++;
+  } else if (insert_pos < count) {
+    for (int i = count - 1; i > insert_pos; --i) {
+      objs[i] = objs[i - 1];
+      obj_ids[i] = obj_ids[i - 1];
+      lacs[i] = lacs[i - 1];
+      access_counts[i] = access_counts[i - 1];
+      scores[i] = scores[i - 1];
+      sources[i] = sources[i - 1];
+    }
+    objs[insert_pos] = obj;
+    obj_ids[insert_pos] = obj->obj_id;
+    lacs[insert_pos] = obj->LOH.last_access_counter;
+    access_counts[insert_pos] = obj->LOH.access_count;
+    scores[insert_pos] = score;
+    sources[insert_pos] = source;
+  } else {
+    return;
+  }
+
+  params->evict_queue_pos = 0;
+  params->evict_queue_len = count;
+  for (int i = 0; i < count; ++i) {
+    params->evict_queue[i] = objs[i];
+    params->evict_queue_obj_id[i] = obj_ids[i];
+    params->evict_queue_lac[i] = lacs[i];
+    params->evict_queue_access_count[i] = access_counts[i];
+    params->evict_queue_score[i] = scores[i];
+    params->evict_queue_source[i] = sources[i];
+    params->evict_queue_valid[i] = 1;
+  }
+}
+
+static void loh_evict_queue_try_insert_new_obj(LOH_params_t *params,
+                                               cache_obj_t *obj) {
+  if (!loh_evict_pool_newobj || !params->evict_pool_enable || obj == NULL)
+    return;
+  if (loh_evict_pool_newobj_staging) {
+    int64_t obj_size = obj->obj_size > 0 ? (int64_t)obj->obj_size : 1;
+    params->evict_pool_newobj_staged_count++;
+    params->evict_pool_newobj_staged_bytes += (uint64_t)obj_size;
+
+    cache_t *cache = (cache_t *)params->cache_ptr;
+    int64_t cache_size = cache != NULL ? (int64_t)cache->cache_size : 0;
+    double pressure_pct = loh_evict_pool_newobj_pressure_pct;
+    if (pressure_pct < 0.0) pressure_pct = 0.0;
+    int64_t threshold =
+        cache_size > 0 ? (int64_t)((double)cache_size * pressure_pct) : 0;
+    if (threshold < obj_size) threshold = obj_size;
+
+    if ((int64_t)params->evict_pool_newobj_staged_bytes < threshold) return;
+
+    params->evict_pool_newobj_promotions++;
+    params->evict_pool_newobj_staged_count = 0;
+    params->evict_pool_newobj_staged_bytes = 0;
+    params->evict_pool_event_rebuilds++;
+    loh_evict_queue_clear(params);
+    return;
+  }
+  const double new_score = loh_compare_score_for_obj(params, obj);
+  loh_evict_queue_insert_scored(params, obj, new_score, -1, true);
+}
+
+static inline bool loh_evict_queue_has_remaining_obj(LOH_params_t *params,
+                                                     obj_id_t obj_id) {
+  for (int i = params->evict_queue_pos; i < params->evict_queue_len; ++i) {
+    if (params->evict_queue_valid[i] && params->evict_queue_obj_id[i] == obj_id)
+      return true;
+  }
+  return false;
+}
+
+static inline bool loh_evict_pool_refill_candidate_ok(LOH_params_t *params,
+                                                      cache_obj_t *obj,
+                                                      cache_obj_t *exclude) {
+  if (obj == NULL) return false;
+  if (exclude != NULL && obj->obj_id == exclude->obj_id) return false;
+  if (loh_evict_queue_has_remaining_obj(params, obj->obj_id)) return false;
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_ERROR
+  {
+    cache_t *cache = (cache_t *)params->cache_ptr;
+    if (cache != NULL &&
+        hashtable_find_obj_id(cache->hashtable, obj->obj_id) != obj)
+      return false;
+  }
+#endif
+  return true;
+}
+
+static inline int loh_evict_pool_refill_scan_limit(LOH_params_t *params) {
+  int limit = loh_structured_candidates + params->batch_evict_size + 16;
+  if (limit < 32) limit = 32;
+  if (limit > MAX_CANDIDATES) limit = MAX_CANDIDATES;
+  return limit;
+}
+
+static cache_obj_t *loh_evict_pool_next_recency_candidate(
+    LOH_params_t *params, cache_obj_t *exclude) {
+  int scanned = 0;
+  int scan_limit = loh_evict_pool_refill_scan_limit(params);
+  for (cache_obj_t *curr = params->q_tail; curr != NULL && scanned < scan_limit;
+       curr = curr->queue.prev) {
+    scanned++;
+    if (loh_evict_pool_refill_candidate_ok(params, curr, exclude)) return curr;
+  }
+  return NULL;
+}
+
+static cache_obj_t *loh_evict_pool_next_freq_candidate(LOH_params_t *params,
+                                                       cache_obj_t *exclude) {
+  int scanned = 0;
+  int scan_limit = loh_evict_pool_refill_scan_limit(params);
+  for (int freq = 1; freq <= FREQ_MAX && scanned < scan_limit; ++freq) {
+    for (loh_freq_node_t *curr = params->freq_table_tail[freq];
+         curr != NULL && scanned < scan_limit; curr = curr->prev) {
+      scanned++;
+      if (loh_evict_pool_refill_candidate_ok(params, curr->obj, exclude))
+        return curr->obj;
+    }
+  }
+  return NULL;
+}
+
+static cache_obj_t *loh_evict_pool_next_size_candidate(LOH_params_t *params,
+                                                       cache_obj_t *exclude) {
+  if (!loh_use_size_buckets) {
+    cache_obj_t *best = NULL;
+    int64_t best_size = INT64_MIN;
+    for (int i = 0; i < params->size_heap_size; ++i) {
+      cache_obj_t *obj = params->size_heap[i].obj;
+      if (!loh_evict_pool_refill_candidate_ok(params, obj, exclude)) continue;
+      if (params->size_heap[i].size_value > best_size) {
+        best_size = params->size_heap[i].size_value;
+        best = obj;
+      }
+    }
+    return best;
+  }
+
+  int scanned = 0;
+  int scan_limit = loh_evict_pool_refill_scan_limit(params);
+  for (int bucket = SIZE_BUCKET_COUNT - 1; bucket >= 0 && scanned < scan_limit;
+       --bucket) {
+    for (size_node_t *curr = params->size_buckets[bucket];
+         curr != NULL && scanned < scan_limit; curr = curr->next) {
+      scanned++;
+      if (loh_evict_pool_refill_candidate_ok(params, curr->obj, exclude))
+        return curr->obj;
+    }
+  }
+  return NULL;
+}
+
+static cache_obj_t *loh_evict_pool_next_irt_candidate(LOH_params_t *params,
+                                                      int heap_idx,
+                                                      cache_obj_t *exclude) {
+  if (heap_idx < 0 || heap_idx >= IRT_HISTORY_SIZE) return NULL;
+  int scan_limit = loh_evict_pool_refill_scan_limit(params);
+  for (int i = 0; i < params->irt_heap_size[heap_idx] && i < scan_limit; ++i) {
+    cache_obj_t *obj = params->irt_heap[heap_idx][i].obj;
+    if (loh_evict_pool_refill_candidate_ok(params, obj, exclude)) return obj;
+  }
+  return NULL;
+}
+
+static inline int loh_evict_pool_active_source_count(void) {
+  return loh_score_use_irt ? 6 : 3;
+}
+
+static int loh_evict_pool_queue_source_count(LOH_params_t *params,
+                                             int source) {
+  int count = 0;
+  for (int i = params->evict_queue_pos; i < params->evict_queue_len; ++i) {
+    if (params->evict_queue_valid[i] && params->evict_queue_source[i] == source)
+      count++;
+  }
+  return count;
+}
+
+static int loh_evict_pool_pick_refill_source(LOH_params_t *params,
+                                             int requested_source,
+                                             const uint8_t tried_sources[]) {
+  int n_sources = loh_evict_pool_active_source_count();
+  int best_source = -1;
+  double best_cost = DBL_MAX;
+
+  int equal_budget = n_sources > 0 ? params->batch_evict_size / n_sources : 1;
+  if (equal_budget < 1) equal_budget = 1;
+
+  for (int source = 0; source < n_sources; ++source) {
+    if (tried_sources != NULL && tried_sources[source]) continue;
+
+    int source_budget = loh_source_budget[source] > 0
+                            ? loh_source_budget[source]
+                            : equal_budget;
+    if (source_budget < 1) source_budget = 1;
+
+    int queued = loh_evict_pool_queue_source_count(params, source);
+    double queue_pressure = queued / (double)source_budget;
+
+    uint64_t pops = params->evict_pool_source_pop[source];
+    uint64_t bad = params->evict_pool_source_bad[source];
+    double bad_rate = pops > 0 ? bad / (double)pops : 0.0;
+
+    double cost = queue_pressure + bad_rate;
+    if (source == requested_source) cost -= 0.05;
+
+    if (cost < best_cost) {
+      best_cost = cost;
+      best_source = source;
+    }
+  }
+
+  return best_source;
+}
+
+static int loh_evict_queue_refill_from_source_once(LOH_params_t *params,
+                                                   int source,
+                                                   cache_obj_t *exclude) {
+  if (source < 0 || source > 5) return 0;
+
+  cache_obj_t *candidate = NULL;
+  switch (source) {
+    case 0:
+      candidate = loh_evict_pool_next_recency_candidate(params, exclude);
+      break;
+    case 1:
+      candidate = loh_evict_pool_next_freq_candidate(params, exclude);
+      break;
+    case 2:
+      candidate = loh_evict_pool_next_size_candidate(params, exclude);
+      break;
+    case 3:
+    case 4:
+    case 5:
+      if (loh_score_use_irt) {
+        candidate = loh_evict_pool_next_irt_candidate(params, source - 3,
+                                                      exclude);
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (candidate == NULL) return 0;
+  double score = loh_compare_score_for_obj(params, candidate);
+  loh_evict_queue_insert_scored(params, candidate, score, source, false);
+  return 1;
+}
+
+static void loh_evict_queue_refill_from_source(LOH_params_t *params,
+                                               int source,
+                                               cache_obj_t *exclude) {
+  if (!loh_evict_pool_refill || !params->evict_pool_enable) return;
+  if (params->evict_queue_len <= params->evict_queue_pos) return;
+
+  if (!loh_evict_pool_source_adaptive) {
+    (void)loh_evict_queue_refill_from_source_once(params, source, exclude);
+    return;
+  }
+
+  uint8_t tried_sources[LOH_MAX_SOURCES] = {0};
+  int n_sources = loh_evict_pool_active_source_count();
+  for (int attempt = 0; attempt < n_sources; ++attempt) {
+    int refill_source = loh_evict_pool_pick_refill_source(params, source,
+                                                         tried_sources);
+    if (refill_source < 0 || refill_source >= n_sources) return;
+    tried_sources[refill_source] = 1;
+    if (loh_evict_queue_refill_from_source_once(params, refill_source, exclude))
+      return;
+  }
 }
 
 #if LOH_PERF_PROFILING
@@ -5040,6 +5764,7 @@ static void update_cache_content_stats_find(LOH_params_t *params,
 static void cleanup_invalid_objects(LOH_params_t *params);
 static void adjust_history_capacity_if_needed(LOH_params_t *params,
                                               cache_t *cache);
+static inline void loh_fast_rand_seed(uint64_t seed);
 
 // 特征计算函数
 
@@ -5518,6 +6243,17 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       getenv("LOH_TOTAL_CANDIDATES") ? getenv("LOH_TOTAL_CANDIDATES")
                                      : "(unset)",
       MAX_CANDIDATES_LIMIT);
+  {
+    const char *env_rng_seed = getenv("LOH_RNG_SEED");
+    if (env_rng_seed && env_rng_seed[0] != '\0') {
+      uint64_t seed = (uint64_t)strtoull(env_rng_seed, NULL, 0);
+      loh_fast_rand_seed(seed);
+      LOH_DEBUG_PRINT_CONFIG("  LOH_RNG_SEED=%llu\n",
+                             (unsigned long long)seed);
+    } else {
+      LOH_DEBUG_PRINT_CONFIG("  LOH_RNG_SEED=(default)\n");
+    }
+  }
 
   cache_t *cache =
       cache_struct_init("LOH", ccache_params, cache_specific_params);
@@ -5630,9 +6366,166 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
   params->evict_queue_len = 0;
   params->evict_queue_pos = 0;
   params->evict_queue_fill_vtime = 0;
-  // LOH_BATCH_EVICT_SIZE: 运行时批量大小（默认 16，最大 BATCH_EVICT_MAX=64）
+  params->evict_queue_weight_epoch = 0;
+  params->weight_epoch = 0;
+  params->evict_pool_enable = 1;  // default: step02_event_rebuild (LOH_EVICT_POOL_ENABLE=1)
+  params->evict_pool_guard_disabled = 0;
+  params->evict_pool_pop_count = 0;
+  params->evict_pool_guard_audits = 0;
+  params->evict_pool_guard_bad = 0;
+  params->evict_pool_requested_enable = 0;
+  params->evict_pool_warmup_deferred = 0;
+  params->evict_pool_fast_hits = 0;
+  params->evict_pool_fast_invalid = 0;
+  params->evict_pool_fast_stale = 0;
+  params->evict_pool_fast_null = 0;
+  params->evict_pool_health_window_total = 0;
+  params->evict_pool_health_window_valid = 0;
+  params->evict_pool_event_rebuilds = 0;
+  params->evict_pool_low_watermark_rebuilds = 0;
+  params->evict_pool_newobj_staged_count = 0;
+  params->evict_pool_newobj_staged_bytes = 0;
+  params->evict_pool_newobj_promotions = 0;
+    memset(params->evict_pool_source_pop, 0,
+      sizeof(params->evict_pool_source_pop));
+    memset(params->evict_pool_source_bad, 0,
+      sizeof(params->evict_pool_source_bad));
+  params->evict_pool_margin_sum = 0.0;
+  params->evict_pool_margin_samples = 0;
+  int pool_low_watermark_env_set = 0;
   {
-    int bs = 16;
+    const char *pool_str = getenv("LOH_EVICT_POOL_ENABLE");
+    if (pool_str) params->evict_pool_enable = atoi(pool_str) != 0;
+    params->evict_pool_requested_enable = params->evict_pool_enable;
+    const char *newobj_str = getenv("LOH_EVICT_POOL_NEWOBJ");
+    if (newobj_str)
+      loh_evict_pool_newobj = loh_parse_bool_env(newobj_str,
+                                                 loh_evict_pool_newobj);
+    const char *refill_str = getenv("LOH_EVICT_POOL_REFILL");
+    if (refill_str)
+      loh_evict_pool_refill = loh_parse_bool_env(refill_str,
+                                                 loh_evict_pool_refill);
+    const char *guard_str = getenv("LOH_EVICT_POOL_GUARD");
+    if (guard_str)
+      loh_evict_pool_guard =
+          loh_parse_bool_env(guard_str, loh_evict_pool_guard);
+    const char *guard_interval_str = getenv("LOH_EVICT_POOL_GUARD_INTERVAL");
+    if (guard_interval_str) {
+      loh_evict_pool_guard_interval = atoi(guard_interval_str);
+      if (loh_evict_pool_guard_interval < 1) loh_evict_pool_guard_interval = 1;
+    }
+    const char *guard_min_samples_str =
+        getenv("LOH_EVICT_POOL_GUARD_MIN_SAMPLES");
+    if (guard_min_samples_str) {
+      loh_evict_pool_guard_min_samples = atoi(guard_min_samples_str);
+      if (loh_evict_pool_guard_min_samples < 1)
+        loh_evict_pool_guard_min_samples = 1;
+    }
+    const char *guard_bad_rate_str =
+        getenv("LOH_EVICT_POOL_GUARD_BAD_RATE");
+    if (guard_bad_rate_str) {
+      loh_evict_pool_guard_bad_rate = atof(guard_bad_rate_str);
+      if (loh_evict_pool_guard_bad_rate < 0.0)
+        loh_evict_pool_guard_bad_rate = 0.0;
+      if (loh_evict_pool_guard_bad_rate > 1.0)
+        loh_evict_pool_guard_bad_rate = 1.0;
+    }
+    const char *guard_rel_eps_str = getenv("LOH_EVICT_POOL_GUARD_REL_EPS");
+    if (guard_rel_eps_str) {
+      loh_evict_pool_guard_rel_eps = atof(guard_rel_eps_str);
+      if (loh_evict_pool_guard_rel_eps < 0.0) loh_evict_pool_guard_rel_eps = 0.0;
+    }
+    const char *guard_abs_eps_str = getenv("LOH_EVICT_POOL_GUARD_ABS_EPS");
+    if (guard_abs_eps_str) {
+      loh_evict_pool_guard_abs_eps = atof(guard_abs_eps_str);
+      if (loh_evict_pool_guard_abs_eps < 0.0) loh_evict_pool_guard_abs_eps = 0.0;
+    }
+    const char *adaptive_pool_str = getenv("LOH_EVICT_POOL_ADAPTIVE");
+    if (adaptive_pool_str)
+      loh_evict_pool_adaptive =
+          loh_parse_bool_env(adaptive_pool_str, loh_evict_pool_adaptive);
+    if (loh_evict_pool_adaptive) {
+      loh_evict_pool_event_rebuild = 1;
+      loh_evict_pool_guard_rebuild_only = 1;
+      loh_evict_pool_newobj_staging = 1;
+      loh_evict_pool_source_adaptive = 1;
+    }
+    const char *health_log_str = getenv("LOH_EVICT_POOL_HEALTH_LOG");
+    if (health_log_str)
+      loh_evict_pool_health_log =
+          loh_parse_bool_env(health_log_str, loh_evict_pool_health_log);
+    const char *event_rebuild_str = getenv("LOH_EVICT_POOL_EVENT_REBUILD");
+    if (event_rebuild_str)
+      loh_evict_pool_event_rebuild = loh_parse_bool_env(
+          event_rebuild_str, loh_evict_pool_event_rebuild);
+    const char *guard_rebuild_str =
+        getenv("LOH_EVICT_POOL_GUARD_REBUILD_ONLY");
+    if (guard_rebuild_str)
+      loh_evict_pool_guard_rebuild_only = loh_parse_bool_env(
+          guard_rebuild_str, loh_evict_pool_guard_rebuild_only);
+    const char *health_window_str = getenv("LOH_EVICT_POOL_HEALTH_WINDOW");
+    if (health_window_str) {
+      loh_evict_pool_health_window = atoi(health_window_str);
+      if (loh_evict_pool_health_window < 1) loh_evict_pool_health_window = 1;
+    }
+    const char *min_valid_str = getenv("LOH_EVICT_POOL_MIN_VALID_RATE");
+    if (min_valid_str) {
+      loh_evict_pool_min_valid_rate = atof(min_valid_str);
+      if (loh_evict_pool_min_valid_rate < 0.0)
+        loh_evict_pool_min_valid_rate = 0.0;
+      if (loh_evict_pool_min_valid_rate > 1.0)
+        loh_evict_pool_min_valid_rate = 1.0;
+    }
+    const char *low_watermark_str = getenv("LOH_EVICT_POOL_LOW_WATERMARK");
+    if (low_watermark_str) {
+      loh_evict_pool_low_watermark = atoi(low_watermark_str);
+      if (loh_evict_pool_low_watermark < 0) loh_evict_pool_low_watermark = 0;
+      pool_low_watermark_env_set = 1;
+    }
+    const char *newobj_staging_str = getenv("LOH_EVICT_POOL_NEWOBJ_STAGING");
+    if (newobj_staging_str)
+      loh_evict_pool_newobj_staging = loh_parse_bool_env(
+          newobj_staging_str, loh_evict_pool_newobj_staging);
+    const char *newobj_pressure_str =
+        getenv("LOH_EVICT_POOL_NEWOBJ_PRESSURE_PCT");
+    if (newobj_pressure_str) {
+      loh_evict_pool_newobj_pressure_pct = atof(newobj_pressure_str);
+      if (loh_evict_pool_newobj_pressure_pct < 0.0)
+        loh_evict_pool_newobj_pressure_pct = 0.0;
+    }
+    const char *warmup_allowlist_str =
+        getenv("LOH_EVICT_POOL_WARMUP_ALLOWLIST");
+    if (warmup_allowlist_str)
+      loh_evict_pool_warmup_allowlist = loh_parse_bool_env(
+          warmup_allowlist_str, loh_evict_pool_warmup_allowlist);
+    const char *warmup_max_batch_str =
+        getenv("LOH_EVICT_POOL_WARMUP_MAX_BATCH");
+    if (warmup_max_batch_str) {
+      loh_evict_pool_warmup_max_batch = atoi(warmup_max_batch_str);
+      if (loh_evict_pool_warmup_max_batch < 0)
+        loh_evict_pool_warmup_max_batch = 0;
+    }
+    const char *warmup_max_one_hit_str =
+        getenv("LOH_EVICT_POOL_WARMUP_MAX_ONE_HIT");
+    if (warmup_max_one_hit_str) {
+      loh_evict_pool_warmup_max_one_hit = atof(warmup_max_one_hit_str);
+      if (loh_evict_pool_warmup_max_one_hit < 0.0)
+        loh_evict_pool_warmup_max_one_hit = 0.0;
+      if (loh_evict_pool_warmup_max_one_hit > 1.0)
+        loh_evict_pool_warmup_max_one_hit = 1.0;
+    }
+    const char *source_adaptive_str =
+        getenv("LOH_EVICT_POOL_SOURCE_ADAPTIVE");
+    if (source_adaptive_str)
+      loh_evict_pool_source_adaptive = loh_parse_bool_env(
+          source_adaptive_str, loh_evict_pool_source_adaptive);
+  }
+  // LOH_BATCH_EVICT_SIZE: 运行时批量大小（默认 4，最大 BATCH_EVICT_MAX）
+  // 说明：代码默认为 step02_event_rebuild 配置（batch=4）。
+  // 若不使用 step02_event_rebuild（即 evict_pool / event_rebuild 都关闭），
+  // 推荐显式设置 LOH_BATCH_EVICT_SIZE=16，多数 trace 上吐吞量更优。
+  {
+    int bs = 4;
     const char *bs_str = getenv("LOH_BATCH_EVICT_SIZE");
     if (bs_str) {
       bs = atoi(bs_str);
@@ -5640,18 +6533,44 @@ cache_t *LOH_init(const common_cache_params_t ccache_params,
       if (bs > BATCH_EVICT_MAX) bs = BATCH_EVICT_MAX;
     }
     params->batch_evict_size = bs;
+    if (loh_evict_pool_adaptive && !pool_low_watermark_env_set &&
+        loh_evict_pool_low_watermark == 0 && bs > 1) {
+      loh_evict_pool_low_watermark = bs / 4;
+      if (loh_evict_pool_low_watermark < 1) loh_evict_pool_low_watermark = 1;
+    }
+    if (loh_evict_pool_warmup_allowlist &&
+        params->evict_pool_requested_enable) {
+      params->evict_pool_enable = 0;
+      params->evict_pool_warmup_deferred = 1;
+      loh_evict_queue_clear(params);
+    }
   }
   // LOH_BATCH_MAX_AGE: 队列最大年龄（请求数），0=不限（默认 0）
   {
     int64_t age = 0;
     const char *age_str = getenv("LOH_BATCH_MAX_AGE");
     if (age_str) age = atoll(age_str);
+    const char *pool_age_str = getenv("LOH_EVICT_POOL_MAX_AGE");
+    if (pool_age_str) age = atoll(pool_age_str);
+    if (params->evict_pool_enable && !age_str && !pool_age_str) age = 500;
     if (age < 0) age = 0;
     params->batch_max_age = age;
   }
-  LOH_DEBUG_PRINT_CONFIG("[LOH INIT] batch_evict_size=%d, batch_max_age=%lld\n",
-                         params->batch_evict_size,
-                         (long long)params->batch_max_age);
+  LOH_DEBUG_PRINT_CONFIG(
+      "[LOH INIT] batch_evict_size=%d, batch_max_age=%lld, "
+      "evict_pool_enable=%d, evict_pool_newobj=%d, evict_pool_refill=%d, "
+      "evict_pool_guard=%d, guard_interval=%d, guard_min_samples=%d, "
+      "guard_bad_rate=%.4f, pool_adaptive=%d, event_rebuild=%d, "
+      "guard_rebuild_only=%d, low_watermark=%d, newobj_staging=%d, "
+      "warmup_allowlist=%d, source_adaptive=%d\n",
+      params->batch_evict_size,
+      (long long)params->batch_max_age, params->evict_pool_enable,
+      loh_evict_pool_newobj, loh_evict_pool_refill, loh_evict_pool_guard,
+      loh_evict_pool_guard_interval, loh_evict_pool_guard_min_samples,
+      loh_evict_pool_guard_bad_rate, loh_evict_pool_adaptive,
+      loh_evict_pool_event_rebuild, loh_evict_pool_guard_rebuild_only,
+      loh_evict_pool_low_watermark, loh_evict_pool_newobj_staging,
+      loh_evict_pool_warmup_allowlist, loh_evict_pool_source_adaptive);
 
   // LOH_EVICT_SCORE_BY_SIZE: 用 score/obj_size 做淘汰比较（改善 BMR）
   {
@@ -7375,6 +8294,56 @@ static void LOH_free(cache_t *cache) {
   loh_print_perf_summary(params);
 #endif
 
+#if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
+  if (loh_evict_pool_guard && params->evict_pool_guard_audits > 0) {
+    fprintf(stderr,
+            "[LOH POOL_GUARD] summary audits=%llu bad=%llu disabled=%d\n",
+            (unsigned long long)params->evict_pool_guard_audits,
+            (unsigned long long)params->evict_pool_guard_bad,
+            params->evict_pool_guard_disabled);
+  }
+  if (loh_evict_pool_health_enabled() &&
+      (params->evict_pool_fast_hits || params->evict_pool_fast_invalid ||
+       params->evict_pool_event_rebuilds ||
+       params->evict_pool_newobj_promotions)) {
+    double avg_margin =
+        params->evict_pool_margin_samples > 0
+            ? params->evict_pool_margin_sum /
+                  (double)params->evict_pool_margin_samples
+            : 0.0;
+    fprintf(stderr,
+            "[LOH POOL_HEALTH] summary hits=%llu invalid=%llu stale=%llu "
+            "null=%llu event_rebuilds=%llu low_watermark_rebuilds=%llu "
+            "newobj_promotions=%llu avg_margin=%.6f samples=%llu\n",
+            (unsigned long long)params->evict_pool_fast_hits,
+            (unsigned long long)params->evict_pool_fast_invalid,
+            (unsigned long long)params->evict_pool_fast_stale,
+            (unsigned long long)params->evict_pool_fast_null,
+            (unsigned long long)params->evict_pool_event_rebuilds,
+            (unsigned long long)params->evict_pool_low_watermark_rebuilds,
+            (unsigned long long)params->evict_pool_newobj_promotions,
+            avg_margin,
+            (unsigned long long)params->evict_pool_margin_samples);
+    fprintf(stderr,
+            "[LOH POOL_HEALTH] sources pop=[%llu,%llu,%llu,%llu,%llu,%llu,%llu] "
+            "bad=[%llu,%llu,%llu,%llu,%llu,%llu,%llu]\n",
+            (unsigned long long)params->evict_pool_source_pop[0],
+            (unsigned long long)params->evict_pool_source_pop[1],
+            (unsigned long long)params->evict_pool_source_pop[2],
+            (unsigned long long)params->evict_pool_source_pop[3],
+            (unsigned long long)params->evict_pool_source_pop[4],
+            (unsigned long long)params->evict_pool_source_pop[5],
+            (unsigned long long)params->evict_pool_source_pop[6],
+            (unsigned long long)params->evict_pool_source_bad[0],
+            (unsigned long long)params->evict_pool_source_bad[1],
+            (unsigned long long)params->evict_pool_source_bad[2],
+            (unsigned long long)params->evict_pool_source_bad[3],
+            (unsigned long long)params->evict_pool_source_bad[4],
+            (unsigned long long)params->evict_pool_source_bad[5],
+            (unsigned long long)params->evict_pool_source_bad[6]);
+  }
+#endif
+
   // 释放 flat obj_array
   if (params->obj_array) {
     free(params->obj_array);
@@ -7428,6 +8397,8 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
     } else {
       sync_with_actor_critic(params);
     }
+    params->weight_epoch++;
+    loh_evict_queue_clear(params);
     params->requests_since_rl_update = 0;
     params->epoch_start_time = time(NULL);
 
@@ -7823,6 +8794,8 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
           "r_bmr_fs=%.4f r_bmr_rs=%.4f\n",
           r_bmr_fs, r_bmr_rs);
 
+        loh_evict_pool_apply_warmup_allowlist(params, one_hit_ratio);
+
       // 合并: 自动特征模式检测（原 80% 触发，现统一在 warmup 时执行）
       if (loh_auto_feature_mode && !loh_auto_detected) {
         loh_auto_detect_and_switch(cache);
@@ -7917,10 +8890,10 @@ static bool LOH_get(cache_t *cache, const request_t *req) {
         }
         fsb_apply_arm(params, 0);
         fprintf(stderr,
-                "[FSB] started: block_size=%d, min_rounds=%d, max_rounds=%d, "
-                "warmup_rounds=%d, ucb_c=%.2f\n",
-                g_fsb.block_size, g_fsb.min_rounds, g_fsb.max_rounds,
-                g_fsb.warmup_rounds, g_fsb.ucb_c);
+          "[FSB] started: block_size=%d, min_rounds=%d, max_rounds=%d, "
+          "warmup_rounds=%d, ucb_c=%.2f\n",
+          g_fsb.block_size, g_fsb.min_rounds, g_fsb.max_rounds,
+          g_fsb.warmup_rounds, g_fsb.ucb_c);
         // 跳过 auto_compound
       } else if (loh_auto_compound) {
         double auto_r_threshold = 0.98;
@@ -8474,10 +9447,10 @@ static cache_obj_t *LOH_find(cache_t *cache, const request_t *req,
   PERF_TS ts_find;
   PERF_NOW(ts_find);
 
-  // 每次请求失效批量淘汰队列：防止跨请求持久化导致 mr 退化
-  // 队列仅在单次请求内（同一 insert 触发的连续 evictions）有效
-  params->evict_queue_len = 0;
-  params->evict_queue_pos = 0;
+  // 默认每次请求失效批量淘汰队列；启用 pool 后改由 LAC/age/epoch 校验。
+  if (!params->evict_pool_enable) {
+    loh_evict_queue_clear(params);
+  }
 
   cache_obj_t *cache_obj = cache_find_base(cache, req, update_cache);
 
@@ -8640,6 +9613,8 @@ static cache_obj_t *LOH_insert(cache_t *cache, const request_t *req) {
   update_cache_content_stats_add(params, obj);
 #endif
 
+  loh_evict_queue_try_insert_new_obj(params, obj);
+
   PERF_ACCUM(params, insert, ts_insert);
   return obj;
 }
@@ -8656,6 +9631,12 @@ static __uint128_t loh_rng_state = 0x12345678DEADBEEFULL;
 static inline uint64_t loh_fast_rand(void) {
   loh_rng_state *= 0xda942042e4dd58b5ULL;
   return (uint64_t)(loh_rng_state >> 64);
+}
+
+static inline void loh_fast_rand_seed(uint64_t seed) {
+  if (seed == 0) seed = 1;
+  loh_rng_state = ((__uint128_t)seed << 64) ^
+                  (uint64_t)(seed + 0x9e3779b97f4a7c15ULL);
 }
 
 // ——— 快速 log1p 近似（IEEE 754 位操作，用于评分热路径） ———
@@ -8675,14 +9656,54 @@ static inline double fast_log1p_approx(double x) {
 
 static cache_obj_t *LOH_to_evict(cache_t *cache, const request_t *req) {
   LOH_params_t *params = (LOH_params_t *)cache->eviction_params;
+  int guard_shadow_audit = 0;
+  obj_id_t guard_queued_obj_id = 0;
+  double guard_queued_score = DBL_MAX;
+  int guard_queued_source = -1;
 
   // ---- 批量淘汰快速路径：从预评分队列取对象 ----
-  // 队列已在 LOH_find 中按请求失效，此处无需 age/lac 检查
+  if (params->evict_pool_enable && params->evict_queue_len > 0) {
+    if (params->evict_queue_weight_epoch != params->weight_epoch) {
+      loh_evict_queue_clear(params);
+    } else if (params->batch_max_age > 0 &&
+               params->current_timestamp - params->evict_queue_fill_vtime >
+                   params->batch_max_age) {
+      loh_evict_queue_clear(params);
+    }
+  }
   while (params->evict_queue_pos < params->evict_queue_len) {
     int pos = params->evict_queue_pos++;
-    cache_obj_t *queued = params->evict_queue[pos];
+    if (!params->evict_queue_valid[pos]) {
+      if (loh_evict_pool_record_fast_invalid(params, "invalid")) break;
+      continue;
+    }
+    cache_obj_t *queued = params->evict_pool_enable
+                              ? hashtable_find_obj_id(
+                                    cache->hashtable,
+                                    params->evict_queue_obj_id[pos])
+                              : params->evict_queue[pos];
     if (queued != NULL) {
+      if (params->evict_pool_enable &&
+          (queued->LOH.last_access_counter != params->evict_queue_lac[pos] ||
+           queued->LOH.access_count != params->evict_queue_access_count[pos])) {
+        if (loh_evict_pool_record_fast_invalid(params, "stale")) break;
+        continue;
+      }
+      if (loh_evict_pool_guard_should_audit(params)) {
+        guard_shadow_audit = 1;
+        guard_queued_obj_id = params->evict_queue_obj_id[pos];
+        guard_queued_score = params->evict_queue_score[pos];
+        guard_queued_source = params->evict_queue_source[pos];
+        loh_evict_queue_clear(params);
+        break;
+      }
+      int source = params->evict_queue_source[pos];
+      loh_evict_queue_refill_from_source(params, source, queued);
+      loh_evict_pool_record_fast_hit(params, source);
+      loh_evict_pool_maybe_low_watermark_rebuild(params);
       return queued;
+    } else {
+      if (loh_evict_pool_record_fast_invalid(params, "null")) break;
     }
   }
 
@@ -10005,6 +11026,21 @@ scoring_done:  // ultra_fast 路径跳转到这里
       obj_to_evict ? (unsigned long long)obj_to_evict->obj_id : -1ULL,
       min_score);
 
+  if (params->evict_pool_enable && obj_to_evict != NULL &&
+      second_score < DBL_MAX && min_score < DBL_MAX) {
+    double margin = second_score - min_score;
+    if (margin >= 0.0) {
+      params->evict_pool_margin_sum += margin;
+      params->evict_pool_margin_samples++;
+    }
+  }
+
+  if (guard_shadow_audit) {
+    loh_evict_pool_guard_record(params, guard_queued_obj_id,
+                                guard_queued_score, guard_queued_source,
+                                obj_to_evict, min_score);
+  }
+
 #if LOH_DEBUG_LEVEL >= LOH_DEBUG_DETAILED
   // 验证选中的对象确实在候选集中
   bool found = false;
@@ -10306,6 +11342,7 @@ penalty_pair_done:
     params->evict_queue_len = 0;
     params->evict_queue_pos = 0;
     params->evict_queue_fill_vtime = params->current_timestamp;
+    params->evict_queue_weight_epoch = params->weight_epoch;
     // 标记已选的最差对象
     if (best_i >= 0 && best_i < cand_n) cand_scores[best_i] = DBL_MAX;
     const int fill_limit = params->batch_evict_size - 1;
@@ -10320,12 +11357,15 @@ penalty_pair_done:
       }
       if (qi >= 0 && qmin < DBL_MAX) {
         int idx = params->evict_queue_len;
-        params->evict_queue[idx] = params->candidates[qi];
-        params->evict_queue_lac[idx] =
-            params->candidates[qi]->LOH.last_access_counter;
+        loh_evict_queue_store(params, idx, params->candidates[qi], qmin,
+                              loh_cand_source[qi]);
         params->evict_queue_len++;
         cand_scores[qi] = DBL_MAX;  // 标记已取
       }
+    }
+    if (best_i >= 0 && best_i < cand_n) {
+      loh_evict_queue_refill_from_source(params, loh_cand_source[best_i],
+                                         obj_to_evict);
     }
   }
 
@@ -10445,8 +11485,13 @@ static bool LOH_remove(cache_t *cache, const obj_id_t obj_id) {
 
   // 清理批量淘汰队列中对该对象的引用（防止悬垂指针）
   for (int i = params->evict_queue_pos; i < params->evict_queue_len; i++) {
-    if (params->evict_queue[i] == obj) {
+    if (params->evict_queue[i] == obj ||
+        params->evict_queue_obj_id[i] == obj_id) {
       params->evict_queue[i] = NULL;
+      params->evict_queue_obj_id[i] = 0;
+      params->evict_queue_score[i] = DBL_MAX;
+      params->evict_queue_source[i] = -1;
+      params->evict_queue_valid[i] = 0;
     }
   }
 

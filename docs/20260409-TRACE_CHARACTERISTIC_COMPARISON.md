@@ -499,11 +499,14 @@ CMA-ES 优化器有两个正交配置项，共四种组合：
 - **为何 LFU 明显优于 LRU/SIZE**：
 	- 稳定 Zipf 分布使高频对象的长期访问频率远高于低频对象，LFU 通过维护精确频率计数保留高价值对象。
 	- LRU 只感知最近一次访问时间，i.i.d. 访问下近期命中与未来命中无相关性，性能接近随机替换。
-	- SIZE 在所有对象等大时退化为 LRU（命中时 `pqueue_change_priority(same_size, same_size)` 触发 `percolate_down`，使命中节点沉底，行为等价于 LRU）。
+	- SIZE 在所有对象等大时**不退化为 LRU**（详见 §13.3）：命中时 `pqueue_change_priority(S, S)` 调用 `percolate_down` 但条件不满足，节点原地不动，驱逐顺序是混合 FIFO+LIFO，对 recency 完全盲。
 - **为何 LOH 进一步优于 LFU**：
 	- LOH 是 LFU 的严格超集：当 CMA-ES 将频率维度权重调大、其余维度权重归零时，LOH 等价于 LFU。
 	- CMA-ES 可在 LFU 基础上继续优化权重组合（如复合特征 freq×size），进一步降低 miss ratio。
 	- 数学上，在任意 i.i.d. 稳态 trace 上，LOH ≥ LFU 是必然成立的。
+- **为何 SIZE 在 lfutest2（等大对象）上与 LRU 表现相近**：
+	- 此处原文曾称"SIZE 退化为 LRU"，该说法**不准确**。详见 §13.3 对 pqueue 实现的完整分析。
+	- 正确解释：SIZE 在等大对象时命中不更新 pqueue 位置（`pqueue_change_priority(S, S)` → `percolate_down` 不动），驱逐顺序是混合 FIFO+LIFO，对 recency 完全"盲"。在 i.i.d. trace 上，LRU/FIFO/LIFO 表现相近（无 recency 可利用），故 SIZE ≈ LRU 是巧合而非机制等价。
 - **实测效果**：LRU=0.2630，SIZE=0.2639，LFU=0.2149，LOH=0.2121（LFU 比 LRU 低约 0.048，LOH 比 LFU 再低约 0.003）。
 
 #### 3. `sizetest_10m.csv` — 大小主导（两层极端大小分布）
@@ -608,3 +611,330 @@ CMA-ES 优化器有两个正交配置项，共四种组合：
 - 若目标是稳定获得较优 LOH 权重，当前应优先采用 **CMA-ES**。
 - 若继续推进 DRL，需要先在 recencytest 上做针对性训练配置修复，再考虑迁移到真实 trace。
 - 对于权重可解释性分析，应将“MR 收敛”和“权重向量收敛”分离评估：在 lfutest2/sizetest 上，前者已稳定，但后者仍可多解。
+
+## 13. 2026-05-08 三条核心合成 Trace 与四算法对比
+
+### 13.1 文件位置
+
+三条 trace 与对应生成脚本统一放置在 `traces/synth_three_core/`：
+
+```
+traces/synth_three_core/
+├── gen_lfu_zipf_heavy.py          # lfu_zipf_heavy 生成脚本（纯 Zipf，alpha=1.5，无 anti-recency disturbance）
+├── gen_size_twotier_extreme.py    # → symlink → scripts/gen_size_trace_twotier_extreme.py
+├── gen_lru_fast.py                # → symlink → tmp/20260508-lrutest-version-batch/generators/gen_lrutest_10m_fast.py
+├── lfu_zipf_heavy_10m.csv         # 最终版（a=1.5，10M 行，实体文件）
+├── size_twotier_extreme_10m.csv   # → symlink → tmp/20260508-synth-lfu-size-4x4-rerun/traces/
+└── lru_fast_10m.csv               # → symlink → tmp/20260508-lrutest-version-batch/traces/gen_lrutest_10m_fast/
+```
+
+重测脚本：`tmp/20260508-three-core-retest/run.sh`（3 trace × 4 algo = 12 个并行 job）
+重测日志：`tmp/20260508-three-core-retest/logs/<trace_name>_<algo>.log`
+重测结果：`tmp/20260508-three-core-retest/results.tsv`
+
+### 13.2 三条 Trace 的详细生成逻辑
+
+#### 13.2.1 `lfu_zipf_heavy_10m.csv` — LFU 侧重（纯 Zipf，无 anti-recency disturbance）
+
+**生成脚本**：`traces/synth_three_core/gen_lfu_zipf_heavy.py`
+
+**固定参数**：
+- `N_REQUESTS = 10_000_000`（总请求数）
+- `N_OBJECTS = 100_000`（全对象池大小）
+- `BATCH = 500_000`（批次写出大小）
+- `OBJ_SIZE = 10_000`（全部对象等大，消除 size 信号）
+- `SEED = 42`
+
+**运行时参数**（命令行传入）：
+- `ZIPF_ALPHA = 1.50`（本 trace 文件使用 `python3 gen_lfu_zipf_heavy.py lfu_zipf_heavy_10m.csv 1.5` 生成；脚本默认值为 1.30，α 越大头部越集中）
+
+**采样逻辑（i.i.d. 纯 Zipf）**：
+
+1. 在全对象池 `N_OBJECTS=100000` 上构建 Zipf 概率分布（`alpha=1.50`）。
+2. 每次请求独立按该 Zipf 分布采样对象 ID（无热点窗口、无冷扫描、无阶段切换）。
+3. 批量写出 `time,obj_id,obj_size,0`。
+
+**为何 LFU/LOH 显著优于 LRU/Size**：
+- LFU 直接利用稳定频率排序，保留高频对象。
+- LRU 只能利用 recency，而 i.i.d. Zipf 场景下 recency 信号弱于频率信号。
+- Size（等大对象，行为见 §13.3）不携带频率信息，通常不如 LFU。
+- LOH 通过权重自适应结合频率特征，通常略优于纯 LFU。
+
+---
+
+#### 13.2.2 `size_twotier_extreme_10m.csv` — Size 侧重（极端双层大小分布）
+
+**生成脚本**：`traces/synth_three_core/gen_size_twotier_extreme.py`
+
+**固定参数**：
+- `N_REQUESTS = 10_000_000`（总请求数）
+- `N_SMALL = 99_000`（小对象数），`SIZE_SMALL = 64`（字节）
+- `N_LARGE = 1_000`（大对象数），`SIZE_LARGE = 16_777_216`（= 16MB）
+- 全对象池：`100_000` 个对象，均匀随机访问（无频率偏斜、无时序局部性）
+
+**采样逻辑**：
+1. 全对象池（ID 0..99999）中均匀随机采样，每次请求独立 i.i.d.。
+2. 对象按 ID 分层：ID 0..98999 → 64B；ID 99000..99999 → 16MB。
+3. 每次访问按对象 ID 查表得 `obj_size`，写入 CSV 行 `time,obj_id,obj_size,0`。
+
+**大小失衡**：1 个大对象（16MB）= 262144 个小对象（64B）的空间。缓存容量 `0.1 × (99K×64 + 1K×16M) ≈ 0.1 × 16.006GB ≈ 1.6GB ≈ 100 个大对象 OR 25M 个小对象`。
+
+**为何 Size/LOH 显著优于 LRU/LFU**：
+- Size 驱逐最大对象（16MB），优先保留小对象（64B）。99K 个小对象全部命中，miss 只来自 1K 个大对象（均被驱逐，访问占比 ~1%）→ 对象 MR ≈ 0.019。
+- LRU/LFU 不感知大小，大对象和小对象等价对待。单个 16MB 大对象进入缓存会驱逐 262144 个小对象（64B），造成大量小对象 miss → 对象 MR ≈ 0.85−0.90。
+- LOH：CMA-ES 自适应提高 size 相关权重，与 Size 几乎等价（MR ≈ 0.019）。
+
+---
+
+#### 13.2.3 `lru_fast_10m.csv` — LRU 侧重（滑动热点窗口 + 衰减采样）
+
+**生成脚本**：`traces/synth_three_core/gen_lru_fast.py`
+
+**固定参数**：
+- `NUM_REQ = 10_000_000`（总请求数）
+- `MAX_OBJECTS = 100_000`（全对象池）
+- `FIXED_SIZE = 10_000`（全部对象等大）
+- `WINDOW_SIZE = 5_000`（热点滑动窗口大小）
+- `REACCESS_PROB = 0.95`（重访概率）
+- `DECAY = 0.002`（衰减系数，控制窗口内的 recency 偏向强度）
+
+**采样逻辑**：
+1. 维护大小为 `WINDOW_SIZE=5000` 的 ring buffer（记录最近活跃对象）。
+2. 每次请求：
+   - 以概率 `1 - REACCESS_PROB = 0.05` 创建新对象（从全池新 ID），加入窗口（FIFO 替换最旧对象）。
+   - 以概率 `REACCESS_PROB = 0.95` 从窗口中按衰减权重采样：权重 $w_i = (1-\text{DECAY})^i$（$i=0$ = 最近的对象），偏向访问最近进入窗口的对象。
+3. 命中对象移到窗口末尾（"最近"位置），维护窗口内 recency 排序。
+
+**缓存容量分析**（`cache size = 0.1`）：
+- 总对象约 `10M × 0.05 = 500K` 次新对象创建（但上限 `MAX_OBJECTS=100K`），实际最多 100K 对象。
+- 缓存可容 `0.1 × 100K × 10KB = 100MB / 10KB = 10K` 对象。
+- 热窗口 5K < 缓存容量 10K，因此 LRU 完全可以缓存整个热窗口 → MR ≈ 0.01（只有新对象第一次访问会 miss）。
+
+**为何 LRU 显著优于 LFU/Size**：
+- LRU 完全覆盖热窗口（5K 对象 < 缓存 10K），所有重访均命中 → MR ≈ 0.01。
+- LFU：访问频率随 recency 衰减权重分布，但 LFU 无法感知"窗口滑动"——当热窗口前移时，旧热对象频率仍高，LFU 保留已过期的热对象，新窗口对象得不到缓存。
+- Size：等大对象下的特殊退化行为（见 §13.3），实测 MR ≈ 0.976，与 LFU 同样糟糕。
+- LOH：CMA-ES 将 recency 权重调高，接近 LRU 行为，MR ≈ 0.015。
+
+### 13.3 SIZE 算法在等大对象时的退化行为修正
+
+文档第 11.2.2 节声称"SIZE 在所有对象等大时退化为 LRU"，这一说法**不准确**。以下基于 Size.c 和 pqueue.c 实现给出正确解释。
+
+#### 13.3.1 pqueue 的比较函数
+
+`libCacheSim/dataStructure/pqueue.h` 中 `cmp_pri` 的定义为：
+
+```c
+static inline int cmp_pri(pqueue_pri_t next, pqueue_pri_t curr) {
+  return (next.pri < curr.pri);  // MAX-heap：size 越大，越优先被驱逐
+}
+```
+
+这是一个 **MAX-heap（最大堆）**，`pqueue_pop` 返回 size **最大**的对象（优先驱逐大对象）。
+
+#### 13.3.2 等大时的 hit 行为
+
+在 `Size_find`（命中时调用）中：
+
+```c
+pqueue_pri_t pri = {.pri = req->obj_size};
+pqueue_change_priority(params->pq, pri, (pq_node_t *)(cached_obj->Size.pq_node));
+```
+
+`pqueue_change_priority` 的逻辑：
+
+```c
+void pqueue_change_priority(pqueue_t *q, pqueue_pri_t new_pri, void *d) {
+  pqueue_pri_t old_pri = q->getpri(d);
+  q->setpri(d, new_pri);
+  posn = q->getpos(d);
+  if (q->cmppri(old_pri, new_pri))  // old < new → 优先级升高 → bubble_up
+    bubble_up(q, posn);
+  else                               // old >= new → percolate_down
+    percolate_down(q, posn);
+}
+```
+
+当 `old_size == new_size`（等大对象）：
+- `cmppri(old, new)` = `(S < S)` = `false` → 调用 `percolate_down`
+- `percolate_down` 的循环条件：`cmppri(moving_pri, child_pri)` = `(S < S)` = `false` → **循环不执行，节点不移动**
+
+**结论：命中时 pqueue 节点原地不动。** 与 LRU 的"命中即移到最近端"完全不同。
+
+#### 13.3.3 insert 行为
+
+`pqueue_insert` 后调用 `bubble_up`，条件是 `cmppri(parent_pri, moving_pri)` = `(parent_size < new_size)` = `(S < S)` = `false` → **新对象留在堆末尾**。
+
+#### 13.3.4 实际驱逐顺序（等大对象）
+
+设依次插入 A、B、C、D：
+
+1. 堆内存数组（1-indexed）：`[A, B, C, D]`（均无 bubble_up）
+2. 第 1 次驱逐：`pqueue_pop` 取根 `A`（最先插入的对象），将最后节点 `D` 移到根，`percolate_down` 不动 → 堆 `[D, B, C]`
+3. 第 2 次驱逐：取根 `D`（最后插入的对象），将 `C` 移到根 → 堆 `[C, B]`
+4. 第 3 次驱逐：`C` → 堆 `[B]`
+5. 第 4 次驱逐：`B`
+
+驱逐序为 **A（最老），D（最新），C，B**——第 1 次是 FIFO（最老先驱逐），之后是 **LIFO**（最新先驱逐），本质上是一种"混合 FIFO+LIFO"，与 LRU 完全不同。
+
+**命中不更新位置**，所以等大时 SIZE 对 recency 信号完全"盲"——既不像 LRU 那样保护最近命中的对象，也不像 FIFO 那样以固定插入顺序驱逐。
+
+#### 13.3.5 为何 lfutest 上 SIZE ≈ LRU、lrutest 上 SIZE ≠ LRU
+
+| Trace | 访问模式 | LRU | SIZE（等大时） | 原因 |
+|---|---|---|---|---|
+| lfutest2（i.i.d. Zipf） | 无时序局部性 | MR≈0.263 | MR≈0.264 | 无 recency 可用，FIFO/LIFO/LRU 在 i.i.d. trace 上表现相近 |
+| lru_fast（滑动窗口） | 强 recency | MR≈0.010 | MR≈0.976 | LRU 精确捕捉窗口滑动；SIZE 不更新命中位置 → 持续驱逐当前热对象 |
+
+**正确结论**：SIZE 在等大对象时既不退化为 LRU，也不退化为 FIFO，而是一种**命中不更新位置的 FIFO-then-LIFO 混合驱逐**。在 i.i.d. trace 上，这与 LRU/FIFO 表现相近（碰巧）；在 recency 主导的 trace 上，这与 LRU 完全背离，表现极差。
+
+### 13.4 四算法对比结果汇总（cache size = 0.1）
+
+#### 13.4.1 最终版（仅保留 LFU-B / `alpha=1.5`）
+
+本章按你的要求只保留最终口径：`lfu_zipf_heavy` 使用纯 Zipf、无冷扫描、`ZIPF_ALPHA=1.5`（LFU-B 最终版）。
+
+- 统一 trace 目录：`traces/synth_three_core/`
+- 最终 lfu 文件：`traces/synth_three_core/lfu_zipf_heavy_10m.csv`（纯 Zipf，alpha=1.5，无 anti-recency disturbance，10M 行）
+- 生成日志：`tmp/20260508-three-core-retest-a1p5/logs/gen_lfu_a1p5.log`
+- 并行重测结果：`tmp/20260508-retest-verify/logs/`（2026-05-08 重测，全部 12 job 完成）
+
+对象 Miss Ratio 与字节 Miss Ratio（MR / BMR，cache size = 0.1）：
+
+| trace | LRU MR/BMR | LFU MR/BMR | Size MR/BMR | LOH MR/BMR | 最优 |
+|---|---:|---:|---:|---:|---|
+| lfu_zipf_heavy（noscan, a=1.5） | 0.014203 / 0.014203 | 0.011034 / 0.011034 | 0.027647 / 0.027647 | **0.010984** / 0.010984 | LOH |
+| size_twotier_extreme | 0.899621 / 0.901281 | 0.848954 / 0.899981 | **0.018876** / 0.898582 | 0.018954 / 0.900454 | Size |
+| lru_fast | **0.010000** / 0.010000 | 0.977338 / 0.977338 | 0.976229 / 0.976229 | 0.012664 / 0.012664 | LRU |
+
+结论：最终 LFU-B 版本下，`lfu_zipf_heavy` 仍保持 `LOH < LFU < LRU < Size`；三条 trace 的最优策略分别是 `LOH`（lfu_zipf_heavy）、`Size`（size_twotier_extreme）、`LRU`（lru_fast）。LRU/LFU/Size 结果与历史完全一致；LOH（CMA-ES）因随机性存在 run-to-run 微小波动（约 ±0.001），排序不变。
+
+## 14. 最终三张 Trace 特征图
+
+本节记录最终用于解释 LRU、LFU、SIZE 三类单维策略的 trace 特征图。最终图不再使用 `wiki_2019t`，而是使用三条 oriented synthetic trace 与两条真实 trace 的对应子集：
+
+- `Recency-oriented trace`：`lru_fast_10m.csv`，用于展示 LRU 友好的短 stack-distance 结构。
+- `Frequency-oriented trace`：`lfu_zipf_heavy_10m.csv`，用于展示 LFU 友好的稳定频率结构。
+- `Size-oriented trace`：`size_twotier_extreme_10m.csv`，用于展示 SIZE 友好的极端对象大小结构。
+- `Trace A`：`meta_reag`，真实 trace，size 长尾和复杂复合特征明显。
+- `Trace B`：`tencentBlock_1063`，真实 trace，短期局部性与频率/大小结构共同存在。
+
+### 14.1 图与脚本位置
+
+统一绘图脚本：`tmp/20260510-final-feature-figures/make_final_feature_figures.py`
+
+脚本已经拆成两部分：
+
+- 数据准备阶段：解析 trace 或 analyzer 输出，写入 `tmp/20260510-final-feature-figures/data/*.npz`。
+- 绘图阶段：只读取 `.npz` 缓存或脚本内 MR 表，生成 PNG/PDF。后续只调字体、legend、inset、箭头时只需运行绘图阶段。
+
+常用命令：
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" python3 tmp/20260510-final-feature-figures/make_final_feature_figures.py --stage all --figure all
+PATH="$PWD/.venv/bin:$PATH" python3 tmp/20260510-final-feature-figures/make_final_feature_figures.py --stage plot --figure all
+```
+
+三张特征图位置：
+
+| 图 | PNG | PDF | 含义 |
+|---|---|---|---|
+| LRU/object-stack distance CDF | `tmp/20260510-final-feature-figures/figures/lru_stackdist_cdf_with_cold_final_3traces.png` | `tmp/20260510-final-feature-figures/figures/lru_stackdist_cdf_with_cold_final_3traces.pdf` | 含 cold request 的 normalized object-stack re-access distance CDF |
+| LFU/frequency stability | `tmp/20260510-final-feature-figures/figures/freq_stability_overlap_final_3traces_10m.png` | `tmp/20260510-final-feature-figures/figures/freq_stability_overlap_final_3traces_10m.pdf` | 相邻时间窗口 Top-K 高频对象集合的 overlap ratio |
+| SIZE/object-size CDF | `tmp/20260510-final-feature-figures/figures/size_cdf_final_3traces_logx.png` | `tmp/20260510-final-feature-figures/figures/size_cdf_final_3traces_logx.pdf` | 对象大小按对象数统计的 CDF，横轴为 log-scale Byte |
+
+### 14.2 LRU 图：Object-Stack Re-access Distance CDF
+
+LRU 图刻画的是 object-stack re-access distance 分布。横轴是 normalized object-stack re-access distance，即两次访问同一对象之间出现过多少不同对象，再除以对象 footprint；纵轴是累计比例。这个量比 request-count re-access time 更贴近 object-capacity LRU：如果对象再次访问前只经过很少不同对象，它更可能仍留在 LRU 缓存中。图中将 cold/first-object request 作为 x=1 处的最终跳变纳入 CDF，因此曲线右端一定到 1。
+
+`Recency-oriented trace` 的曲线在很小的 normalized distance 处快速上升，表示重访对象大多仍处于 LRU 栈前部。这对应 §13.4.1 中 LRU MR=0.010000，为三种固定策略中最低；LFU MR=0.977338、SIZE MR=0.976229 接近失效，因为它们不能识别滑动热点窗口和命中后位置更新。
+
+`Trace A` 的曲线包含更明显的长尾和 cold 质量，说明很多请求无法被短 stack-distance 单独解释。对应 §7 中 LRU MR=0.3268，优于 LFU MR=0.4650，但略差于 SIZE MR=0.3089。这说明 Trace A 中 recency 有帮助，但不是唯一主导信号。
+
+`Trace B` 的短距离重访结构更强，LRU MR=0.2618，明显优于 LFU MR=0.6201 和 SIZE MR=0.4802。该图解释了为什么 Trace B 上 LRU 比长期频率或对象大小更合理：命中机会更多来自近期访问过且仍在栈前部的对象。
+
+### 14.3 LFU 图：Frequency Stability
+
+LFU 图刻画的是高频对象集合的稳定性。横轴是时间窗口，纵轴是相邻窗口中 Top-256 高频对象集合的 overlap ratio。该值越高，说明高频对象集合越稳定；LFU 越容易用长期频率计数保留未来仍会被访问的对象。该图比单纯的 Zipf 曲线更贴近 LFU 的核心假设：不仅要有频率偏斜，还要有稳定的高频集合。
+
+`Frequency-oriented trace` 的曲线长期保持高 overlap，说明高频对象集合稳定，LFU 的频率计数不会被时间漂移破坏。这对应 §13.4.1 中 LFU MR=0.011034，为三种固定策略中最低；LRU MR=0.014203、SIZE MR=0.027647 均更高，因为 recency 和 size 都不是该 trace 的主导信号。
+
+`Trace A` 的 overlap 明显低于 oriented synthetic trace，说明高频集合不够稳定，单纯 LFU 会保留一批历史高频但未来价值下降的对象。对应 §7 中 Trace A 的 LFU MR=0.4650，高于 LRU MR=0.3268 和 SIZE MR=0.3089。
+
+`Trace B` 的 overlap 处于中间水平，但单纯 LFU 仍然很差：§7 中 LFU MR=0.6201，高于 LRU MR=0.2618 和 SIZE MR=0.4802。这说明 Trace B 的命中机会不能只靠长期频率解释，短期局部性比长期高频集合更关键。
+
+### 14.4 SIZE 图：Object-Size CDF 与对象大小区分度
+
+SIZE 图刻画的是对象大小的区分度。横轴是对象大小（Byte，log-scale），纵轴是按对象数统计的累计比例。曲线越陡、台阶越明显，说明对象大小越集中在少数离散层；如果大量请求对象都很小而少数对象巨大，则 SIZE 策略可以通过驱逐大对象，把缓存空间留给更多小对象，从而显著降低对象 MR。
+
+`Size-oriented trace` 的主图显示绝大多数对象是小对象，右上角 inset 放大了尾部从 0.99 到 1.0 的跳变，表示最后约 1% 对象是巨大对象。这对应 §13.4.1 中 SIZE MR=0.018876，为三种固定策略中最低；LRU MR=0.899621、LFU MR=0.848954 都很高，因为它们不直接感知对象大小，无法稳定驱逐巨大对象。
+
+`Trace A` 的 size CDF 横跨多个数量级，说明 size 维度是真实有效信号，但曲线没有退化成 synthetic trace 的两层结构。对应 §7 中 SIZE MR=0.3089，略优于 LRU MR=0.3268，并明显优于 LFU MR=0.4650，说明对象大小在 Trace A 上有区分力。
+
+`Trace B` 的对象大小分布更温和，缺少 `Size-oriented trace` 那种清晰两层结构。对应 §7 中 SIZE MR=0.4802，差于 LRU MR=0.2618，但优于 LFU MR=0.6201。这说明 Trace B 中对象大小不是主导排序信号，按大小驱逐会牺牲不少具有短期重用价值的对象。
+
+### 14.5 RSD 在各 trace 上的表现与原因
+
+前三张图分别解释 LRU、LFU、SIZE 三个单维专家策略的适用条件：短 re-access distance、高频集合稳定、对象大小区分度强。RSD 的优势不在于固定选择某一个单维规则，而在于根据 trace 结构组合这些信号。
+
+在三条 oriented synthetic trace 上，RSD 能接近对应专家策略：`Frequency-oriented trace` 上 RSD MR=0.010984，略低于 LFU MR=0.011034；`Size-oriented trace` 上 RSD MR=0.018954，与 SIZE MR=0.018876 基本并列；`Recency-oriented trace` 上 RSD MR=0.012664，接近 LRU MR=0.010000。说明当单一维度非常明确时，RSD 不会明显偏离正确主导信号。
+
+在 `Trace A` 上，三张特征图共同显示它不是单维 trace：size 有区分力，recency 也有贡献，frequency 单独较弱。对应 §7 中 RSD MR=0.2707，低于 SIZE MR=0.3089、LRU MR=0.3268 和 LFU MR=0.4650，优势来自多维排序信号的联合使用。
+
+在 `Trace B` 上，LRU 图显示短期局部性强，但 LFU 和 SIZE 图也说明频率与对象大小不能单独解释全部行为。对应 §7 中 RSD MR=0.0350，显著低于 LRU MR=0.2618、SIZE MR=0.4802 和 LFU MR=0.6201，说明 RSD 能把近期重访、频率、大小及复合特征组合成更稳定的驱逐顺序。
+
+## 15. 五条 Trace 上四算法 MR 对比图
+
+本节新增一张横轴为三条 oriented synthetic trace 与两条真实 trace、纵轴为对象 MR 的对比图。图中 `RSD` 对应本文前文的 `LOH(CMA-ES)` 结果；命名为 RSD 是为了在最终图中突出它作为自适应综合排序策略，而不是单一 LRU/LFU/SIZE 专家策略。
+
+图位置：
+
+- PNG: `tmp/20260510-final-feature-figures/figures/mr_comparison_5traces.png`
+- PDF: `tmp/20260510-final-feature-figures/figures/mr_comparison_5traces.pdf`
+- 算法横轴折线图 PNG: `tmp/20260510-final-feature-figures/figures/mr_algorithm_trace_lines_5traces.png`
+- 算法横轴折线图 PDF: `tmp/20260510-final-feature-figures/figures/mr_algorithm_trace_lines_5traces.pdf`
+- Oriented algorithm 三联折线图 PNG: `tmp/20260510-final-feature-figures/figures/mr_oriented_algorithm_stack_3panels.png`
+- Oriented algorithm 三联折线图 PDF: `tmp/20260510-final-feature-figures/figures/mr_oriented_algorithm_stack_3panels.pdf`
+
+数据来源：
+
+- 三条 oriented synthetic trace 的 MR 来自 §13.4.1。
+- 两条真实 trace 的 MR 来自 §7，其中 `Trace A = meta_reag`，`Trace B = 1063`。
+- `wiki_2019t` 不纳入该最终图，保持与三张最终特征图一致。
+
+MR 数据表如下：
+
+| Trace | LRU MR | LFU MR | SIZE MR | RSD MR |
+|---|---:|---:|---:|---:|
+| Frequency-oriented trace | 0.014203 | 0.011034 | 0.027647 | 0.010984 |
+| Size-oriented trace | 0.899621 | 0.848954 | 0.018876 | 0.018954 |
+| Recency-oriented trace | 0.010000 | 0.977338 | 0.976229 | 0.012664 |
+| Trace A | 0.3268 | 0.4650 | 0.3089 | 0.2707 |
+| Trace B | 0.2618 | 0.6201 | 0.4802 | 0.0350 |
+
+这张 MR 图与前三张特征图的对应关系如下：
+
+1. 在 `Frequency-oriented trace` 上，frequency stability 图显示高频集合稳定，因此 LFU 已接近最优；RSD 略低于 LFU，说明它能退化到 frequency 主导排序并做轻微修正。
+2. 在 `Size-oriented trace` 上，size CDF 显示 99% 小对象 + 1% 巨大对象的极端两层结构，因此 SIZE 和 RSD 并列最优，LRU/LFU 因不感知对象大小而高 MR。
+3. 在 `Recency-oriented trace` 上，stack-distance CDF 显示绝大多数重访距离很短，因此 LRU 最优，RSD 接近 LRU；LFU/SIZE 不利用命中后位置更新，MR 接近 1。
+4. 在 `Trace A` 上，三张特征图都没有显示单一维度能完全解释该 trace；size 有帮助、recency 也有帮助，frequency 单独较弱。因此 RSD 综合排序最低，SIZE 次之，LRU 再次，LFU 最差。
+5. 在 `Trace B` 上，LRU 特征比 LFU/SIZE 更有效，但 RSD 远优于所有固定策略，说明 Trace B 的真实可缓存性来自多维复合，而不是某一个单维专家策略。
+
+总体结论：三条 oriented synthetic trace 用来证明单维特征图能解释对应专家策略为何有效；两条真实 trace 则说明生产负载通常不是单维问题。RSD/LOH-CMAES 的优势正来自它能在不同 trace 上自动调整排序维度，而固定 LRU/LFU/SIZE 只能在其假设刚好成立时表现最优。
+
+算法横轴折线图使用同一份 MR 数据，但横轴改为 `LRU`、`LFU`、`SIZE`、`RSD`，纵轴使用以 10 为底的 log-scale MR。为避免把 synthetic trace 上不相关的固定策略结果混在同一视觉比较中，折线图采用选择性绘制规则：
+
+- `RSD` 位置绘制全部五条 trace，因为 RSD 是统一自适应策略，需要横向比较所有 trace。
+- `LRU` 位置只绘制 `Recency-oriented trace`、`Trace A`、`Trace B`。
+- `LFU` 位置只绘制 `Frequency-oriented trace`、`Trace A`、`Trace B`。
+- `SIZE` 位置只绘制 `Size-oriented trace`、`Trace A`、`Trace B`。
+
+因此三条 oriented synthetic trace 的线段表达“对应专家策略 vs RSD”的差距；两条真实 trace 的线段完整跨过 LRU/LFU/SIZE/RSD，表达固定专家策略与自适应 RSD 在真实负载上的差异。
+
+Oriented algorithm 三联折线图进一步把三个单维专家策略分开展示：三张子图上下堆叠，纵轴共用标题 `Object Miss Ratio`，但每个子图使用独立的横轴刻度和纵轴刻度。三张子图分别为：
+
+- `Recency-oriented`：横轴为 `Recency-oriented trace`、`Trace A`、`Trace B`，比较 LRU 与 RSD 的 MR。
+- `Frequency-oriented`：横轴为 `Frequency-oriented trace`、`Trace A`、`Trace B`，比较 LFU 与 RSD 的 MR。
+- `Size-oriented`：横轴为 `Size-oriented trace`、`Trace A`、`Trace B`，比较 MSU 与 RSD 的 MR。
+
+这张三联图强调每个单维专家策略在自身 synthetic trace 上为何接近最优，同时展示同一专家策略迁移到真实 trace 后与 RSD 的差距。

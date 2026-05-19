@@ -25,3 +25,88 @@ data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-OMR cache size     7GiB,          
 data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-OMR cache size     7GiB,          3000000 req, miss ratio 0.354900, byte miss ratio 0.834167, throughput 0.01 MQPS
 data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-BMR cache size     7GiB,          3000000 req, miss ratio 0.349572, byte miss ratio 0.822682, throughput 0.02 MQPS
 data/WikiCDN/wiki_2016u.oracleGeneral.zst LOH-BMR cache size     7GiB,          3000000 req, miss ratio 0.354875, byte miss ratio 0.834181, throughput 0.01 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.023403, byte miss ratio 0.209933, throughput 1.12 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    16GiB,         10000000 req, miss ratio 0.231585, byte miss ratio 0.725214, throughput 0.54 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.024400, byte miss ratio 0.215438, throughput 1.18 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.029329, byte miss ratio 0.228184, throughput 1.08 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.024385, byte miss ratio 0.215317, throughput 1.28 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.029266, byte miss ratio 0.228504, throughput 1.20 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.024461, byte miss ratio 0.255387, throughput 1.11 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.023447, byte miss ratio 0.239241, throughput 1.12 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.026374, byte miss ratio 0.218557, throughput 1.11 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.025592, byte miss ratio 0.198361, throughput 0.85 MQPS, runtime 3311.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.023395, byte miss ratio 0.209865, throughput 0.76 MQPS, runtime 3678.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.025962, byte miss ratio 0.193431, throughput 0.73 MQPS, runtime 3824.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.023070, byte miss ratio 0.222595, throughput 0.72 MQPS, runtime 3878.1 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size   787KiB,             1000 req, miss ratio 0.931000, byte miss ratio 0.996994, throughput 1.72 MQPS, runtime 0.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size   787KiB,             1000 req, miss ratio 0.931000, byte miss ratio 0.996994, throughput 1.67 MQPS, runtime 0.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size    29MiB,            10000 req, miss ratio 0.755300, byte miss ratio 0.981520, throughput 2.40 MQPS, runtime 0.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size    29MiB,            10000 req, miss ratio 0.755300, byte miss ratio 0.981520, throughput 1.65 MQPS, runtime 0.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.024458, byte miss ratio 0.218579, throughput 0.27 MQPS, runtime 10287.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.024281, byte miss ratio 0.203407, throughput 1.00 MQPS, runtime 2814.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.024280, byte miss ratio 0.203400, throughput 1.04 MQPS, runtime 2683.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    82GiB,        100000000 req, miss ratio 0.094126, byte miss ratio 0.491097, throughput 0.87 MQPS, runtime 115.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.234566, byte miss ratio 0.780551, throughput 0.20 MQPS, runtime 14305.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.234188, byte miss ratio 0.794350, throughput 0.19 MQPS, runtime 14857.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.258163, byte miss ratio 0.757485, throughput 0.16 MQPS, runtime 17127.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.257403, byte miss ratio 0.757548, throughput 0.16 MQPS, runtime 17144.1 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.230074, byte miss ratio 0.782762, throughput 0.14 MQPS, runtime 19369.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.236268, byte miss ratio 0.768904, throughput 0.16 MQPS, runtime 17208.9 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.239430, byte miss ratio 0.770712, throughput 0.16 MQPS, runtime 17752.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.233772, byte miss ratio 0.775067, throughput 0.16 MQPS, runtime 17035.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.240168, byte miss ratio 0.769790, throughput 0.16 MQPS, runtime 17059.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.234537, byte miss ratio 0.780619, throughput 0.16 MQPS, runtime 17114.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.257549, byte miss ratio 0.757858, throughput 0.16 MQPS, runtime 17223.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.236358, byte miss ratio 0.768839, throughput 0.16 MQPS, runtime 17290.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.233809, byte miss ratio 0.794364, throughput 0.16 MQPS, runtime 17447.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.226149, byte miss ratio 0.789042, throughput 0.16 MQPS, runtime 17774.1 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.229974, byte miss ratio 0.782851, throughput 0.15 MQPS, runtime 18969.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.322532, byte miss ratio 0.737915, throughput 0.13 MQPS, runtime 22101.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-OMR cache size   538GiB,       2803498585 req, miss ratio 0.024020, byte miss ratio 0.227980, throughput 0.41 MQPS, runtime 6850.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-OMR cache size     5GiB,       2803498585 req, miss ratio 0.211112, byte miss ratio 0.780715, throughput 0.55 MQPS, runtime 5059.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.275531, byte miss ratio 0.754102, throughput 0.19 MQPS, runtime 15062.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.238663, byte miss ratio 0.772832, throughput 0.19 MQPS, runtime 15115.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.247744, byte miss ratio 0.760506, throughput 0.17 MQPS, runtime 16341.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.281221, byte miss ratio 0.782998, throughput 0.17 MQPS, runtime 16412.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.257703, byte miss ratio 0.758962, throughput 0.16 MQPS, runtime 17389.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.266149, byte miss ratio 0.750649, throughput 0.16 MQPS, runtime 17466.1 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.352448, byte miss ratio 0.767408, throughput 0.12 MQPS, runtime 24171.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.102721, byte miss ratio 0.493778, throughput 0.28 MQPS, runtime 9983.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.082110, byte miss ratio 0.531867, throughput 0.50 MQPS, runtime 5611.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.095043, byte miss ratio 0.512406, throughput 0.48 MQPS, runtime 5798.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.091909, byte miss ratio 0.535665, throughput 0.48 MQPS, runtime 5810.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.089122, byte miss ratio 0.574072, throughput 0.47 MQPS, runtime 5923.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.091570, byte miss ratio 0.512954, throughput 0.47 MQPS, runtime 6026.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.094149, byte miss ratio 0.516143, throughput 0.46 MQPS, runtime 6057.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.101419, byte miss ratio 0.498924, throughput 0.46 MQPS, runtime 6092.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size    54GiB,       2803498585 req, miss ratio 0.145153, byte miss ratio 0.471650, throughput 0.33 MQPS, runtime 8523.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LRU cache size    27MiB,           100000 req, miss ratio 0.8741, byte miss ratio 0.9893, throughput 5.25 MQPS
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LRU cache size    54GiB,       2803498585 req, miss ratio 0.235907, byte miss ratio 0.591418, throughput 1.02 MQPS, runtime 2745.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ARC cache size    54GiB,       2803498585 req, miss ratio 0.164960, byte miss ratio 0.498566, throughput 1.03 MQPS, runtime 2714.1 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst Sieve cache size    54GiB,       2803498585 req, miss ratio 0.151234, byte miss ratio 0.479547, throughput 1.01 MQPS, runtime 2785.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LeCaR cache size    54GiB,       2803498585 req, miss ratio 0.189176, byte miss ratio 0.533236, throughput 1.01 MQPS, runtime 2785.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst GLCache cache size    54GiB,       2803498585 req, miss ratio 0.102299, byte miss ratio 0.640177, throughput 1.01 MQPS, runtime 2774.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst S3FIFO-0.1000-2 cache size    54GiB,       2803498585 req, miss ratio 0.158596, byte miss ratio 0.489033, throughput 1.02 MQPS, runtime 2760.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst Cacheus cache size    54GiB,       2803498585 req, miss ratio 0.195003, byte miss ratio 0.539955, throughput 0.50 MQPS, runtime 5626.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LHD cache size    54GiB,       2803498585 req, miss ratio 0.089766, byte miss ratio 0.640506, throughput 0.51 MQPS, runtime 5497.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst WTinyLFU-w0.01-SLRU cache size    54GiB,       2803498585 req, miss ratio 0.154931, byte miss ratio 0.500949, throughput 0.51 MQPS, runtime 5512.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-OMR cache size    54GiB,       2803498585 req, miss ratio 0.082564, byte miss ratio 0.582356, throughput 0.39 MQPS, runtime 7152.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst ThreeLCache-BMR cache size    54GiB,       2803498585 req, miss ratio 0.145624, byte miss ratio 0.471521, throughput 0.35 MQPS, runtime 8094.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst GDSF cache size    54GiB,       2803498585 req, miss ratio 0.067627, byte miss ratio 0.637188, throughput 0.18 MQPS, runtime 15240.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LRB-BMR cache size    54GiB,       2803498585 req, miss ratio 0.143081, byte miss ratio 0.468761, throughput 0.03 MQPS, runtime 92852.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst Belady cache size     5GiB,       2803498585 req, miss ratio 0.268076, byte miss ratio 0.636941, throughput 1.74 MQPS, runtime 1614.8 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst BeladySize cache size     5GiB,       2803498585 req, miss ratio 0.178878, byte miss ratio 0.759024, throughput 0.17 MQPS, runtime 16350.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.028652, byte miss ratio 0.205373, throughput 0.28 MQPS, runtime 9858.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.264063, byte miss ratio 0.783595, throughput 0.11 MQPS, runtime 25095.3 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.273354, byte miss ratio 0.813845, throughput 0.09 MQPS, runtime 30569.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.027422, byte miss ratio 0.241815, throughput 0.25 MQPS, runtime 11018.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.022006, byte miss ratio 0.258778, throughput 0.95 MQPS, runtime 2945.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.022380, byte miss ratio 0.260081, throughput 0.95 MQPS, runtime 2948.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.041104, byte miss ratio 0.175936, throughput 0.89 MQPS, runtime 3135.6 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.041187, byte miss ratio 0.176303, throughput 1.24 MQPS, runtime 2259.4 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.025844, byte miss ratio 0.265129, throughput 0.53 MQPS, runtime 5243.0 sec, cpu time 4335.9 sec, main thread cpu time 3431.2 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.041185, byte miss ratio 0.176282, throughput 0.40 MQPS, runtime 7016.5 sec, cpu time 4642.8 sec, main thread cpu time 3794.7 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.038884, byte miss ratio 0.266874, throughput 0.53 MQPS, runtime 5298.0 sec, cpu time 4731.1 sec, main thread cpu time 3479.1 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size   538GiB,       2803498585 req, miss ratio 0.046523, byte miss ratio 0.194733, throughput 0.77 MQPS, runtime 3652.8 sec, cpu time 4459.4 sec, main thread cpu time 3641.0 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.230461, byte miss ratio 0.773959, throughput 0.52 MQPS, runtime 5401.5 sec, cpu time 7315.8 sec, main thread cpu time 5390.5 sec
+/mnt/serverpool/dingkp_trace/wiki/wiki_2016u.oracleGeneral.zst LOH cache size     5GiB,       2803498585 req, miss ratio 0.230454, byte miss ratio 0.797611, throughput 0.37 MQPS, runtime 7598.7 sec, cpu time 9175.1 sec, main thread cpu time 7591.1 sec

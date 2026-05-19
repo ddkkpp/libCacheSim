@@ -122,8 +122,8 @@ def plot_reuse(
         # this is compulsory miss
         x = x[1:]
         y = [y[i] - y[0] for i in range(1, len(y))]
-    plt.plot([i / 3600 for i in x], y)
-    # plt.ylim(0, 1)
+    plt.step([i / 3600 for i in x], y, where="post")
+    plt.ylim(0.0, 1.0)
     plt.xlabel("Time (Hour)", fontsize=label_fontsize, fontweight="bold")
     plt.ylabel("Cumulative proportion", fontsize=label_fontsize, fontweight="bold")
     plt.savefig(
@@ -146,7 +146,8 @@ def plot_reuse(
     if x[0] < 0:
         x = x[1:]
         y = [y[i] - y[0] for i in range(1, len(y))]
-    plt.plot([i / 1e6 for i in x], y)
+    plt.step([i / 1e6 for i in x], y, where="post")
+    plt.ylim(0.0, 1.0)
     plt.xlabel(
         "Re-access distance (million of requests)",
         fontsize=label_fontsize,

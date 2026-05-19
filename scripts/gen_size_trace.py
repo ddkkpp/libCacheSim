@@ -25,12 +25,12 @@ N_OBJECTS = N_SMALL + N_LARGE  # = 100_000，与 recencytest/lfutest2 一致
 
 SIZE_SMALL = 64           # 64B，极小
 SIZE_LARGE = 4_194_304    # 4 MB，极大
-SIZE_MEDIUM = SIZE_SMALL  # 兼容旧代码
 
 SEED = 42
 BATCH = 1_000_000
 
 OUTPUT = sys.argv[1] if len(sys.argv) > 1 else "sizetest_10m.csv"
+SIZE_MEDIUM = SIZE_SMALL  # 兼容旧代码
 
 
 def main():

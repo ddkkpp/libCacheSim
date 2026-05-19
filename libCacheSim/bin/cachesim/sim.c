@@ -4,6 +4,8 @@
 #include "utils/include/mystr.h"
 #include "utils/include/mysys.h"
 
+#include <time.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -12,6 +14,26 @@ void print_head_requests(request_t *req, uint64_t req_cnt) {
   if (req_cnt < 2) {
     print_request(req);
   }
+}
+
+static double get_process_cpu_time(void) {
+#ifdef CLOCK_PROCESS_CPUTIME_ID
+  struct timespec ts;
+  if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+  }
+#endif
+  return (double)clock() / (double)CLOCKS_PER_SEC;
+}
+
+static double get_current_thread_cpu_time(void) {
+#ifdef CLOCK_THREAD_CPUTIME_ID
+  struct timespec ts;
+  if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0) {
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+  }
+#endif
+  return get_process_cpu_time();
 }
 
 void simulate(reader_t *reader, cache_t *cache, int report_interval,
@@ -34,6 +56,8 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
   generate_cache_name(cache, detailed_cache_name, 256);
 
   double start_time = -1;
+  double start_cpu_time = -1;
+  double start_main_thread_cpu_time = -1;
   while (req->valid) {
     if (print_head_req) {
       print_head_requests(req, req_cnt);
@@ -47,6 +71,8 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
     } else {
       if (start_time < 0) {
         start_time = gettime();
+        start_cpu_time = get_process_cpu_time();
+        start_main_thread_cpu_time = get_current_thread_cpu_time();
       }
     }
 
@@ -75,6 +101,9 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
   }
 
   double runtime = gettime() - start_time;
+  double cpu_runtime = get_process_cpu_time() - start_cpu_time;
+  double main_thread_cpu_runtime =
+      get_current_thread_cpu_time() - start_main_thread_cpu_time;
 
   char output_str[1024];
   char size_str[64];
@@ -89,18 +118,22 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
   if (!ignore_obj_size) {
     snprintf(output_str, 1024,
              "%s %s cache size %8s, %16lu req, miss ratio %.6lf, byte miss "
-             "ratio %.6lf, throughput %.2lf MQPS, runtime %.1lf sec\n",
+             "ratio %.6lf, throughput %.2lf MQPS, runtime %.1lf sec, cpu "
+             "time %.1lf sec, main thread cpu time %.1lf sec\n",
              reader->trace_path, detailed_cache_name, size_str,
              (unsigned long)req_cnt, (double)miss_cnt / (double)req_cnt,
-             byte_miss_ratio, (double)req_cnt / 1000000.0 / runtime, runtime);
+             byte_miss_ratio, (double)req_cnt / 1000000.0 / runtime, runtime,
+             cpu_runtime, main_thread_cpu_runtime);
   } else {
     snprintf(output_str, 1024,
              "%s %s cache size %8lld, %16lu req, miss ratio %.6lf, byte miss "
-             "ratio %.6lf, throughput %.2lf MQPS, runtime %.1lf sec\n",
+             "ratio %.6lf, throughput %.2lf MQPS, runtime %.1lf sec, cpu "
+             "time %.1lf sec, main thread cpu time %.1lf sec\n",
              reader->trace_path, detailed_cache_name,
              (long long)cache->cache_size, (unsigned long)req_cnt,
              (double)miss_cnt / (double)req_cnt, byte_miss_ratio,
-             (double)req_cnt / 1000000.0 / runtime, runtime);
+             (double)req_cnt / 1000000.0 / runtime, runtime, cpu_runtime,
+             main_thread_cpu_runtime);
   }
 
 #pragma GCC diagnostic pop

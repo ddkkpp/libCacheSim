@@ -13,6 +13,7 @@ import os, sys
 import re
 import logging
 import matplotlib.pyplot as plt
+import numpy as np
 
 from typing import Tuple
 import logging
@@ -90,15 +91,50 @@ def plot_size_distribution(
     obj_size_req_cnt, obj_size_obj_cnt = _load_size_data(datapath)
 
     x, y = conv_to_cdf(None, data_dict=obj_size_req_cnt)
-    plt.plot(x, y, label="Request")
+    x_arr = np.array(x, dtype=np.float64)
+    y_arr = np.array(y, dtype=np.float64)
 
+    # Linear figure: start the CDF from x=0 explicitly.
+    if len(x_arr) == 1:
+        x0 = float(x_arr[0])
+        y0 = float(y_arr[0])
+        right = max(x0 + 1.0, x0 * 1.2)
+        x_linear = [0.0, x0, right]
+        y_linear = [0.0, y0, y0]
+    else:
+        x_linear = [0.0] + x_arr.tolist()
+        y_linear = [0.0] + y_arr.tolist()
+
+    plt.step(x_linear, y_linear, where="post", label="Request", linewidth=2.0)
+    plt.ylim(0.0, 1.0)
+    plt.yticks(np.linspace(0.0, 1.0, 11))
     plt.legend()
     plt.xlabel("Object size (Byte)", fontsize=label_fontsize, fontweight="bold")
     plt.ylabel("Cumulative proportion", fontsize=label_fontsize, fontweight="bold")
     plt.savefig(
         "{}/{}_size.{}".format(output_dir, figname_prefix, fig_type), bbox_inches="tight"
     )
+    plt.clf()
 
+    # Log figure: x must be strictly positive, so do not include x=0.
+    if len(x_arr) == 1:
+        x0 = float(x_arr[0])
+        y0 = float(y_arr[0])
+        span = max(1.0, x0 * 0.2)
+        left = max(1e-12, x0 - span)
+        right = x0 + span
+        x_log = [left, x0, right]
+        y_log = [0.0, y0, y0]
+    else:
+        x_log = x_arr.tolist()
+        y_log = y_arr.tolist()
+
+    plt.step(x_log, y_log, where="post", label="Request", linewidth=2.0)
+    plt.ylim(0.0, 1.0)
+    plt.yticks(np.linspace(0.0, 1.0, 11))
+    plt.legend()
+    plt.xlabel("Object size (Byte)", fontsize=label_fontsize, fontweight="bold")
+    plt.ylabel("Cumulative proportion", fontsize=label_fontsize, fontweight="bold")
     plt.xscale("log")
     plt.savefig(
         "{}/{}_size_log.{}".format(output_dir, figname_prefix, fig_type),

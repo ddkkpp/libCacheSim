@@ -22,3 +22,172 @@
 ./data/MetaCDN/meta_rprn.oracleGeneral.zst ThreeLCache-BMR cache size    67TiB,         88470732 req, miss ratio 0.4231, byte miss ratio 0.2317, throughput 0.15 MQPS
 ./data/MetaCDN/meta_rprn.oracleGeneral.zst LRB-BMR cache size    67TiB,         88470732 req, miss ratio 0.4145, byte miss ratio 0.2315, throughput 0.00 MQPS
 ./data/MetaCDN/meta_rprn.oracleGeneral.zst LRB-BMR cache size     7TiB,         88470732 req, miss ratio 0.5060, byte miss ratio 0.2677, throughput 0.00 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334041, byte miss ratio 0.211301, throughput 0.68 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     4TiB,          5000000 req, miss ratio 0.495752, byte miss ratio 0.276053, throughput 0.96 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334753, byte miss ratio 0.210825, throughput 0.50 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.335378, byte miss ratio 0.211018, throughput 0.50 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.365256, byte miss ratio 0.220411, throughput 0.32 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334324, byte miss ratio 0.211012, throughput 0.64 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.336027, byte miss ratio 0.213052, throughput 0.57 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.346141, byte miss ratio 0.214234, throughput 0.47 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.335877, byte miss ratio 0.211312, throughput 0.45 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.358272, byte miss ratio 0.218757, throughput 0.42 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.343283, byte miss ratio 0.212399, throughput 0.40 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.353629, byte miss ratio 0.214806, throughput 0.41 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.371356, byte miss ratio 0.219537, throughput 0.33 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332501, byte miss ratio 0.211370, throughput 1.02 MQPS, runtime 87.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.434019, byte miss ratio 0.240545, throughput 0.38 MQPS, runtime 232.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329335, byte miss ratio 0.207889, throughput 0.07 MQPS, runtime 1180.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.339419, byte miss ratio 0.215138, throughput 0.07 MQPS, runtime 1238.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329092, byte miss ratio 0.207518, throughput 0.07 MQPS, runtime 1200.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.331271, byte miss ratio 0.210213, throughput 0.08 MQPS, runtime 1167.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328830, byte miss ratio 0.207110, throughput 0.07 MQPS, runtime 1210.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332583, byte miss ratio 0.211368, throughput 0.07 MQPS, runtime 1207.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.342328, byte miss ratio 0.214778, throughput 0.07 MQPS, runtime 1266.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.349989, byte miss ratio 0.218856, throughput 0.06 MQPS, runtime 1363.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.338938, byte miss ratio 0.214914, throughput 0.07 MQPS, runtime 1351.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329401, byte miss ratio 0.208303, throughput 0.06 MQPS, runtime 1428.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330935, byte miss ratio 0.209068, throughput 0.09 MQPS, runtime 931.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329103, byte miss ratio 0.207611, throughput 0.10 MQPS, runtime 928.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328858, byte miss ratio 0.207157, throughput 0.09 MQPS, runtime 934.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.347618, byte miss ratio 0.220651, throughput 0.04 MQPS, runtime 2296.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329954, byte miss ratio 0.207548, throughput 0.09 MQPS, runtime 1039.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329478, byte miss ratio 0.207759, throughput 0.10 MQPS, runtime 883.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329025, byte miss ratio 0.207271, throughput 0.10 MQPS, runtime 854.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330658, byte miss ratio 0.209499, throughput 0.09 MQPS, runtime 1033.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330049, byte miss ratio 0.208750, throughput 0.10 MQPS, runtime 915.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328966, byte miss ratio 0.206841, throughput 0.10 MQPS, runtime 846.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.339040, byte miss ratio 0.214692, throughput 0.08 MQPS, runtime 1080.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.340514, byte miss ratio 0.215384, throughput 0.08 MQPS, runtime 1084.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330481, byte miss ratio 0.209223, throughput 0.13 MQPS, runtime 705.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332393, byte miss ratio 0.211035, throughput 0.11 MQPS, runtime 826.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.335068, byte miss ratio 0.212470, throughput 0.07 MQPS, runtime 1234.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328708, byte miss ratio 0.207701, throughput 0.03 MQPS, runtime 3018.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330118, byte miss ratio 0.208495, throughput 0.11 MQPS, runtime 821.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329375, byte miss ratio 0.207678, throughput 0.11 MQPS, runtime 823.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329938, byte miss ratio 0.207804, throughput 0.12 MQPS, runtime 765.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.343981, byte miss ratio 0.217008, throughput 0.03 MQPS, runtime 3064.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328980, byte miss ratio 0.207050, throughput 0.12 MQPS, runtime 750.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.333929, byte miss ratio 0.212198, throughput 0.02 MQPS, runtime 3866.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332761, byte miss ratio 0.211964, throughput 0.01 MQPS, runtime 6327.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.331290, byte miss ratio 0.210231, throughput 0.01 MQPS, runtime 6298.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328856, byte miss ratio 0.211390, throughput 0.01 MQPS, runtime 7114.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329413, byte miss ratio 0.213027, throughput 0.01 MQPS, runtime 8175.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.329296, byte miss ratio 0.212256, throughput 0.01 MQPS, runtime 9951.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330447, byte miss ratio 0.211609, throughput 0.00 MQPS, runtime 20388.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.328692, byte miss ratio 0.208603, throughput 0.00 MQPS, runtime 21067.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.333030, byte miss ratio 0.210233, throughput 0.30 MQPS, runtime 295.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.397443, byte miss ratio 0.253546, throughput 0.21 MQPS, runtime 414.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.391190, byte miss ratio 0.252472, throughput 0.21 MQPS, runtime 413.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.457413, byte miss ratio 0.269761, throughput 0.17 MQPS, runtime 506.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.495032, byte miss ratio 0.275717, throughput 0.17 MQPS, runtime 519.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.507898, byte miss ratio 0.277846, throughput 0.14 MQPS, runtime 654.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.495282, byte miss ratio 0.275735, throughput 0.13 MQPS, runtime 689.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.440612, byte miss ratio 0.260904, throughput 0.16 MQPS, runtime 544.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.527210, byte miss ratio 0.281889, throughput 0.15 MQPS, runtime 601.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst ThreeLCache-OMR cache size    67TiB,         88470732 req, miss ratio 0.546228, byte miss ratio 0.264848, throughput 0.41 MQPS, runtime 217.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst ThreeLCache-OMR cache size   682GiB,         88470732 req, miss ratio 0.672001, byte miss ratio 0.308716, throughput 0.48 MQPS, runtime 184.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.599578, byte miss ratio 0.282885, throughput 0.25 MQPS, runtime 357.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.595280, byte miss ratio 0.286741, throughput 0.22 MQPS, runtime 398.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.523312, byte miss ratio 0.278581, throughput 0.19 MQPS, runtime 457.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.523940, byte miss ratio 0.276675, throughput 0.18 MQPS, runtime 489.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.611972, byte miss ratio 0.289501, throughput 0.19 MQPS, runtime 459.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.547521, byte miss ratio 0.278983, throughput 0.17 MQPS, runtime 527.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.541724, byte miss ratio 0.279266, throughput 0.17 MQPS, runtime 518.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.349445, byte miss ratio 0.226625, throughput 0.14 MQPS, runtime 642.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.556067, byte miss ratio 0.272879, throughput 0.11 MQPS, runtime 823.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.351744, byte miss ratio 0.229403, throughput 0.13 MQPS, runtime 677.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.346779, byte miss ratio 0.225629, throughput 0.13 MQPS, runtime 660.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.352142, byte miss ratio 0.226172, throughput 0.12 MQPS, runtime 721.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.368836, byte miss ratio 0.233549, throughput 0.13 MQPS, runtime 684.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.358902, byte miss ratio 0.228818, throughput 0.15 MQPS, runtime 590.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.380165, byte miss ratio 0.234119, throughput 0.12 MQPS, runtime 734.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size     7TiB,         88470732 req, miss ratio 0.399110, byte miss ratio 0.239844, throughput 0.12 MQPS, runtime 729.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LRU cache size     9GiB,           100000 req, miss ratio 0.6617, byte miss ratio 0.3106, throughput 5.79 MQPS
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst WTinyLFU-w0.01-SLRU cache size     7TiB,         88470732 req, miss ratio 0.437737, byte miss ratio 0.250629, throughput 0.92 MQPS, runtime 96.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst ThreeLCache-OMR cache size     7TiB,         88470732 req, miss ratio 0.595996, byte miss ratio 0.280649, throughput 0.36 MQPS, runtime 243.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst ARC cache size     7TiB,         88470732 req, miss ratio 0.545098, byte miss ratio 0.283509, throughput 1.47 MQPS, runtime 60.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst ThreeLCache-BMR cache size     7TiB,         88470732 req, miss ratio 0.516025, byte miss ratio 0.266535, throughput 0.31 MQPS, runtime 287.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LRU cache size     7TiB,         88470732 req, miss ratio 0.523411, byte miss ratio 0.272072, throughput 2.18 MQPS, runtime 40.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst GLCache cache size     7TiB,         88470732 req, miss ratio 0.395847, byte miss ratio 0.242479, throughput 1.40 MQPS, runtime 63.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst Cacheus cache size     7TiB,         88470732 req, miss ratio 0.525777, byte miss ratio 0.272039, throughput 0.55 MQPS, runtime 159.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst Sieve cache size     7TiB,         88470732 req, miss ratio 0.530246, byte miss ratio 0.272448, throughput 2.33 MQPS, runtime 37.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst S3FIFO-0.1000-2 cache size     7TiB,         88470732 req, miss ratio 0.517157, byte miss ratio 0.267244, throughput 0.97 MQPS, runtime 91.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LeCaR cache size     7TiB,         88470732 req, miss ratio 0.523444, byte miss ratio 0.272077, throughput 0.91 MQPS, runtime 97.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LHD cache size     7TiB,         88470732 req, miss ratio 0.381195, byte miss ratio 0.280753, throughput 0.52 MQPS, runtime 168.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst GDSF cache size     7TiB,         88470732 req, miss ratio 0.329321, byte miss ratio 0.215210, throughput 0.16 MQPS, runtime 537.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LRB-BMR cache size     7TiB,         88470732 req, miss ratio 0.506178, byte miss ratio 0.267966, throughput 0.01 MQPS, runtime 8752.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst Belady cache size   682GiB,         88470732 req, miss ratio 0.505699, byte miss ratio 0.268473, throughput 2.39 MQPS, runtime 37.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst BeladySize cache size   682GiB,         88470732 req, miss ratio 0.389405, byte miss ratio 0.248584, throughput 0.23 MQPS, runtime 378.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.333355, byte miss ratio 0.240981, throughput 1.27 MQPS, runtime 69.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334291, byte miss ratio 0.210057, throughput 0.44 MQPS, runtime 202.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst ThreeLCache-OMR cache size    67TiB,         88470732 req, miss ratio 0.546228, byte miss ratio 0.264848, throughput 0.18 MQPS, runtime 494.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.494428, byte miss ratio 0.276494, throughput 0.11 MQPS, runtime 838.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.451235, byte miss ratio 0.270032, throughput 0.09 MQPS, runtime 1015.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.331877, byte miss ratio 0.209489, throughput 0.36 MQPS, runtime 243.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.350256, byte miss ratio 0.220262, throughput 0.69 MQPS, runtime 128.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.347749, byte miss ratio 0.219540, throughput 0.66 MQPS, runtime 134.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.351586, byte miss ratio 0.220610, throughput 0.64 MQPS, runtime 137.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.346474, byte miss ratio 0.219251, throughput 0.62 MQPS, runtime 142.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.382061, byte miss ratio 0.221588, throughput 0.54 MQPS, runtime 162.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.381391, byte miss ratio 0.221566, throughput 0.53 MQPS, runtime 166.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.351262, byte miss ratio 0.220449, throughput 0.54 MQPS, runtime 164.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.378291, byte miss ratio 0.221027, throughput 0.52 MQPS, runtime 171.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.380167, byte miss ratio 0.221388, throughput 0.51 MQPS, runtime 172.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.379573, byte miss ratio 0.221109, throughput 0.51 MQPS, runtime 173.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330374, byte miss ratio 0.208995, throughput 0.50 MQPS, runtime 176.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330401, byte miss ratio 0.208167, throughput 0.49 MQPS, runtime 181.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334552, byte miss ratio 0.213295, throughput 0.48 MQPS, runtime 182.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330353, byte miss ratio 0.208062, throughput 0.46 MQPS, runtime 190.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330521, byte miss ratio 0.209251, throughput 0.46 MQPS, runtime 192.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330373, byte miss ratio 0.208198, throughput 0.46 MQPS, runtime 193.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.336027, byte miss ratio 0.212993, throughput 0.44 MQPS, runtime 202.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330386, byte miss ratio 0.209035, throughput 0.43 MQPS, runtime 204.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.345141, byte miss ratio 0.218710, throughput 0.71 MQPS, runtime 124.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.345186, byte miss ratio 0.218857, throughput 0.60 MQPS, runtime 147.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.345675, byte miss ratio 0.218826, throughput 0.59 MQPS, runtime 150.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.350933, byte miss ratio 0.220208, throughput 0.58 MQPS, runtime 152.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.341534, byte miss ratio 0.217828, throughput 0.58 MQPS, runtime 153.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.335441, byte miss ratio 0.213836, throughput 0.55 MQPS, runtime 161.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.382934, byte miss ratio 0.221939, throughput 0.54 MQPS, runtime 162.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.383217, byte miss ratio 0.222053, throughput 0.53 MQPS, runtime 165.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.382534, byte miss ratio 0.221833, throughput 0.53 MQPS, runtime 168.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.383686, byte miss ratio 0.222180, throughput 0.48 MQPS, runtime 182.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330345, byte miss ratio 0.208175, throughput 0.47 MQPS, runtime 187.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.383486, byte miss ratio 0.222046, throughput 0.47 MQPS, runtime 187.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330422, byte miss ratio 0.208177, throughput 0.45 MQPS, runtime 196.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330410, byte miss ratio 0.208956, throughput 0.45 MQPS, runtime 197.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330552, byte miss ratio 0.209005, throughput 0.45 MQPS, runtime 198.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.337178, byte miss ratio 0.213372, throughput 0.44 MQPS, runtime 201.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330505, byte miss ratio 0.209163, throughput 0.43 MQPS, runtime 206.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330277, byte miss ratio 0.207902, throughput 0.43 MQPS, runtime 208.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.352599, byte miss ratio 0.220885, throughput 0.61 MQPS, runtime 145.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.344208, byte miss ratio 0.218534, throughput 0.60 MQPS, runtime 147.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.349237, byte miss ratio 0.219849, throughput 0.56 MQPS, runtime 156.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.350138, byte miss ratio 0.219996, throughput 0.54 MQPS, runtime 163.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.382317, byte miss ratio 0.221885, throughput 0.53 MQPS, runtime 167.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.380144, byte miss ratio 0.221397, throughput 0.51 MQPS, runtime 173.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.383851, byte miss ratio 0.222149, throughput 0.51 MQPS, runtime 172.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.345647, byte miss ratio 0.218784, throughput 0.50 MQPS, runtime 176.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334493, byte miss ratio 0.213390, throughput 0.49 MQPS, runtime 182.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.382460, byte miss ratio 0.221768, throughput 0.47 MQPS, runtime 187.0 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.383154, byte miss ratio 0.222008, throughput 0.46 MQPS, runtime 191.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330380, byte miss ratio 0.208200, throughput 0.46 MQPS, runtime 194.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330528, byte miss ratio 0.209264, throughput 0.43 MQPS, runtime 204.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330363, byte miss ratio 0.208180, throughput 0.43 MQPS, runtime 205.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330535, byte miss ratio 0.209140, throughput 0.43 MQPS, runtime 204.4 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330336, byte miss ratio 0.208888, throughput 0.41 MQPS, runtime 213.7 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.337224, byte miss ratio 0.213495, throughput 0.38 MQPS, runtime 232.9 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.330505, byte miss ratio 0.208088, throughput 0.37 MQPS, runtime 237.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332451, byte miss ratio 0.211506, throughput 0.58 MQPS, runtime 153.6 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332767, byte miss ratio 0.210702, throughput 0.64 MQPS, runtime 138.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332562, byte miss ratio 0.211798, throughput 0.76 MQPS, runtime 116.5 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.332581, byte miss ratio 0.210714, throughput 0.68 MQPS, runtime 130.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.334721, byte miss ratio 0.213306, throughput 0.92 MQPS, runtime 96.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.337853, byte miss ratio 0.215388, throughput 0.78 MQPS, runtime 113.5 sec, cpu time 135.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.335050, byte miss ratio 0.213604, throughput 0.65 MQPS, runtime 135.3 sec, cpu time 158.4 sec, main thread cpu time 135.3 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.339476, byte miss ratio 0.214863, throughput 0.71 MQPS, runtime 124.1 sec, cpu time 152.8 sec, main thread cpu time 124.1 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.417668, byte miss ratio 0.240620, throughput 0.62 MQPS, runtime 143.3 sec, cpu time 166.2 sec, main thread cpu time 143.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size    67TiB,         88470732 req, miss ratio 0.415668, byte miss ratio 0.235676, throughput 0.32 MQPS, runtime 274.4 sec, cpu time 226.4 sec, main thread cpu time 184.2 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.416483, byte miss ratio 0.255029, throughput 0.25 MQPS, runtime 347.9 sec, cpu time 394.7 sec, main thread cpu time 347.8 sec
+/mnt/serverpool/dingkp_trace/metaCDN/meta_rprn.oracleGeneral.zst LOH cache size   682GiB,         88470732 req, miss ratio 0.382733, byte miss ratio 0.250223, throughput 0.27 MQPS, runtime 325.8 sec, cpu time 359.2 sec, main thread cpu time 325.3 sec

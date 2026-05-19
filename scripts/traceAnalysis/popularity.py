@@ -59,8 +59,14 @@ def plot_popularity_Zipf(
 
     sorted_freq, _ = load_popularity_data(datapath)
 
+    marker_every = max(1, len(sorted_freq) // 200)
     plt.plot(
         sorted_freq,
+        linewidth=1.2,
+        marker="o",
+        markersize=2.0,
+        markevery=marker_every,
+        alpha=0.85,
     )
     plt.xlabel("Object rank", fontsize=label_fontsize, fontweight="bold")
     plt.ylabel("Frequency", fontsize=label_fontsize, fontweight="bold")
