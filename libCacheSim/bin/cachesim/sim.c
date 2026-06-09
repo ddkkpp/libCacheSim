@@ -4,8 +4,8 @@
 #include "utils/include/mystr.h"
 #include "utils/include/mysys.h"
 
+#include <stdlib.h>
 #include <time.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,12 +36,27 @@ static double get_current_thread_cpu_time(void) {
   return get_process_cpu_time();
 }
 
-void simulate(reader_t *reader, cache_t *cache, int report_interval,
+static void seed_sim_rng(void) {
+  const char *env_seed = getenv("LOH_RNG_SEED");
+  if (env_seed != NULL && env_seed[0] != '\0') {
+    char *end = NULL;
+    unsigned long long seed = strtoull(env_seed, &end, 0);
+    if (end != env_seed) {
+      srand((unsigned int)seed);
+      set_rand_seed((uint64_t)rand());
+      return;
+    }
+  }
+
+  srand(time(NULL));
+  set_rand_seed(rand());
+}
+
+void simulate(reader_t *reader, cache_t *cache, uint64_t report_interval,
               int warmup_sec, char *ofilepath, bool ignore_obj_size,
               bool print_head_req) {
   /* random seed */
-  srand(time(NULL));
-  set_rand_seed(rand());
+  seed_sim_rng();
 
   request_t *req = new_request();
   uint64_t req_cnt = 0, miss_cnt = 0;
@@ -50,7 +65,6 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
 
   read_one_req(reader, req);
   uint64_t start_ts = (uint64_t)req->clock_time;
-  uint64_t last_report_ts = warmup_sec;
 
   char detailed_cache_name[256];
   generate_cache_name(cache, detailed_cache_name, 256);
@@ -82,8 +96,7 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
       miss_cnt++;
       miss_byte += req->obj_size;
     }
-    if (req->clock_time - last_report_ts >= (uint64_t)report_interval &&
-        req->clock_time != 0) {
+    if (report_interval > 0 && req_cnt - last_req_cnt >= report_interval) {
       INFO(
           "%s %s %.2lf hour: %lu requests, miss ratio %.4lf, interval miss "
           "ratio "
@@ -94,12 +107,10 @@ void simulate(reader_t *reader, cache_t *cache, int report_interval,
           (double)(miss_cnt - last_miss_cnt) / (req_cnt - last_req_cnt));
       last_miss_cnt = miss_cnt;
       last_req_cnt = req_cnt;
-      last_report_ts = (int64_t)req->clock_time;
     }
 
     read_one_req(reader, req);
   }
-
   double runtime = gettime() - start_time;
   double cpu_runtime = get_process_cpu_time() - start_cpu_time;
   double main_thread_cpu_runtime =

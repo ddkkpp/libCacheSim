@@ -42,7 +42,7 @@ struct arguments {
   int64_t n_req; /* number of requests to process */
 
   bool verbose;
-  int report_interval;
+  uint64_t report_interval;
   bool ignore_obj_size;
   bool consider_obj_metadata;
   bool use_ttl;
@@ -57,7 +57,7 @@ void parse_cmd(int argc, char *argv[], struct arguments *args);
 
 void free_arg(struct arguments *args);
 
-void simulate(reader_t *reader, cache_t *cache, int report_interval,
+void simulate(reader_t *reader, cache_t *cache, uint64_t report_interval,
               int warmup_sec, char *ofilepath, bool ignore_obj_size,
               bool print_head_req);
 

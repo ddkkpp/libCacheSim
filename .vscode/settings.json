@@ -143,5 +143,61 @@
     "git.showUntrackedFiles": true,
     "terminal.integrated.cwd": "${workspaceFolder}",
     "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "chat.agent.maxRequests": 2000,
+    // ── LaTeX Workshop 配置 ──
+    // 保存 .tex 文件时自动触发编译
+    "latex-workshop.latex.autoBuild.run": "onSave",
+    // 编译工具定义：pdflatex 和 bibtex
+    "latex-workshop.latex.tools": [
+        {
+            "name": "pdflatex",
+            "command": "pdflatex",
+            "args": [
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOC%"
+            ]
+        },
+        {
+            "name": "bibtex",
+            "command": "bibtex",
+            "args": [
+                "%DOCFILE%"
+            ]
+        }
+    ],
+    // 编译 recipe：完整 4 步流程 pdflatex → bibtex → pdflatex × 2
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "pdflatex ➜ bibtex ➜ pdflatex × 2",
+            "tools": [
+                "pdflatex",
+                "bibtex",
+                "pdflatex",
+                "pdflatex"
+            ]
+        },
+        {
+            "name": "pdflatex (single pass)",
+            "tools": [
+                "pdflatex"
+            ]
+        }
+    ],
+    // PDF 预览：使用浏览器渲染，避免 VS Code 内置 tab 对嵌入字体显示偏丑
+    "latex-workshop.view.pdf.viewer": "browser",
+    "latex-workshop.synctex.afterBuild.enabled": true,
+    // 反向搜索快捷键：使用内置 PDF 预览时 Ctrl+点击 跳转到源码
+    "latex-workshop.view.pdf.internal.synctex.keybinding": "ctrl-click",
+    // tex 文件根目录（CDN_paper 是子目录，需指定）
+    "latex-workshop.latex.rootFile.useSubFile": false,
+    "latex-workshop.latex.rootFile.doNotPrompt": true,
+    // 编译后自动清理临时文件（.aux, .log 等保留在 CDN_paper 目录）
+    "latex-workshop.latex.autoClean.run": "never",
+    // 禁用 chktex（外部 linter），避免误报 "Cannot find reference" 等警告
+    // LaTeX Workshop 自身的诊断基于编译日志，更准确
+    "latex-workshop.linting.chktex.enabled": false,
+    "latex-workshop.linting.lacheck.enabled": false
 }

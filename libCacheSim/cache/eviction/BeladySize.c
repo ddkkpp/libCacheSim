@@ -14,10 +14,11 @@
 extern "C" {
 #endif
 
-// #define EXACT_Belady 1
-static const char *DEFAULT_PARAMS = "n-sample=128";
+static const char *DEFAULT_PARAMS = "exact=1,n-sample=128";
 
 typedef struct {
+  // whether to scan all cached objects at each eviction
+  bool exact;
   // how many samples to take at each eviction
   int n_sample;
 } BeladySize_params_t; /* BeladySize parameters */
@@ -169,27 +170,31 @@ static cache_obj_t *BeladySize_insert(cache_t *cache, const request_t *req) {
   return obj;
 }
 
-#ifdef EXACT_Belady
 struct hash_iter_user_data {
   uint64_t curr_vtime;
   cache_obj_t *to_evict_obj;
-  uint64_t max_score;
+  double max_score;
+  bool found_stale;
 };
 
 static inline void hashtable_iter_Belady_size(cache_obj_t *cache_obj,
                                               void *userdata) {
   struct hash_iter_user_data *iter_userdata =
       (struct hash_iter_user_data *)userdata;
-  if (iter_userdata->max_score == UINT64_MAX) return;
+  if (iter_userdata->found_stale) return;
 
-  uint64_t obj_score;
-  if (cache_obj->Belady.next_access_vtime == -1)
-    obj_score = UINT64_MAX;
-  else
-    obj_score = cache_obj->obj_size * (cache_obj->Belady.next_access_vtime -
-                                       iter_userdata->curr_vtime);
+  int64_t dt = (int64_t)(cache_obj->Belady.next_access_vtime -
+                         (int64_t)iter_userdata->curr_vtime);
+  if (dt <= 0) {
+    iter_userdata->to_evict_obj = cache_obj;
+    iter_userdata->found_stale = true;
+    return;
+  }
 
-  if (obj_score > iter_userdata->max_score) {
+  int64_t obj_size = cache_obj->obj_size > 0 ? cache_obj->obj_size : 1;
+  double obj_score = log((double)obj_size) + log((double)dt);
+  if (iter_userdata->to_evict_obj == NULL ||
+      obj_score > iter_userdata->max_score) {
     iter_userdata->to_evict_obj = cache_obj;
     iter_userdata->max_score = obj_score;
   }
@@ -205,20 +210,33 @@ static inline void hashtable_iter_Belady_size(cache_obj_t *cache_obj,
  * @param cache the cache
  * @return the object to be evicted
  */
-static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
+static cache_obj_t *BeladySize_exact_to_evict(cache_t *cache,
+                                              const request_t *req) {
   struct hash_iter_user_data iter_userdata;
   iter_userdata.curr_vtime = cache->n_req;
-  iter_userdata.max_score = 0;
+  iter_userdata.max_score = -1;
   iter_userdata.to_evict_obj = NULL;
+  iter_userdata.found_stale = false;
 
   hashtable_foreach(cache->hashtable, hashtable_iter_Belady_size,
                     &iter_userdata);
 
+  if (iter_userdata.to_evict_obj == NULL) {
+    WARN(
+        "BeladySize_to_evict: exact scan found no victim, "
+        "current hash table size %llu, n_obj %llu, cache size %lld, request "
+        "size %lld\n",
+        (unsigned long long)hashsize(cache->hashtable->hashpower),
+        (unsigned long long)cache->hashtable->n_obj,
+        (long long)cache->cache_size, (long long)req->obj_size);
+    return hashtable_rand_obj(cache->hashtable);
+  }
+
   return iter_userdata.to_evict_obj;
 }
 
-#else
-static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
+static cache_obj_t *BeladySize_sample_to_evict(cache_t *cache,
+                                               const request_t *req) {
   BeladySize_params_t *params = (BeladySize_params_t *)cache->eviction_params;
   cache_obj_t *obj_to_evict = NULL, *sampled_obj;
   double obj_to_evict_score = -1, sampled_obj_score = -1;
@@ -254,7 +272,14 @@ static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
 
   return obj_to_evict;
 }
-#endif
+
+static cache_obj_t *BeladySize_to_evict(cache_t *cache, const request_t *req) {
+  BeladySize_params_t *params = (BeladySize_params_t *)cache->eviction_params;
+  if (params->exact) {
+    return BeladySize_exact_to_evict(cache, req);
+  }
+  return BeladySize_sample_to_evict(cache, req);
+}
 
 /**
  * @brief evict an object from the cache
@@ -303,8 +328,14 @@ bool BeladySize_remove(cache_t *cache, const obj_id_t obj_id) {
  */
 static const char *BeladySize_current_params(BeladySize_params_t *params) {
   static __thread char params_str[128];
-  snprintf(params_str, 128, "n-sample=%d\n", params->n_sample);
+  snprintf(params_str, 128, "exact=%d,n-sample=%d\n", params->exact,
+           params->n_sample);
   return params_str;
+}
+
+static bool BeladySize_parse_bool(const char *value) {
+  return strcasecmp(value, "1") == 0 || strcasecmp(value, "true") == 0 ||
+         strcasecmp(value, "yes") == 0 || strcasecmp(value, "on") == 0;
 }
 
 /**
@@ -331,7 +362,9 @@ static void BeladySize_parse_params(cache_t *cache,
       params_str++;
     }
 
-    if (strcasecmp(key, "n-sample") == 0) {
+    if (strcasecmp(key, "exact") == 0) {
+      params->exact = BeladySize_parse_bool(value);
+    } else if (strcasecmp(key, "n-sample") == 0) {
       params->n_sample = (int)strtol(value, &end, 0);
       if (strlen(end) > 2) {
         ERROR("param parsing error, find string \"%s\" after number\n", end);

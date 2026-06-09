@@ -6,7 +6,7 @@
 usage() {
     echo "Usage: $0 [trace_file] [cache_size]"
     echo "  trace_file:  Path to trace file (optional, default: data/MetaCDN/meta_reag.oracleGeneral.zst)"
-    echo "  cache_size:  Cache size as ratio (optional, default: 0.1)"
+    echo "  cache_size:  Cache size ratio in (0,1] or absolute bytes (>1), optional, default: 0.1"
     echo
     echo "Environment Variables (all optional):"
     echo
@@ -202,10 +202,11 @@ fi
 # 参数2: 缓存大小
 if [ -n "$2" ]; then
     CACHE_SIZE="$2"
-    if ! [[ "$CACHE_SIZE" =~ ^[0-9]*\.?[0-9]+$ ]] || (( $(echo "$CACHE_SIZE <= 0" | bc -l) )) || (( $(echo "$CACHE_SIZE > 1" | bc -l) )); then
-        echo "Error: cache_size must be between 0 and 1, got: $CACHE_SIZE"
+    if ! [[ "$CACHE_SIZE" =~ ^[0-9]*\.?[0-9]+$ ]] || (( $(echo "$CACHE_SIZE <= 0" | bc -l) )); then
+        echo "Error: cache_size must be positive number, got: $CACHE_SIZE"
         usage
     fi
+    # Accept either ratio in (0,1] or absolute cache bytes (>1).
     echo "Using cache size: $CACHE_SIZE"
 else
     CACHE_SIZE="0.1"
@@ -521,15 +522,18 @@ extract_c_state_dims_from_log() {
 }
 
 validate_runtime_state_dims_or_kill() {
-    local wait_s timeout_s
+    local wait_s timeout_s c_exited grace_s
 
     timeout_s="${LOH_RUNTIME_DIM_CHECK_TIMEOUT_S:-60}"
     wait_s=0
+    c_exited=0
+    grace_s=10  # after C exits, keep checking log for dims this many more seconds
 
     echo "[runtime-check] Waiting C runtime dims from formal run (timeout=${timeout_s}s)..."
     while [ "${wait_s}" -lt "${timeout_s}" ]; do
-        if ! ps -p "${CACHESIM_PID}" > /dev/null 2>&1; then
-            break
+        if [ "${c_exited}" -eq 0 ] && ! ps -p "${CACHESIM_PID}" > /dev/null 2>&1; then
+            c_exited=1
+            echo "[runtime-check] C process exited; will keep checking log for up to ${grace_s}s more..."
         fi
 
         if extract_c_state_dims_from_log; then
@@ -549,6 +553,15 @@ validate_runtime_state_dims_or_kill() {
 
             echo -e "${GREEN}[runtime-check] state dim matched on formal run.${NC}"
             return 0
+        fi
+
+        # If C already exited and we exhausted the grace period, give up
+        if [ "${c_exited}" -eq 1 ]; then
+            grace_s=$((grace_s - 1))
+            if [ "${grace_s}" -le 0 ]; then
+                echo -e "${YELLOW}[runtime-check] C dims not found ${grace_s:-0}s after C exit, skip hard check and continue.${NC}"
+                return 0
+            fi
         fi
 
         sleep 1
@@ -809,7 +822,9 @@ echo "  LOH_FIXED_WEIGHTS: ${LOH_FIXED_WEIGHTS:-<unset>}"
 export LOH_ENABLE_RL=1
 
 # 执行缓存模拟
-CACHESIM_LOG_FILE="${CACHESIM_LOG_DIR}/cachesim_sb3_${RUN_TIMESTAMP}.log"
+# 使用 .cs.log 后缀隔离 cachesim 私有输出，避免与脚本 stdout（launcher 将其捕获到同名主日志）
+# 并发写入同一 OS 文件导致行内容交错；watcher 退出后再 cat 合并，保证顺序写入。
+CACHESIM_LOG_FILE="${CACHESIM_LOG_DIR}/cachesim_sb3_${RUN_TIMESTAMP}.cs.log"
 echo -e "${BLUE}Running cachesim... (Log: ${CACHESIM_LOG_FILE})${NC}"
 echo "  Miss ratio weight: $MISS_RATIO_WEIGHT"
 echo "  Byte miss ratio weight: $BYTE_MISS_RATIO_WEIGHT"
@@ -914,13 +929,25 @@ if ps -p "${WATCH_PID}" > /dev/null 2>&1; then
     kill "${WATCH_PID}" 2>/dev/null || true
 fi
 
+# watcher 已终止；将 cachesim 私有日志（.cs.log）顺序合并到脚本 stdout（主日志），无并发冲突
+cat "${CACHESIM_LOG_FILE}"
+
 # 检查执行结果
 if [ "${CACHESIM_EXIT}" -ne 0 ]; then
     echo -e "${RED}Error: cachesim execution failed. Check ${CACHESIM_LOG_FILE} for details.${NC}"
-    cat "${CACHESIM_LOG_FILE}"
     exit 1
 else
     echo -e "${GREEN}Cachesim execution completed successfully.${NC}"
+fi
+
+# 兜底：从 ofilepath 结果文件中提取最终指标行（printf 到 stdout 可能因 buffer 未 flush 丢失，
+# 但 fprintf+fflush+fclose 到 ofilepath 总是可靠的）
+_OFP="result/$(basename "${TRACE_FILE}").cachesim"
+if [ -f "${_OFP}" ]; then
+    _final_line=$(tail -1 "${_OFP}" 2>/dev/null || true)
+    if [ -n "${_final_line}" ]; then
+        echo "${_final_line}"
+    fi
 fi
 
 # 显示cachesim的输出

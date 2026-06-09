@@ -300,6 +300,7 @@ class ThreeLCacheCache : public webcachesim::Cache {
   TrainingData *training_data;
 
   double training_loss = 0;
+  uint64_t training_append_count = 0;
   int32_t n_force_eviction = 0;
 
   double training_time = 0;
@@ -373,6 +374,10 @@ class ThreeLCacheCache : public webcachesim::Cache {
   void forget();
 
   void erase_out_cache();
+
+  void debug_log_training_append(const char *source, Meta &meta,
+                                 uint64_t sample_timestamp,
+                                 int32_t future_interval);
 
   int32_t rank();
 

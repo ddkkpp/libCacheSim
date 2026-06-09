@@ -19,7 +19,11 @@
 #include "ThreeLCache.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <limits>
 
 #include "utils.hpp"
 
@@ -29,6 +33,67 @@ using namespace ThreeLCache;
 
 void ThreeLCacheCache::train() {
   auto timeBegin = chrono::system_clock::now();
+  const char *debugTrain = std::getenv("THREEL_DEBUG_TRAIN");
+  if (debugTrain != nullptr && debugTrain[0] != '\0' && debugTrain[0] != '0') {
+    static uint64_t debugTrainOrdinal = 0;
+    ++debugTrainOrdinal;
+    double labelSum = 0.0;
+    double labelMin = std::numeric_limits<double>::infinity();
+    double labelMax = -std::numeric_limits<double>::infinity();
+    for (float label : training_data->labels) {
+      const double value = static_cast<double>(label);
+      labelSum += value;
+      labelMin = std::min(labelMin, value);
+      labelMax = std::max(labelMax, value);
+    }
+    std::array<double, 6> featureSums{};
+    for (size_t pos = 0; pos < training_data->indices.size(); ++pos) {
+      const int32_t column = training_data->indices[pos];
+      if (column >= 0 && static_cast<size_t>(column) < featureSums.size()) {
+        featureSums[static_cast<size_t>(column)] += training_data->data[pos];
+      }
+    }
+    std::fprintf(stderr,
+                 "[3LTRAIN] impl=libcachesim train=%llu seq=%llu rows=%zu nnz=%zu indptr=%zu resident=%zu ghost=%zu evict_nums=%lld max_boundary0=%llu max_boundary1=%llu label_sum=%.17g label_min=%.17g label_max=%.17g f0=%.17g f1=%.17g f2=%.17g f3=%.17g f4=%.17g f5=%.17g\n",
+                 static_cast<unsigned long long>(debugTrainOrdinal),
+                 static_cast<unsigned long long>(current_seq),
+                 training_data->labels.size(),
+                 training_data->data.size(),
+                 training_data->indptr.size(),
+                 in_cache.metas.size(),
+                 out_cache.metas.size(),
+                 static_cast<long long>(evict_nums),
+                 static_cast<unsigned long long>(MAX_EVICTION_BOUNDARY[0]),
+                 static_cast<unsigned long long>(MAX_EVICTION_BOUNDARY[1]),
+                 labelSum,
+                 labelMin,
+                 labelMax,
+                 featureSums[0],
+                 featureSums[1],
+                 featureSums[2],
+                 featureSums[3],
+                 featureSums[4],
+                 featureSums[5]);
+    const size_t rowsToPrint = std::min<size_t>(3, training_data->labels.size());
+    for (size_t row = 0; row < rowsToPrint; ++row) {
+      std::array<double, 6> rowFeatures{};
+      const int32_t begin = training_data->indptr[row];
+      const int32_t end = training_data->indptr[row + 1];
+      for (int32_t pos = begin; pos < end; ++pos) {
+        const int32_t column = training_data->indices[static_cast<size_t>(pos)];
+        if (column >= 0 && static_cast<size_t>(column) < rowFeatures.size()) {
+          rowFeatures[static_cast<size_t>(column)] =
+              training_data->data[static_cast<size_t>(pos)];
+        }
+      }
+      std::fprintf(stderr,
+                   "[3LTRAIN_ROW] impl=libcachesim train=%llu row=%zu label=%.17g f0=%.17g f1=%.17g f2=%.17g f3=%.17g f4=%.17g f5=%.17g\n",
+                   static_cast<unsigned long long>(debugTrainOrdinal), row,
+                   static_cast<double>(training_data->labels[row]),
+                   rowFeatures[0], rowFeatures[1], rowFeatures[2],
+                   rowFeatures[3], rowFeatures[4], rowFeatures[5]);
+    }
+  }
   if (booster) LGBM_BoosterFree(booster);
   DatasetHandle trainData;
   std::string params_str;
@@ -85,6 +150,47 @@ void ThreeLCacheCache::sample() {
   meta.emplace_sample(current_seq);
 }
 
+void ThreeLCacheCache::debug_log_training_append(
+    const char *source, Meta &meta, uint64_t sample_timestamp,
+    int32_t future_interval) {
+  const char *debugRows = std::getenv("THREEL_DEBUG_TRAIN_ROWS");
+  const uint64_t debugLimit = debugRows == nullptr
+                                  ? 0
+                                  : std::strtoull(debugRows, nullptr, 10);
+  if (debugLimit != 0 && training_append_count < debugLimit) {
+    uint32_t distances[3] = {0, 0, 0};
+    if (meta._extra) {
+      for (int j = 0; j < 3 && j < meta._extra->_past_distance_idx &&
+                      j < max_n_past_distances;
+           ++j) {
+        uint8_t past_distance_idx =
+            (meta._extra->_past_distance_idx - 1 - j) % max_n_past_distances;
+        distances[j] = meta._extra->_past_distances[past_distance_idx];
+      }
+    }
+    std::fprintf(stderr,
+                 "[3LTRAIN_APPEND] impl=libcachesim row=%llu source=%s "
+                 "seq=%llu key=%llu sample=%llu future=%d last=%llu "
+                 "freq=%u size=%llu resident=%zu ghost=%zu dist0=%u "
+                 "dist1=%u dist2=%u\n",
+                 static_cast<unsigned long long>(training_append_count),
+                 source == nullptr ? "unknown" : source,
+                 static_cast<unsigned long long>(current_seq),
+                 static_cast<unsigned long long>(meta._key),
+                 static_cast<unsigned long long>(sample_timestamp),
+                 future_interval,
+                 static_cast<unsigned long long>(meta._past_timestamp),
+                 static_cast<unsigned int>(meta._freq),
+                 static_cast<unsigned long long>(meta._size),
+                 in_cache.metas.size(),
+                 out_cache.metas.size(),
+                 distances[0],
+                 distances[1],
+                 distances[2]);
+  }
+  ++training_append_count;
+}
+
 void ThreeLCacheCache::update_stat_periodic() {}
 
 bool ThreeLCacheCache::lookup(const SimpleRequest &req) {
@@ -106,6 +212,7 @@ bool ThreeLCacheCache::lookup(const SimpleRequest &req) {
     auto sample_time = meta._sample_times;
     if (sample_time != 0 && (_distribution(_generator) % 4 == 0 || !booster)) {
       int32_t future_distance = current_seq - sample_time;
+      debug_log_training_append("hit", meta, sample_time, future_distance);
       training_data->emplace_back(meta, sample_time, future_distance,
                                   meta._key);
       if (training_data->labels.size() >= batch_size && evict_nums <= 0) {
@@ -154,6 +261,8 @@ void ThreeLCacheCache::erase_out_cache() {
             MAX_EVICTION_BOUNDARY[0] + current_seq - meta._past_timestamp;
         if (MAX_EVICTION_BOUNDARY[1] < current_seq - meta._past_timestamp)
           MAX_EVICTION_BOUNDARY[1] = current_seq - meta._past_timestamp;
+        debug_log_training_append("ghost_expire", meta, sample_time,
+                                  future_distance);
         training_data->emplace_back(meta, sample_time, future_distance,
                                     meta._key);
 

@@ -1,0 +1,3 @@
+1.cmaes乃至drl，长时间后权重稳定在全0.5不变
+2.结构化候选/feature-extreme candidate没有用甚至副作用
+3.分数中的特征的选择并非对每个trace都最优

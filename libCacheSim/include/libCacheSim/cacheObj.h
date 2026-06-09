@@ -18,6 +18,10 @@
 extern "C" {
 #endif
 
+#ifndef LOH_ENABLE_ALT_SCORE_FEATURE_SETS
+#define LOH_ENABLE_ALT_SCORE_FEATURE_SETS 0
+#endif
+
 // ############## per object metadata used in eviction algorithm cache obj
 typedef struct {
   int64_t freq;
@@ -140,6 +144,12 @@ typedef struct {
   int16_t loh_irt_pos[3];  // index in each IRT heap (-1 if not present)
   int16_t loh_size_pos;    // index in size heap (-1 if not present) for LOH.c
   int32_t obj_array_idx;   // index in flat obj_array for O(1) random sampling
+#if LOH_ENABLE_ALT_SCORE_FEATURE_SETS
+  uint32_t lrb_past_distances[31];
+  float lrb_edc[10];
+  uint8_t lrb_past_distance_idx;
+  uint8_t lrb_past_distance_count;
+#endif
 } LOH_obj_metadata_t;
 
 typedef struct {
